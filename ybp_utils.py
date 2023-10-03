@@ -1,14 +1,9 @@
 #YANK BP
-import textwrap, yaml, yank, sys, os, glob, shutil, openmm, rdkit
+import textwrap, sys, os, glob, shutil, openmm
 #import nglview
 import openmmtools as mmtools
 import yank.utils
 import numpy as np
-from yank.experiment import YankLoader, YankDumper
-import netCDF4 as nc
-import matplotlib.pyplot as plt
-from mdtraj.formats.dcd import DCDTrajectoryFile
-import mdtraj as md
 import MDAnalysis as mda
 #OPENFF
 from openff.units import Quantity, unit
@@ -310,7 +305,7 @@ def make_openmm_simulation(interchange):
     return simulation
 
 
-def make_simulation_and_writeout(interchange, phase):
+def make_simulation_and_writeout(interchange, phase, ligand_resname='resname UNK'):
     sim = make_openmm_simulation(interchange)
     with open(f'{phase}_final.xml', "w") as xml_file:
         xml_file.write(openmm.XmlSerializer.serialize(sim.system))
@@ -320,6 +315,15 @@ def make_simulation_and_writeout(interchange, phase):
                                      sim.context.getState(getPositions=True, enforcePeriodicBox=True).getPositions(),
                                      file=pdb_file,
                                      keepIds=True)
+    with open(f'{phase}_final.pdb', 'r') as f:
+        lines = f.readlines()
+    assert ligand_resname.startswith('resname') and len(ligand_resname) == 11
+    ligand_resname = ligand_resname[-3:]
+    
+    lines = [line.replace('UNK', ligand_resname) for line in lines]
+    with open(f'{phase}_final.pdb', 'w') as f:
+        f.writelines(lines)
+
 
 
 def run_for_walltime(simulation, num_minutes):
