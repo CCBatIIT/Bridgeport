@@ -16,32 +16,25 @@ import mdtraj as md
 
 #INPUT FILES
 #DAVID CHANGE ME
-name= sys.argv[1] #become an arg
-data_dir = f'/ocean/projects/bio230003p/dcooper/yank/{name}/'
-run = sys.argv[2]
-job_type = sys.argv[3]
+drug = sys.argv[1]
+centroid = int(sys.argv[2])
+data_dir = f'/expanse/lustre/projects/iit119/dcooper/yank/{drug}/centroid_{centroid}/'
+run = sys.argv[3]
+job_type = sys.argv[4]
 
 
 #MAYBE CHANGE ME
-if os.path.exists(data_dir + f'{name}_crys.pdb'):
-    crystal_fn = data_dir + f'{name}_crys.pdb'
 ligand_resname = 'resname UNL'
-yank_output_dir = data_dir + f'{name}_{run}'
-yaml_file = data_dir + f'{name}_{run}.yaml' 
+yank_output_dir = data_dir + f'{drug}_{run}'
+yaml_file = data_dir + f'{drug}_{run}.yaml' 
 prog_path = os.path.join(data_dir,f'progress_{run}.log')
 
 
 
 #DON"T NEED TO CHANGE ME
-complex_fns = data_dir + f'{name}_1.prmtop', data_dir + f'{name}_1.inpcrd'
-solvent_fns = data_dir + f'solvent_{name}.prmtop', data_dir + f'solvent_{name}.inpcrd'
-try:
-    pose_fns = [crystal_fn] + sorted(glob.glob(data_dir + f'{name}_*.pdb'))
-    print('crystal pose added to poses_fns as ind 0')
-except:
-    pose_fns = sorted(glob.glob(data_dir + f'{name}_*.pdb'))
-
-
+complex_fns = data_dir + f'{drug}.xml', data_dir + f'{drug}_{centroid}_1.pdb'
+solvent_fns = data_dir + f'solvent_{drug}.xml', data_dir + f'solvent_{drug}.pdb'
+pose_fns = sorted(glob.glob(data_dir + f'{drug}_*.pdb'))
 
 
 #DAVID DONT CHANGE MUCH BELOW THIS LINE ___________
@@ -53,15 +46,15 @@ experiments:
   protocol: absolute-binding
   restraint:
     type: FlatBottom
-    restrained_receptor_atoms: (resname TYR and resid 261) or (resname ASP and resid 49) or (resname HIS and resid 232) or (resname TYR and resid 83)
+    restrained_receptor_atoms: protein and resid 53 72 162 222 251 and name CA
     restrained_ligand_atoms: all
     spring_constant: 10.0*kilocalories_per_mole/(angstrom**2)
-    well_radius: 8.0*angstroms
+    well_radius: 6.0*angstroms
   system: rec-lig
 options:
-  default_nsteps_per_iteration: 500
+  default_nsteps_per_iteration: 100
   default_number_of_iterations: 50
-  default_timestep: 1.0*femtosecond
+  default_timestep: 3.0*femtosecond
   minimize: no
   number_of_equilibration_iterations: 0
   output_dir: {out_dir}
@@ -109,9 +102,9 @@ systems:
     return yaml_contents
 
 
-#if not os.path.isfile(yaml_file):
-with open(yaml_file, 'w') as f:
-    f.write(write_the_yaml(complex_fns, solvent_fns, ligand_resname, yank_output_dir))
+if not os.path.isfile(yaml_file):
+    with open(yaml_file, 'w') as f:
+        f.write(write_the_yaml(complex_fns, solvent_fns, ligand_resname, yank_output_dir))
 
 
 class YankWrapper():
@@ -134,19 +127,20 @@ class YankWrapper():
         with open(self.yaml_init_fn, 'r') as f:
             self.yaml_init = yaml.load(f, Loader=YankLoader)
         try:
-            self.yank_store = f'/ocean/projects/bio230003p/dcooper/yank/{name}/{name}_{run}'
+            self.yank_store = f'/expanse/lustre/projects/iit119/dcooper/yank/{drug}/centroid_{centroid}/{drug}_{run}'
         except:
             self.yank_store = os.path.join(os.path.dirname(self.yaml_init_fn), self.yaml_init['options']['output_dir'])
         self.yaml_current_fn = os.path.join(self.yank_store,'experiments','experiments.yaml')
         assert hasattr(self, 'yaml_init_fn') and hasattr(self, 'yaml_init') 
         
+
         #Try to run yank, if it has been run, then this will simply pass
         yaml_builder = yank.experiment.ExperimentBuilder(script=self.yaml_init)
         yaml_builder.run_experiments()
                 
         #YANK Throws a strange error, it cannot be restarted with the file names as elements of the dictionary
         # see such lines created by yank that look like (below) and should be deleted from yaml_current prior
-        # /ocean/projects/bio230003p/dcooper/PosePred/data/fentanyl/fentanyl_1.inpcrd: ../../fentanyl_1.inpcrd
+        # /expanse/lustre/projects/iit119/dcooper/PosePred/data/fentanyl/fentanyl_1.inpcrd: ../../fentanyl_1.inpcrd
         # a simple fix may be to delete any lines containing '../..' for now
         with open(self.yaml_current_fn, 'r') as f: #Read and filter contents
             lines = [line for line in f.readlines() if "../.." not in line]
@@ -163,7 +157,7 @@ class YankWrapper():
             pass 
         else:
             with open(prog_path, 'a+') as f:
-                f.write(f'LOG FILE FOR {name} {run} YANK POSE PREDICTION\nOne Simulation Ran\n')
+                f.write(f'LOG FILE FOR {drug} centroid {centroid} {run} YANK POSE PREDICTION\nOne Simulation Ran\n')
                 f.close()
         
         
@@ -253,7 +247,7 @@ class YankWrapper():
         elif phase == 'solvent':
             phase_num = 'phase2_path'
         coords_traj = md.load_dcd(f'{self.yank_store}/experiments/trailblaze/{phase}/coordinates.dcd',\
-                                 top = self.yaml_current['systems']['rec-lig'][phase_num][0])
+                                 top = self.yaml_current['systems']['rec-lig'][phase_num][1])
         with open(f'{self.yank_store}/experiments/trailblaze/{phase}/states_map.json', 'r') as f:
             states_map_inds = eval(f.read())
         
@@ -331,7 +325,7 @@ class YankWrapper():
         elif phase == 'solvent':
             phase_num = 'phase2_path'
         coords_traj = md.load_dcd(f'{self.yank_store}/experiments/trailblaze/{phase}/coordinates.dcd',\
-                                 top = self.yaml_current['systems']['rec-lig'][phase_num][0])
+                                 top = self.yaml_current['systems']['rec-lig'][phase_num][1])
         
         # Define positions array with appropriate dimensions
         poses_positions = np.zeros((ncdf.dimensions['replica'].size, \
@@ -386,10 +380,8 @@ class YankWrapper():
         n_states_o = acc_rate.shape[0]+1
         while self._insert_states():
             print("states were inserted")
-            #States were inserted, so the netcdf should be deleted
-            #yank_nc_fn = f'{self.yank_store}/experiments/{phase}.nc'
             
-            #Reset NetCDFs
+            # Reset NetCDFs
             for fn in ['complex','solvent']:
                 if os.path.isfile(f'{self.yank_store}/experiments/{fn}.nc'):
                     shutil.copy(f'{self.yank_store}/experiments/{fn}.nc',\
@@ -413,20 +405,20 @@ class YankWrapper():
     def insert_poses_now(self, list_of_pdb_fns):
         acc_rate = experiment.acceptance_rate(phase='complex')
         n_states_o = acc_rate.shape[0]+1
-        if self._pose_insertion(list_of_pdb_fns):
-            print("poses were inserted")
-            #Reset NetCDFs
-            for fn in ['complex','solvent']:
-                if os.path.isfile(f'{self.yank_store}/experiments/{fn}.nc'):
-                    shutil.copy(f'{self.yank_store}/experiments/{fn}.nc',\
-                                f'{self.yank_store}/experiments/{fn}_{n_states_o}.nc')
-                    os.remove(f'{self.yank_store}/experiments/{fn}.nc')
-                if os.path.isfile(f'{self.yank_store}/experiments/{fn}_checkpoint.nc'):
-                    shutil.copy(f'{self.yank_store}/experiments/{fn}_checkpoint.nc',\
-                                f'{self.yank_store}/experiments/{fn}_checkpoint_{n_states_o}.nc')
-                    os.remove(f'{self.yank_store}/experiments/{fn}_checkpoint.nc')
+        print('\n\nInserting poses now\n\n')
+        self._pose_insertion(list_of_pdb_fns)
+        #Reset NetCDFs
+        for fn in ['complex','solvent']:
+            if os.path.isfile(f'{self.yank_store}/experiments/{fn}.nc'):
+                shutil.copy(f'{self.yank_store}/experiments/{fn}.nc',\
+                            f'{self.yank_store}/experiments/{fn}_{n_states_o}.nc')
+                os.remove(f'{self.yank_store}/experiments/{fn}.nc')
+            if os.path.isfile(f'{self.yank_store}/experiments/{fn}_checkpoint.nc'):
+                shutil.copy(f'{self.yank_store}/experiments/{fn}_checkpoint.nc',\
+                            f'{self.yank_store}/experiments/{fn}_checkpoint_{n_states_o}.nc')
+                os.remove(f'{self.yank_store}/experiments/{fn}_checkpoint.nc')
 
-            self.run_yank() 
+        self.run_yank() 
     
  
 
@@ -450,7 +442,7 @@ elif job_type == 'start':
     print('SYSTEM READY FOR PRODUCTION RUN')
 
 elif job_type == 'restart1':
-    current_yaml_path = f'/ocean/projects/bio230003p/dcooper/yank/{name}/{name}_{run}/experiments/experiments.yaml'
+    current_yaml_path = f'/expanse/lustre/projects/iit119/dcooper/yank/{drug}/centroid_{centroid}/{drug}_{run}/experiments/experiments.yaml'
     experiment = YankWrapper(current_yaml_path)
     experiment.state_evaluation()
     experiment.insert_poses_now(pose_fns)
@@ -462,7 +454,7 @@ elif job_type == 'restart1':
     experiment.state_evaluation()
 
 elif job_type == 'restart2':
-    current_yaml_path = f'/ocean/projects/bio230003p/dcooper/yank/{name}/{name}_{run}/experiments/experiments.yaml'
+    current_yaml_path = f'/expanse/lustre/projects/iit119/dcooper/yank/{drug}/centroid_{centroid}/{drug}_{run}/experiments/experiments.yaml'
     experiment = YankWrapper(current_yaml_path)
     n_states = len(experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'])
     experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'] = [1.0 for i in range(n_states)]
@@ -471,14 +463,15 @@ elif job_type == 'restart2':
         f.write(f'Restraints now set to: \n {restraints}\n')
     experiment.state_evaluation()
         
-
 elif job_type == 'production':
     #initialize experiment
-    current_yaml_path = f'/ocean/projects/bio230003p/dcooper/yank/{name}/{name}_{run}/experiments/experiments.yaml'
+    current_yaml_path = f'/expanse/lustre/projects/iit119/dcooper/yank/{drug}/centroid_{centroid}/{drug}_{run}/experiments/experiments.yaml'
     experiment = YankWrapper(current_yaml_path)
     acc_rate = experiment.acceptance_rate(phase='complex')
     print(f"ACCEPTANCE LOWEST: " + str(np.min(acc_rate)))
     n_states_o = acc_rate.shape[0]+1
+
+    target_iters = int(sys.argv[5])
 
     for fn in ['complex','solvent']:
         if os.path.isfile(f'{experiment.yank_store}/experiments/{fn}.nc'):
@@ -490,15 +483,9 @@ elif job_type == 'production':
                         f'{experiment.yank_store}/experiments/{fn}_checkpoint_{n_states_o}.nc')
             os.remove(f'{experiment.yank_store}/experiments/{fn}_checkpoint.nc')
 
-    experiment.yaml_current['options']['number_of_equilibration_iterations'] = 0
-    experiment.yaml_current['options']['default_number_of_iterations'] = 50
-    experiment.yaml_current['options']['default_timestep'] = '4.0*femtosecond'
-    experiment.yaml_current['options']['default_nsteps_per_iteration'] = 500
-    experiment.yaml_current['options']['hydrogen_mass'] = '2.0 * amu'
-    
-    n_states = len(experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'])
-    experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'] = [1.0 for i in range(n_states)]
-
+    experiment.yaml_current['options']['default_nsteps_per_iteration'] = 150
+    experiment.yaml_current['options']['default_number_of_iterations'] = target_iters
+    experiment.yaml_current['options']['default_timestep'] = '3.0*femtosecond' 
 
     num_of_iters = experiment.yaml_current['options']['default_number_of_iterations']
     print(f'number of iterations set to {num_of_iters}')
@@ -506,52 +493,105 @@ elif job_type == 'production':
     experiment.run_yank()
 
 elif job_type == 'production_restart':
-    current_yaml_path = f'/ocean/projects/bio230003p/dcooper/yank/{name}/{name}_{run}/experiments/experiments.yaml'
+    #initialize experiment
+    current_yaml_path = f'/expanse/lustre/projects/iit119/dcooper/yank/{drug}/centroid_{centroid}/{drug}_{run}/experiments/experiments.yaml'
     experiment = YankWrapper(current_yaml_path)
     acc_rate = experiment.acceptance_rate(phase='complex')
-    experiment.state_evaluation()
+    print(f"ACCEPTANCE LOWEST: " + str(np.min(acc_rate)))
+    n_states_o = acc_rate.shape[0]+1
 
+    target_iters = int(sys.argv[5])
 
-    #get the number of iterations that have already been ran 
-    # ncdf_path = f'/ocean/projects/bio230003p/dcooper/yank/{name}/{name}_{run}/experiments/complex.nc'
-    # ncdf = nc.Dataset(ncdf_path)
-    iters_ran = int(experiment.yaml_current['options']['default_number_of_iterations'])
+    experiment.yaml_current['options']['default_nsteps_per_iteration'] = 150
+    experiment.yaml_current['options']['default_number_of_iterations'] = target_iters
+    experiment.yaml_current['options']['default_timestep'] = '3.0*femtosecond' 
 
-    # set target iters with arg
-    target_iters = int(sys.argv[4])
+    num_of_iters = experiment.yaml_current['options']['default_number_of_iterations']
+    print(f'number of iterations set to {num_of_iters}')
     
-    #report target iters and iters ran and min acc rate
-    print(f'target: {target_iters} \niters_ran: {iters_ran}')
-    print(f'min acc rate: {np.min(acc_rate)}')
-
-    while (iters_ran < target_iters):
-        new_experiment = YankWrapper(current_yaml_path)
-        n_states = len(experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'])
-        new_experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'] = [1.0 for i in range(n_states)]
-        new_experiment.yaml_current['options']['default_timestep'] = '4.0*femtosecond'
-        new_experiment.yaml_current['options']['default_nsteps_per_iteration'] = 500
-        new_experiment.yaml_current['options']['hydrogen_mass'] = '2.0 * amu'
-        new_experiment.yaml_current['options']['default_number_of_iterations'] = iters_ran + 50
-        new_experiment.yaml_current['options']['output_dir'] = f'/ocean/projects/bio230003p/dcooper/yank/{name}/{name}_{run}'
-        new_experiment.run_yank()
-        acc_rate = new_experiment.acceptance_rate(phase='complex')
-        if(np.min(acc_rate) < 0.45):
-            new_experiment.yaml_current['options']['default_number_of_iterations'] = 50
-            new_experiment.state_evaluation()
-            iters_ran = 50
-        else:
-            with open(prog_path, 'a') as f:
-                f.write(f'PRODUCTION iteration: {iters_ran}\n')
-                f.write(f'PRODUCTION lowest acceptance rate of {np.min(acc_rate)}\n')
-            print(f" NUMBER OF ITERATIONS COMPLETED IS {iters_ran+50}")
-            iters_ran += 50
-    
-
-    print('PRODUCTION RUN COMPLETE')
-
-    acc_rate = experiment.acceptance_rate(phase='complex')
     with open(prog_path, 'a') as f:
         f.write(f'PRODUCTION lowest acceptance rate of {np.min(acc_rate)}\n')
         f.write(f'PRODUCTION accpetance rates: {acc_rate}\n')
+
+    experiment.run_yank()
+
+elif job_type == 'run_all':
+    experiment = YankWrapper(yaml_file)#this will be skipped if this has already been ran 
+    n_states = len(experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'])
+    experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'] = [1.0 for i in range(n_states)]
+    restraints = experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints']
+    with open(prog_path, 'a') as f:
+        f.write(f'Restraints now set to: \n {restraints}\n')
+    experiment.state_evaluation()
+    experiment.insert_poses_now(pose_fns)
+    experiment.state_evaluation()
+    with open(prog_path, 'a') as f:
+        f.write('STARTING PRODUCTION RUN\n')
+        
+    target_iters = int(sys.argv[5])
+
+    acc_rate = experiment.acceptance_rate(phase='complex')
+    n_states_o = acc_rate.shape[0]+1
+    for fn in ['complex','solvent']:
+        if os.path.isfile(f'{experiment.yank_store}/experiments/{fn}.nc'):
+            shutil.copy(f'{experiment.yank_store}/experiments/{fn}.nc',\
+                        f'{experiment.yank_store}/experiments/{fn}_{n_states_o}.nc')
+            os.remove(f'{experiment.yank_store}/experiments/{fn}.nc')
+        if os.path.isfile(f'{experiment.yank_store}/experiments/{fn}_checkpoint.nc'):
+            shutil.copy(f'{experiment.yank_store}/experiments/{fn}_checkpoint.nc',\
+                        f'{experiment.yank_store}/experiments/{fn}_checkpoint_{n_states_o}.nc')
+            os.remove(f'{experiment.yank_store}/experiments/{fn}_checkpoint.nc')
+
+    experiment.yaml_current['options']['default_nsteps_per_iteration'] = 150
+    experiment.yaml_current['options']['default_number_of_iterations'] = target_iters
+    experiment.yaml_current['options']['default_timestep'] = '3.0*femtosecond' 
+
+    num_of_iters = experiment.yaml_current['options']['default_number_of_iterations']
+    with open(prog_path, 'a') as f:
+        f.write(f'default_number_of_iterations set to {num_of_iters}\n')
+    
+    experiment.run_yank()
+    with open(prog_path, 'a') as f:
+        f.write('PRODUCTION RUN COMPLETE\n')
+
+elif job_type == 'test':
+    current_yaml_path = 'TEST.yaml'
+    with open(current_yaml_path, 'r') as f:
+        test_yaml = yaml.load(f, Loader=YankLoader)     
+    print(test_yaml)   
+    experiment = YankWrapper(current_yaml_path)#this will be skipped if this has already been ran 
+    n_states = len(experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'])
+    experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints'] = [1.0 for i in range(n_states)]
+    restraints = experiment.yaml_current['protocols']['absolute-binding']['complex']['alchemical_path']['lambda_restraints']
+    print(f'Restraints now set to: \n {restraints}\n')
+    experiment.state_evaluation()
+
+    # # Add coordinates.dcd to experiment dir if path to previous .dcd is provided
+
+    # if not os.path.exists(f'{yank_output_dir}/experiments/trailblaze'):
+    #     os.mkdir(f'{yank_output_dir}/experiments/trailblaze')
+    # if not os.path.exists(f'{yank_output_dir}/experiments/trailblaze/complex'):
+    #     os.mkdir(f'{yank_output_dir}/experiments/trailblaze/complex')
+    # if not os.path.exists(f'{yank_output_dir}/experiments/trailblaze/solvent'):
+    #     os.mkdir(f'{yank_output_dir}/experiments/trailblaze/solvent')
+
+    # # Copy 
+    # if not os.path.exists(f'{yank_output_dir}/experiments/trailblaze/complex/coordinates.dcd'):
+    #     shutil.copy(f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/8ef5_test1_copy/experiments/trailblaze/complex/coordinates.dcd', f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/experiments/trailblaze/complex/coordinates.dcd') 
+    #     shutil.copy(f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/8ef5_test1_copy/experiments/trailblaze/complex/states_map.json', f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/experiments/trailblaze/complex/states_map.json') 
+
+    #     shutil.copy(f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/8ef5_test1_copy/experiments/trailblaze/solvent/coordinates.dcd', f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/experiments/trailblaze/solvent/coordinates.dcd') 
+    #     shutil.copy(f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/8ef5_test1_copy/experiments/trailblaze/solvent/states_map.json', f'/expanse/lustre/projects/ii119/dcooper/yank/8ef5/old_centroid_2/experiments/trailblaze/solvent/states_map.json') 
+
+
+    # experiment.insert_poses_now(pose_fns)
+    # experiment.state_evaluation()
+
+    experiment.yaml_current['options']['default_number_of_iterations'] = 10
+    print(experiment.yaml_current['options']['default_number_of_iterations'])
+    experiment.run_yank()
+
+    print('SYSTEM READY FOR PRODUCTION RUN')
+
 
 

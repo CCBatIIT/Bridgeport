@@ -1,0 +1,25 @@
+#!/bin/sh
+#SBATCH --job-name="AnalysisJob"
+#SBATCH --output="./yank_analysis_log/AnalysisJob.%j.%N.out"
+#SBATCH --partition=gpu-shared
+#SBATCH --gpus=1
+#SBATCH --mem=12G
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=dcooper6@hawk.iit.edu
+#SBATCH --account=iit119
+#SBATCH --no-requeue
+#SBATCH -t 8:00:00
+
+source ~/.bashrc
+
+conda activate yank_env
+
+cd $SLURM_SUBMIT_DIR
+
+echo ANALYZING ANALOGUE: $1 CENTROID: $2 OPTIONS: delete previous analysis $4
+python ./YANK_analysis_best.py $1 $2 $3 
+
+
+

@@ -12,19 +12,23 @@ import os, pickle
 
 
 # Input options 
-analogue = sys.argv[1]
-run = sys.argv[2]
-sel_str_align = 'protein and name CA'
+drug = sys.argv[1]
+centroid_no = sys.argv[2]
+run = sys.argv[3]
+if drug == '8ef5':
+  cryo_sele_str = 'protein and resid 73:86 88:193 195:349 and name CA'
+  bound_sele_str = 'protein and resid 71:347 and name CA'
 sel_str_store = 'not resname HOH'
 stride = 1
-print(f"ANALYSIS FOR {analogue} RUN: {run}")
+print(f"ANALYSIS FOR {drug} RUN: {run}")
 
 
 # Input files
-working_dir = f'./yank/{analogue}'
-store_dir = f'{working_dir}/{analogue}_{run}/experiments'
+working_dir = f'../../yank/{drug}/centroid_{centroid_no}/'
+store_dir = f'{working_dir}/{drug}_{run}/experiments'
 analysis_store_dir = f'{working_dir}/analysis_{run}'
-delete_analysis_store_dir = sys.argv[3]
+
+delete_analysis_store_dir = sys.argv[4] 
 print("OPTION")
 print(delete_analysis_store_dir)
 if delete_analysis_store_dir == 'True' or delete_analysis_store_dir == 'true' or delete_analysis_store_dir == 'yes':
@@ -32,8 +36,10 @@ if delete_analysis_store_dir == 'True' or delete_analysis_store_dir == 'true' or
 if not os.path.exists(analysis_store_dir):
    os.mkdir(analysis_store_dir)
 complex_nc = f'{store_dir}/complex.nc'
-complex_prmtop = f'{working_dir}/{analogue}_1.prmtop'
-complex_inpcrd = f'{working_dir}/{analogue}_1.inpcrd'
+ref_pdb = f'./CRYO/{drug}.pdb'
+complex_pdb = f'{working_dir}/{drug}_{centroid_no}_1.pdb'
+complex_xml = f'{working_dir}/{drug}.xml'
+
 #output
 bound_dcd_fn = f'{analysis_store_dir}/bound_{run}.dcd' 
 print(bound_dcd_fn)
@@ -51,12 +57,12 @@ from MDAnalysis.analysis import align
 
 if not os.path.exists(f'{analysis_store_dir}/bound.pdb'):
   print("MAKING bound.pdb")
-  ref = mda.Universe(complex_prmtop, complex_inpcrd)
-  complex = mda.Universe(complex_prmtop, complex_inpcrd)
+  ref = mda.Universe(ref_pdb)
+  complex = mda.Universe(complex_pdb)
   sel_protein = complex.select_atoms("protein")
   sel_store = complex.select_atoms(sel_str_store)
-  sel_store.write(f'{analysis_store_dir}/{analogue}_complex_no_water.pdb')
-  complex_no_water = mda.Universe(f'{analysis_store_dir}/{analogue}_complex_no_water.pdb')
+  sel_store.write(f'{analysis_store_dir}/{drug}_complex_no_water.pdb')
+  complex_no_water = mda.Universe(f'{analysis_store_dir}/{drug}_complex_no_water.pdb')
   sel_store_no_water = complex_no_water.select_atoms('all')
 
   print(f"Number of atoms: {sel_protein.n_atoms} in protein, " + \
@@ -108,9 +114,9 @@ if not os.path.exists(bound_dcd_fn):
   print('These are RMSDs before and after alignment:')
   writer = mda.coordinates.DCD.DCDWriter(bound_dcd_fn, sel_store.n_atoms)
   for frame in range(equil_iters+1,len(replica_ind)-2):
-      coords = nc.variables['positions'][frame*stride,replica_ind[frame],:,:]*10.0
+      coords = nc.variables['positions'][frame*stride,replica_ind[frame],:,:]#*10.0 # remove here
       complex_no_water.load_new(coords, format=MemoryReader)
-      print(align.alignto(complex_no_water, ref, select=sel_str_align))
+      print(align.alignto(complex_no_water, ref, select={'mobile': bound_sele_str, 'reference': cryo_sele_str}))
       writer.write(sel_store_no_water)
 print("\n\nTRAJECTORIES WRITTEN\n\n")
 
@@ -212,7 +218,7 @@ ligand_AMBER_atom_types = np.array(AMBER_atom_types)[sel_ligand.indices]
 print("\n\n BOUND COMPLEX  LOADED\n\n")
 
 
-delete_pkl = sys.argv[3]
+delete_pkl = sys.argv[4]
 if delete_pkl == 'True' or delete_pkl == 'true' or delete_pkl == 'yes':
    os.system(f'rm {analysis_store_dir}/rmsds.pkl')
    print("\n\n CURRENT .pkl REMOVED MAKING NEW ONE")
@@ -252,7 +258,7 @@ rmsds_sq = squareform(rmsds)
 import scipy.cluster
 Z = scipy.cluster.hierarchy.linkage(rmsds, method='complete')
 assignments = np.array(\
-  scipy.cluster.hierarchy.fcluster(Z, 2, criterion='distance'))
+  scipy.cluster.hierarchy.fcluster(Z, 3, criterion='distance'))
 
 # Reindexes the assignments in order of appearance
 new_index = 0
@@ -278,7 +284,7 @@ print("CLUSTER COUNTS:")
 print(cluster_counts)
 
 # load combined trajectory
-complex_no_water = mda.Universe(f'{analysis_store_dir}/{analogue}_complex_no_water.pdb', bound_dcd_fn)
+complex_no_water = mda.Universe(f'{analysis_store_dir}/{drug}_complex_no_water.pdb', bound_dcd_fn)
 sel_store_no_water = complex_no_water.select_atoms('all')
 
 # Write traj files for each assignment >= 20 frames
@@ -304,7 +310,7 @@ for n in range(max(assignments) + 1):
 counts_and_medoids.sort(reverse=True)
 print(counts_and_medoids)
 with open(f'{analysis_store_dir}/replicate_{run}_cluster_sizes.txt', 'w') as f:
-  f.write(f'CLUSTER COUNTS AND MEDIOIDS OF {analogue}\n')
+  f.write(f'CLUSTER COUNTS AND MEDIOIDS OF {drug}\n')
   for cluster in counts_and_medoids:
     f.write(str(cluster))
 

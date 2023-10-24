@@ -1,0 +1,25 @@
+#!/bin/sh
+#SBATCH --job-name="BindingFreeEnergyJob"
+#SBATCH --output="./yank_analysis_log/BFEJob.%j.%N.out"
+#SBATCH --partition=gpu-shared
+#SBATCH --gpus=1
+#SBATCH --mem=22G
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=dcooper6@hawk.iit.edu
+#SBATCH --account=iit119
+#SBATCH --no-requeue
+#SBATCH -t 1:00:00
+
+source ~/.bashrc
+
+conda activate yank_env
+
+cd $SLURM_SUBMIT_DIR
+
+echo ANALYZING ANALOGUE: $1 CENTROID: $2 REP: $3
+yank analyze --store=../../yank/$1/centroid_$2/$1_$3/experiments
+
+
+
