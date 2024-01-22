@@ -1,5 +1,13 @@
-# YankBindingPose
-Code for the preparation and running of YANK Simulations with the Open Force Field (Requires Python 3.9)
+# Minh Sim Prep
+## Overview
+This repo is a gneeral tool for the preparation of molecular complexes for simulation.
+
+## Environment
+Construct the environment by downloading the following packages from conda-forge:
+openff-toolkit, pdbfixer, openbabel
+
+$ conda create -n openff -c conda-forge openff-toolkit, pdbfixer, openbabel
+$ pip install pdb2pqr
 
 ## Modules
 ### Simulation_Preparer usage:
