@@ -1,4 +1,4 @@
-# Minh Sim Prep
+# Bridgeport - A python package for automated preparation of membrane protein simulations.
 ## Overview
 This repo is a gneeral tool for the preparation of molecular complexes for simulation.
 
