@@ -1,10 +1,10 @@
-import os
+import os, shutil
 import mdtraj as md
 import numpy as np
 from openmm.app import *
 from openmm import *
 from openmm.unit import *
-
+from datetime import datetime
 
 class MotorRow():
     """
@@ -18,26 +18,42 @@ class MotorRow():
         5 - "npt": {"totalSteps": 10000000, "Barostat" : "MonteCarloBarostat", "Pressure" : 1.0}
 
         Common - dt=2.0fs ; Temp=300K ; Platform=OpenCL ; 1000 step stdout ; 5000 step dcd ; 
-     """
+    """
     
-    def __init__(self, xml_file, working_directory):
+    def __init__(self, system_xml, pdb_file, working_directory):
         """
         Parse the xml into openmm an openmm system
         Sets the self.system parameter
         """
-        #Load XML file
-        self.xml = xml_file
-                
+        #If the working dir is absolute, leave it alone, otherwise make it abs
         if os.path.isabs(working_directory):
             self.abs_work_dir = working_directory
         else:
             self.abs_work_dir = os.path.join(os.getcwd(), working_directory)
-
+        #Ensure that the working dir exists, and if not create it
         if not os.path.isdir(self.abs_work_dir):
             os.mkdir(self.abs_work_dir)
+        #Get the system xml file (we want to create a system fresh from this every time)
+        if os.path.isabs(system_xml):
+            pass
+        else:
+            shutil.copy(system_xml, os.path.join(self.abs_work_dir, system_xml))
+            system_xml = os.path.join(self.abs_work_dir, system_xml)
+
+        self.system_xml = system_xml
+        
+        #Get the pdbfile, store the topology (and initial positions i guess)
+        if os.path.isabs(pdb_file):
+            pass
+        else:
+            shutil.copy(pdb_file, os.path.join(self.abs_work_dir, pdb_file))
+            pdb_file = os.path.join(self.abs_work_dir, pdb_file)
+        
+        pdb = PDBFile(pdb_file)
+        self.topology = pdb.topology
 
         
-    def main(self, pdb_in)):
+    def main(self, pdb_in):
         """
         Run the standard five step equilibration
         0 - Minimization
@@ -47,16 +63,29 @@ class MotorRow():
         4 - NPT with MonteCarlo Barostat
         5 - NPT with MonteCarlo Barostat
         """
+        #IF the pdb is absolute, store other files in that same directory (where the pdb is)
+        if os.path.isabs(pdb_in):
+            pass
+        else:
+            shutil.copy(pdb_in, os.path.join(self.abs_work_dir, pdb_in))
+            pdb_in = os.path.join(self.abs_work_dir, pdb_in)
         
-        pdb1 = self._minimize(pdb_in)
-        pdb2 = self._run_step(pdb1, 1)
-        pdb3 = self._run_step(pdb2, 2)
-        pdb4 = self._run_step(pdb3, 3)
-        pdb5 = self._run_step(pdb4, 4)
-        prod_pdb = self._run_step(pdb5, 5)
+        #Minimize
+        state_fn, pdb_fn = self._minimize(pdb_in)
+        #NVT Restraints
+        state_fn, pdb_fn = self._run_step(state_fn, 1, nsteps=125000, positions_from_pdb=pdb_fn)
+        #NVT no Restraints
+        state_fn, pdb_fn = self._run_step(state_fn, 2, nsteps=125000)
+        #NPT Membrane Barostat
+        state_fn, pdb_fn = self._run_step(state_fn, 3, nsteps=250000)
+        #NPT
+        state_fn, pdb_fn = self._run_step(state_fn, 4, nsteps=250000)
+        #NPT
+        state_fn, pdb_fn = self._run_step(state_fn, 5, nsteps=250000)
         
-        return prod_pdb
+        return state_fn, pdb_fn
     
+
     def _describe_state(self, sim: Simulation, name: str = "State"):
         """
         Report the energy of an openmm simulation
@@ -66,23 +95,46 @@ class MotorRow():
         print(f"{name} has energy {round(state.getPotentialEnergy()._value, 2)} kJ/mol ",
               f"with maximum force {round(max_force, 2)} kJ/(mol nm)")
 
+
     def _unpack_infiles(self, xml, pdb):
         """
         Parse XML and PDB into Openmm System Topology adn Positions
         """
-        pdb = PDBFile(pdb_in)
-        with open(xml_file) as f:
+        print(f'Unpacking {xml}, {pdb}')
+        pdb = PDBFile(pdb)
+        with open(xml) as f:
             system = XmlSerializer.deserialize(f.read())
         return system, pdb.topology, pdb.positions
-        
+       
+
+    def _write_state(self, sim: Simulation, xml_fn: str):
+        """
+        Serialize the openmm State as an xml file
+        """
+        state = sim.context.getState(getPositions=True, getVelocities=True, enforcePeriodicBox=True)
+        contents = XmlSerializer.serialize(state)
+        with open(xml_fn, 'w') as f:
+            f.write(contents)
+        print(f'Wrote: {xml_fn}')
+ 
     
-    def _write_structure(self, sim: Simulation, pdb_fn: str):
+    def _write_system(self, sim: Simulation, xml_fn: str):
+        """
+        Serialize the openmm system as an xml file
+        """
+        with open(xml_fn, 'w') as f:
+            f.write(XmlSerializer.serialize(sim.system))
+        print(f'Wrote: {xml_fn}')
+
+
+    def _write_structure(self, sim: Simulation, pdb_fn:str=None):
         """
         Writes the structure of the given simulation object to pdb_fn
         """
         with open(pdb_fn, 'w') as f:
-            PDBFile.writeFile(simulation.topology, simulation.context.getState(getPositions=True).getPositions(), f)
+            PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
         print(f'Wrote: {pdb_fn}')
+
 
     def _get_positions_from_pdb(self, fname_pdb):
         nameMembrane = ['DPP', 'POP']
@@ -112,7 +164,8 @@ class MotorRow():
     
         return np.array(coords), prt_heavy_atoms, mem_heavy_atoms
         
-    def _minimize(self, pdb_in: str, pdb_out: str = None, temp = 300.0, dt = 2.0):
+
+    def _minimize(self, pdb_in:str, pdb_out:str=None, state_xml_out:str=None, temp=300.0, dt=2.0):
         """
         Minimizes the structure of pdb_in
         
@@ -122,26 +175,34 @@ class MotorRow():
         Returns:
             pdb_out - FilePath to the output structure
         """
-        system, topology, positions = self._unpack_infiles(self.xml, pdb_in)
+        start = datetime.now()
+        system, _, positions = self._unpack_infiles(self.system_xml, pdb_in)
         integrator = LangevinIntegrator(temp*kelvin, 1/picosecond, dt*femtosecond)
-        simulation = Simulation(pdb.topology, system, integrator)
-        simulation.context.setPositions(pdb.positions)
-        describe_state(simulation.context.getState(getEnergy=True, getForces=True), "Original state")
+        simulation = Simulation(self.topology, system, integrator)
+        simulation.context.setPositions(positions)
+        self._describe_state(simulation, "Original state")
         simulation.minimizeEnergy()
-        describe_state(simulation.context.getState(getEnergy=True, getForces=True), "Minimized state")
+        self._describe_state(simulation, "Minimized state")
+        end = datetime.now() - start
+        print(f'Minimization completed in {end}')
         
         if pdb_out is not None:
-            write_structure(simulation, pdb_out)
+            pass
         else:
-            pdb_out = os.path.join(os.path.split(pdb_in)[0], f'minimized.pdb')
-            write_structure(simulation, pdb_out)
+            pdb_out = os.path.join(self.abs_work_dir, f'minimized.pdb')
+        self._write_structure(simulation, pdb_out)
         
-        return pdb_out
+        if state_xml_out is not None:
+            pass
+        else:
+            state_xml_out = os.path.join(self.abs_work_dir, f'minimized_state.xml')
+        self._write_state(simulation, state_xml_out)
+        return state_xml_out, pdb_out
 
 
-    def _run_step(self, pdb_in:str, stepnum:int, pdb_out:str=None,
-                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0,
-                  nstdout=1000, fn_stdout=None, ndcd=5000, fn_dcd=None, press=1.0):
+    def _run_step(self, state_in:str, stepnum:int, state_xml_out:str=None, pdb_out:str=None,
+                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, nstdout=1000,
+                  fn_stdout=None, ndcd=5000, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
         """
         Run different simulations based on the step number
         1 - NVT with Heavy Restraints on the Protein and Membrane (Z) coords
@@ -151,11 +212,18 @@ class MotorRow():
         5 - NPT with MonteCarlo Barostat
         """
         #Before ANY STEP
-        system, topology, positions = self._unpack_infiles(self.xml, pdb_in)
-        crds, prt_heavy, mem_heavy = self._get_positions_from_pdb(pdb_in)
+        start = datetime.now()
+        #Establish State
+        with open(self.system_xml) as f:
+            system = XmlSerializer.deserialize(f.read())
+        
+        #print(f'Forces as loaded from XML: {system.getForces()}')
+        #print(f'Box Vectors as loaded from system: {system.getDefaultPeriodicBoxVectors()}')
         
         #STEP SPECIFIC ACTIONS
         if stepnum == 1:
+            assert positions_from_pdb is not None
+            crds, prt_heavy, mem_heavy = self._get_positions_from_pdb(positions_from_pdb)
             prt_rest = CustomExternalForce('fc_pos*periodicdistance(x,y,z,x0,y0,z0)^2')
             prt_rest.addGlobalParameter('fc_pos', fc_pos)
             prt_rest.addPerParticleParameter('x0')
@@ -182,44 +250,72 @@ class MotorRow():
                                                        MonteCarloMembraneBarostat.XYIsotropic,
                                                        MonteCarloMembraneBarostat.ZFree, 100))
         elif stepnum == 4:
+            #system.addForce(MonteCarloMembraneBarostat(press*bar, 300*bar*nanometer, temp*kelvin,
+            #                                           MonteCarloMembraneBarostat.XYIsotropic,
+            #                                           MonteCarloMembraneBarostat.ZFree, 100))
             system.addForce(MonteCarloBarostat(press*bar, temp*kelvin, 100))
 
         elif stepnum == 5:
+            #system.addForce(MonteCarloMembraneBarostat(press*bar, 300*bar*nanometer, temp*kelvin,
+            #                                           MonteCarloMembraneBarostat.XYIsotropic,
+            #                                           MonteCarloMembraneBarostat.ZFree, 100))
             system.addForce(MonteCarloBarostat(press*bar, temp*kelvin, 100))
 
         else:
             raise NotImplementedError('How did that happen?')
         
-        #AFTER ANY STEP
+        #Any Step Establish Simulation
         integrator = LangevinIntegrator(temp*kelvin, 1/picosecond, dt*femtosecond)
         try:
             platform = Platform.getPlatformByName('OpenCL')
             properties = {'OpenCLPrecision': 'mixed'}
-            simulation = Simulation(topology, system, integrator, platform, properties)
+            simulation = Simulation(self.topology, system, integrator, platform, properties)
         except:
-            simulation = Simulation(topology, system, integrator)
-        simulation.context.setPositions(positions)
-        simulation.context.setVelocitiesToTemperature(temp)
+            simulation = Simulation(self.topology, system, integrator)
         
-        if fn_stdout=None:
+        #If it is an NVT step, positions should be set from the pdb out of previous step
+        #otherwise positions (and box vecs) should be set via loadState
+        if stepnum == 1:
+            assert positions_from_pdb is not None
+            pdb = PDBFile(positions_from_pdb)
+            simulation.context.setPositions(pdb.positions)
+            simulation.context.setVelocitiesToTemperature(temp)
+        else:
+            simulation.loadState(state_in)
+        
+        if fn_stdout is None:
             fn_stdout = os.path.join(self.abs_work_dir, f'step{stepnum}.stdout')
         
-        if fn_dcd=None:
+        if fn_dcd is None:
             fn_dcd = os.path.join(self.abs_work_dir, f'step{stepnum}.dcd')
         
         SDR = app.StateDataReporter(fn_stdout, nstdout, step=True, time=True,
                                     potentialEnergy=True, temperature=True, progress=False,
-                                    remainingTime=True, speed=False, volume=False,
-                                    totalSteps=nsteps, separator=' : '))
+                                    remainingTime=True, speed=False, volume=True,
+                                    totalSteps=nsteps, separator=' : ')
         simulation.reporters.append(SDR)
         DCDR = app.DCDReporter(fn_dcd, ndcd)
-        simulation.reporters.append(DCD)
+        simulation.reporters.append(DCDR)
+        print(f'Starting Step {stepnum} with forces {simulation.system.getForces()}')
+        print(f'Starting Step {stepnum} with box_vectors {simulation.system.getDefaultPeriodicBoxVectors()}')
         simulation.step(nsteps)
-
+        self._describe_state(simulation, f'Step {stepnum}')
+        end = datetime.now() - start
+        print(f'Step {stepnum} completed after {end}')
+        print(f'Box Vectors after this step {simulation.system.getDefaultPeriodicBoxVectors()}')
+        
         if pdb_out is not None:
-            write_structure(simulation, pdb_out)
+            pass
         else:
-            pdb_out = os.path.join(os.path.split(pdb_in)[0], f'Step_{stepnum}.pdb')
-            write_structure(simulation, pdb_out)
+            pdb_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.pdb')
+        self._write_structure(simulation, pdb_out)
 
-        return pdb_out
+        if state_xml_out is not None:
+            pass
+        else:
+            state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
+        self._write_state(simulation, state_xml_out)
+        
+        for i in range(3):
+            print('########################################################################################')
+        return state_xml_out, pdb_out
