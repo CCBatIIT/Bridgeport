@@ -32,7 +32,7 @@ class ForceFieldHandler():
     """
     
     def __init__(self, structure_file, force_field_files=None):
-        default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 'OpenMM': ['amber14/protein.ff14SB.xml', 'amber14/lipid17.xml', 'wat_opc3.xml']}
+        default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 'OpenMM': ['amber14/protein.ff14SB.xml', 'amber14/lipid17.xml', './ForceFields/wat_opc3.xml']}
         self.structure_file = structure_file
         # Parse the structure file to see if the user is in OpenFF or OpenMM mode
         self.working_mode = self._parse_file(structure_file)

@@ -13,6 +13,8 @@ import numpy as np
 from pdbfixer import PDBFixer
 from openmm.app import PDBFile
 import mdtraj as md
+from datetime import datetime
+from typing import List
 
 class RepairProtein():
     """
@@ -78,8 +80,12 @@ class RepairProtein():
             self.name = self.name.split('/')[-1]
         except:
             pass
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Welcome to RepairProtein', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein to repair:', self.pdb_fn, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Template sequence:', self.fasta_fn, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Modeller intermediates will be written to:', self.working_dir, flush=True)
 
-    def run(self, pdb_out_fn: str, tails: bool=False, loops=None):
+    def run(self, pdb_out_fn: str, tails: List=False, loops: List=None):
         """
         Run the remodelling.
 
@@ -94,102 +100,47 @@ class RepairProtein():
             loops (2D-list):
                 If list is provided then loops will be optimized. Should be in format [[resid_1, resid_2], ...] to represent the loops. 
         """
-        # Parse template sequence from .fasta
+        # Attributes
         self.pdb_out_fn = pdb_out_fn
-        self.temp_pir_fn = self.working_dir + '/' + self.name + '.pir'
-        fasta_to_pir(self.fasta_fn, self.temp_pir_fn)
-        self.temp_seq = parse_sequence(self.temp_pir_fn)
+
+        # Parse template sequence from .fasta
+        self._get_temp_seq()
 
         # Parse target sequence from .pdb
-        self.tar_pir_fn = self.working_dir + '/' + self.name + '.pir'
-        shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
-        pdb_to_pir(self.name, self.working_dir)
-        self.tar_seq = parse_sequence(self.tar_pir_fn)
-
+        self._get_tar_seq()
+        
         # Find mutated/missing residues
-        sw = SeqWrap(self.temp_seq, self.tar_seq)
-        sw.find_missing_residues(verbose=True)
-        traj = md.load_pdb(self.pdb_fn)
-        self.mutated_residues = sw.mutated_residues
-        counter = 0
-        while len(self.mutated_residues) > 0:
-            # Remove mutation from input.pdb
-            print('!!!',self.pdb_fn)
-            traj = md.load_pdb(self.pdb_fn)
-            mutated_atoms = traj.topology.select('resid '+ str(" ".join(self.mutated_residues[:,0])))
-            sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
-            traj.atom_slice(sele).save_pdb(self.pdb_fn)
-
-            # Reparse target sequence from new .pdb
-            shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
-            pdb_to_pir(self.name, self.working_dir)
-            self.tar_seq = parse_sequence(self.tar_pir_fn)
-
-            # Find missing
-            sw = SeqWrap(self.temp_seq, self.tar_seq)
-            sw.find_missing_residues(verbose=True)
-            self.mutated_residues = sw.mutated_residues
-
-            counter += 1
-            if counter == 2:
-                raise RuntimeError
-
-        self.missing_residues = sw.missing_residues
-        self.term_residues = sw.term_residues
-        self.ali_fn = self.working_dir + '/' + self.name + '.ali'
-        sw.write_alignment_file(self.ali_fn, self.temp_pir_fn)
+        self._align_sequences()
 
         # Model 
-        env = Environ()
-        env.io.atom_files_directory = ['.', self.working_dir]
-
-        class MyModel(AutoModel):
-            def select_atoms(self):
-                return Selection(self.residue_range('1:A', '1:A'))
-            
-        model = MyModel(env, 
-                        alnfile = self.ali_fn, 
-                        knowns=self.name, 
-                        sequence=self.name + '_fill')
-        model.starting_model = 1
-        model.ending_model = 1
-
         cwd = os.getcwd()
         os.chdir(self.working_dir)
-        model.make()
-        model.write(self.pdb_out_fn, no_ter=True)
-
+        self.env = Environ()
+        self.env.io.atom_files_directory = ['.', self.working_dir]
+        self._build_homology_model()
 
         # Fix loops
         if loops != None:
-            class MyLoop(LoopModel):
-                def select_loop_atoms(self):
-                    return Selection(self.residue_range(f'{loop[0]}:A', f'{loop[1]}:A') for loop in loops)
-
-            loopmodel = MyLoop(env, 
-                            inimodel=model.outputs[0]['name'],
-                            sequence=self.name+'_fill',
-                            loop_assess_methods=assess.DOPE)
-            
-            loopmodel.loop.starting_model = 1
-            loopmodel.loop.ending_model = 1
-            loopmodel.md_level = refine.fast
-            loopmodel.make()
-
-            # Move UCSF modeller output to desired location
-            loopmodel.write(self.pdb_out_fn, no_ter=True)
+            self._optimize_loops(loops)
 
         os.chdir(cwd)
 
         # Delete tails if necessary
-        if not tails:
+        if tails != False:
+            traj = md.load_pdb(self.pdb_out_fn)
+            top = traj.topology
+            resid_range = ' '.join(str(i) for i in range(tails[0], tails[1]))
+            sele = top.select(f'resid {resid_range}')
+            traj = traj.atom_slice(sele)
+            traj.save_pdb(self.pdb_out_fn)
+        else:
             traj = md.load_pdb(self.pdb_out_fn)
             top = traj.topology
             resid_range = ' '.join(str(i) for i in range(self.term_residues[0], self.term_residues[1]))
             sele = top.select(f'resid {resid_range}')
             traj = traj.atom_slice(sele)
             traj.save_pdb(self.pdb_out_fn)
-
+        
         # Fix missing residues if cutting tails created improper terminals
         fixer = PDBFixer(self.pdb_out_fn)
         fixer.findMissingResidues()
@@ -213,9 +164,185 @@ class RepairProtein():
         with open(self.pdb_out_fn, 'w') as f:
             for line in pdb_lines:
                 f.write(line)
-            
 
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
+
+    def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=None):
+        # Attributes
+        self.pdb_out_fn = pdb_out_fn
+        self.secondary_template_pdb = secondary_template_pdb
+        self.secondary_name = self.secondary_template_pdb.split('/')[-1].split('.')[0]
+
+        # Parse template sequence from .fasta
+        self._get_temp_seq()
+
+        # Parse target sequence from .pdb
+        self._get_tar_seq()
         
+        # Find mutated/missing residues
+        self._align_sequences()
+
+        # Model 
+        cwd = os.getcwd()
+        os.chdir(self.working_dir)
+        self.env = Environ()
+        self.env.io.atom_files_directory = ['.', self.working_dir]
+        self._build_homology_model()
+        
+        # Fix loops
+        if loops != None:
+            self._optimize_loops(loops)
+
+        os.chdir(cwd)
+
+        # Delete tails if necessary
+        if tails != False:
+            traj = md.load_pdb(self.pdb_out_fn)
+            top = traj.topology
+            resid_range = ' '.join(str(i) for i in range(tails[0], tails[1]))
+            sele = top.select(f'resid {resid_range}')
+            traj = traj.atom_slice(sele)
+            traj.save_pdb(self.pdb_out_fn)
+        else:
+            traj = md.load_pdb(self.pdb_out_fn)
+            top = traj.topology
+            resid_range = ' '.join(str(i) for i in range(self.term_residues[0], self.term_residues[1]))
+            sele = top.select(f'resid {resid_range}')
+            traj = traj.atom_slice(sele)
+            traj.save_pdb(self.pdb_out_fn)
+        
+        # Fix missing residues if cutting tails created improper terminals
+        fixer = PDBFixer(self.pdb_out_fn)
+        fixer.findMissingResidues()
+        fixer.findMissingAtoms()
+        fixer.addMissingAtoms()
+        PDBFile.writeFile(fixer.topology, fixer.positions, open(self.pdb_out_fn, 'w'), keepIds=True)
+
+        # Reinsert CRYS entry
+        crys_line = ''
+        with open(self.pdb_fn, 'r') as f:
+            for line in f:
+                if line.find('CRYST1') != -1:
+                    crys_line = f'{line}'
+        f.close()
+
+        with open(self.pdb_out_fn, 'r') as f:
+            pdb_lines = f.readlines()
+        f.close()
+
+        pdb_lines[0] = crys_line
+        with open(self.pdb_out_fn, 'w') as f:
+            for line in pdb_lines:
+                f.write(line)
+
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
+            
+    def _get_temp_seq(self):
+        self.temp_pir_fn = self.working_dir + '/' + self.name + '.pir'
+        fasta_to_pir(self.fasta_fn, self.temp_pir_fn)
+        self.temp_seq = parse_sequence(self.temp_pir_fn)
+
+    def _get_tar_seq(self):
+        self.tar_pir_fn = self.working_dir + '/' + self.name + '.pir'
+        shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
+        pdb_to_pir(self.name, self.working_dir)
+        self.tar_seq = parse_sequence(self.tar_pir_fn)
+        if hasattr(self, "secondary_template_pdb"):
+            shutil.copy(self.secondary_template_pdb, self.working_dir + '/' + self.secondary_template_pdb.split('/')[-1])
+            pdb_to_pir(self.secondary_name, self.working_dir)
+            self.secondary_pir_fn = self.working_dir + '/' + self.secondary_name + '.pir'
+            self.secondary_seq = parse_sequence(self.secondary_pir_fn)
+        else:
+            self.secondary_pir_fn = None
+            
+    def _align_sequences(self):
+        if hasattr(self, "secondary_seq"):
+            sw = SeqWrap(self.temp_seq, self.tar_seq, self.secondary_seq)
+        else:
+            sw = SeqWrap(self.temp_seq, self.tar_seq)
+
+        sw.find_missing_residues(verbose=False)
+        traj = md.load_pdb(self.pdb_fn)
+        self.mutated_residues = sw.mutated_residues
+        counter = 0
+        while len(self.mutated_residues) > 0:
+            # Remove mutation from input.pdb
+            traj = md.load_pdb(self.pdb_fn)
+            mutated_atoms = traj.topology.select('resid '+ str(" ".join(self.mutated_residues[:,0])))
+            sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
+            traj.atom_slice(sele).save_pdb(self.pdb_fn)
+
+            # Reparse target sequence from new .pdb
+            shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
+            pdb_to_pir(self.name, self.working_dir)
+            self.tar_seq = parse_sequence(self.tar_pir_fn)
+
+            # Find missing
+            if hasattr(self, "secondary_seq"):
+                sw = SeqWrap(self.temp_seq, self.tar_seq, self.secondary_seq)
+            else:
+                sw = SeqWrap(self.temp_seq, self.tar_seq)            
+            sw.find_missing_residues(verbose=False)
+            self.mutated_residues = sw.mutated_residues
+
+            counter += 1
+            if counter == 2:
+                raise RuntimeError
+
+        self.missing_residues = sw.missing_residues
+        self.term_residues = sw.term_residues
+        self.ali_fn = self.working_dir + '/' + self.name + '.ali'
+        sw.write_alignment_file(self.ali_fn, self.temp_pir_fn, self.secondary_pir_fn)
+
+
+    def _build_homology_model(self):
+        class MyModel(AutoModel):
+            def select_atoms(self):
+                return Selection(self.residue_range('1:A', '1:A'))
+
+        if hasattr(self, "secondary_name"):
+            self.model = MyModel(self.env, 
+                        alnfile = self.ali_fn, 
+                        knowns=[self.name, self.secondary_name], 
+                        sequence=self.name + '_fill')
+        else:
+            self.model = MyModel(self.env, 
+                            alnfile = self.ali_fn, 
+                            knowns=self.name, 
+                            sequence=self.name + '_fill')
+            
+        self.model.starting_model = 1
+        self.model.ending_model = 1
+        self.model.make()
+        self.model.write(self.pdb_out_fn, no_ter=True)
+
+    def _optimize_loops(self, loops):
+        class MyLoop(LoopModel):
+            def select_loop_atoms(self):
+                sel = Selection()
+                for loop in loops:
+                    sel.add(self.residue_range(f'{loop[0]}:A', f'{loop[1]}:A'))
+                return sel
+
+        # if known == None:
+        self.loopmodel = MyLoop(self.env, 
+                        inimodel=self.model.outputs[0]['name'],
+                        sequence=self.name+'_fill',
+                        loop_assess_methods=assess.DOPE)
+        # else:
+        #     self.loopmodel = MyLoop(self.env, 
+        #                     inimodel=self.model.outputs[0]['name'],
+        #                     knowns=known,
+        #                     sequence=self.name+'_fill',
+        #                     loop_assess_methods=assess.DOPE)
+
+        self.loopmodel.loop.starting_model = 1
+        self.loopmodel.loop.ending_model = 1
+        self.loopmodel.md_level = refine.fast
+        self.loopmodel.make()
+
+        # Move UCSF modeller output to desired location
+        self.loopmodel.write(self.pdb_out_fn, no_ter=True)
 
 
 

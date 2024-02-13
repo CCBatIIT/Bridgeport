@@ -1,0 +1,34 @@
+{
+    "working_dir": "/home/exouser/Bridgeport/tests",
+
+    "ligand": {
+        "lig_resname": false,
+        "peptide_chain": "P",
+        "peptide_fasta": "/home/exouser/Bridgeport/tests/fasta/PTH.fasta"
+    },
+
+    "protein": {
+        "input_pdb_dir": "/home/exouser/Bridgeport/tests/input_pdb", 
+        "input_pdb": "7vvk.pdb",
+        "chains": "R"
+    },
+
+    "RepairProtein": {
+        "working_dir": "/home/exouser/Bridgeport/tests/modeller_intermediates", 
+        "fasta_path": "/home/exouser/Bridgeport/tests/fasta/PTHR1.fasta",
+        "tails": [30,479],
+        "loops": [
+            [49, 127],
+            [157, 163],
+            [174, 179],
+            [246, 278],
+            [392, 398]
+        ],
+        "secondary_template": false
+    },
+
+    "environment": {
+        "membrane": true,
+        "alignment_ref": "/home/exouser/Bridgeport/tests/OPM/7vvk.pdb"
+    }
+}

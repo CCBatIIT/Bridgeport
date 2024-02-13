@@ -4,9 +4,17 @@ import mdtraj as md
 import MDAnalysis as mda
 from MDAnalysis.analysis.align import alignto
 sys.path.append('RepairProtein')
+sys.path.append('ForceFields')
+sys.path.append('utils')
 import numpy as np
 from ProteinPreparer import ProteinPreparer
 from RepairProtein import RepairProtein
+from ForceFieldHandler import ForceFieldHandler
+from OpenMMJoiner import Joiner
+from openmm.app import *
+from openmm import *
+from openmm.unit import *
+from openbabel import openbabel
 
 class Bridgeport():
     """
@@ -14,9 +22,51 @@ class Bridgeport():
 
     Attributes:
     -----------
+    input_json (str):
+        String path to input .json file.
+
+    input_params (dict):
+        Dictionary of input options read from self.input_json. For information on how to write the input file, reference the Bridgeport README
+
+    working_dir (str):
+        String path to working directory where all subdirectories will be created and output files will be stored. 
+
+    prot_only_dir (str):
+        String path to directory where protein .pdb files will be stored.
+
+    lig_only_dir (str):
+        String path to directory where lig .pdb files will be stored. 
 
     Methods:
     --------
+        run():
+            Run all methods to prepare an OpenMM system. Steps:
+                1. Align input structure to reference structure.
+                2. Separate ligand and protein for separate preparation steps.
+                3. Add missing residues and atoms using Modeller based on provided sequence.
+                4. Add hydrogens, solvent, and membrane (optional).
+                5. Prepare the ligand.
+                6. Generate an OpenMM system. 
+
+            Output system .pdb and .xml file will be found in self.working_dir/systems
+    
+        _align():
+            Align initial structure to a reference structure. The reference structure can include a structure from the OPM database for transmembrane proteins.
+        
+        _separate_lig_prot():
+            Separate ligand and protein based on chain and resname specified in input file.
+        
+        _repair_crystal():
+            Uses the RepairProtein class to replace missing residues with UCSF Modeller. 
+
+        _add_environment():
+             Add water, lipids, and hydrogens to protein with the ProteinPreparer class.
+
+        _ligand_prep():
+            Prepare ligand for OpenFF parameterization.
+
+        _generate_systems():
+            Generate forcefields with OpenFF using the ForcefieldHandler and OpenMMJoiner classes.    
     """
 
     def __init__(self, input_json: str):
@@ -50,28 +100,58 @@ class Bridgeport():
             except:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + key + ':', item, flush=True)       
 
+    def run(self):
+        """
+        Run all methods to prepare an OpenMM system. Steps:
+            1. Align input structure to reference structure.
+            2. Separate ligand and protein for separate preparation steps.
+            3. Add missing residues and atoms using Modeller based on provided sequence.
+            4. Add hydrogens, solvent, and membrane (optional).
+            5. Prepare the ligand.
+            6. Generate an OpenMM system. 
+
+        Output system .pdb and .xml file will be found in self.working_dir/systems
+        """
+        self._align()
+        self._separate_lig_prot()
+        self._repair_crystal()
+        self._add_environment()
+        self._ligand_prep()
+        self._generate_systems()
+    
     def _align(self):
         """
         Align initial structure to a reference structure. 
         The reference structure can include a structure from the OPM database for transmembrane proteins.
-        """
+        """        
         # Create directory for aligned proteins 
-        self.aligned_input_dir = os.path.join(self.working_dir, 'aligned_input_pdbs')
+        self.aligned_input_dir = os.path.join(self.working_dir, 'aligned_input_pdb')
         if not os.path.exists(self.aligned_input_dir):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Creating directory for aligned input structures:', self.aligned_input_dir, flush=True)    
             os.mkdir(self.aligned_input_dir)
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found directory for aligned input structures:', self.aligned_input_dir, flush=True)    
+
 
         # Load reference structure
-        ref = mda.Universe(self.input_params['environment']['alignment_ref'])
+        ref_pdb_path = self.input_params['environment']['alignment_ref']
+        if os.path.exists(ref_pdb_path):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found references structure', ref_pdb_path, flush=True)  
+        else:
+            raise FileNotFoundError("Cannot find reference structure:", ref_pdb_path)
+        ref = mda.Universe(ref_pdb_path)
         ref_resids = ref.residues.resids
         
         # Load structure to align
         input_pdb_dir = self.input_params['protein']['input_pdb_dir']
-        for i, pdb in enumerate(self.input_params['protein']['input_pdbs']):
-            input_pdb_path = os.path.join(input_pdb_dir, pdb)
+        pdb = self.input_params['protein']['input_pdb']
+        input_pdb_path = os.path.join(input_pdb_dir, pdb)
+        if os.path.exists(input_pdb_path):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found input structure:', input_pdb_path, flush=True)
 
             # Slim to correct chain
             u = mda.Universe(input_pdb_path)
-            chain_sele = u.select_atoms('chainid ' + self.input_params['protein']['chains'][i])
+            chain_sele = u.select_atoms('chainid ' + self.input_params['protein']['chains'])
 
             # Get resids
             resids = chain_sele.residues.resids
@@ -79,8 +159,8 @@ class Bridgeport():
             # Find matching resids
             matching_resids, matching_res_inds, matching_ref_res_inds = np.intersect1d(resids, ref_resids, return_indices=True)
             # print('!!!', matching_resids, matching_res_inds, matching_ref_res_inds)
-            # sele = u.select_atoms('chainid ' + self.input_params['protein']['chains'][i] + ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) + ' and backbone')
-            sele_str = 'chainid ' + self.input_params['protein']['chains'][i] + ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) + ' and backbone'
+            # sele = u.select_atoms('chainid ' + self.input_params['protein']['chains'] + ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) + ' and backbone')
+            sele_str = 'chainid ' + self.input_params['protein']['chains'] + ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) + ' and backbone'
             # ref_sele = ref.select_atoms('resid ' + ' '.join(str(ref_resids[res_ind]) for res_ind in matching_ref_res_inds) + ' and backbone')
             ref_sele_str = 'resid ' + ' '.join(str(ref_resids[res_ind]) for res_ind in matching_ref_res_inds) + ' and backbone'
             
@@ -93,6 +173,10 @@ class Bridgeport():
             # Save 
             u.select_atoms('all').write(os.path.join(self.aligned_input_dir, pdb))
 
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//WARNING: Cannot find input structure:', input_pdb_path, "Skipping for now...", flush=True)  
+
+    
     def _separate_lig_prot(self):
         """
         Separate ligand and protein based on chain and resname specified in input file.
@@ -100,47 +184,74 @@ class Bridgeport():
         # Create directories for separated .pdb files
         self.prot_only_dir = os.path.join(self.working_dir, 'proteins')
         if not os.path.exists(self.prot_only_dir):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for protein structures:', self.prot_only_dir, flush=True)  
             os.mkdir(self.prot_only_dir)
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found directory for protein structures:', self.prot_only_dir, flush=True)  
+
         self.lig_only_dir = os.path.join(self.working_dir, 'ligands')
         if not os.path.exists(self.lig_only_dir):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.prot_only_dir, flush=True)  
             os.mkdir(self.lig_only_dir)        
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found directory for protein structures:', self.prot_only_dir, flush=True)  
 
         # Iterate through input files
-        for i, pdb_fn in enumerate(self.input_params['protein']['input_pdbs']):
-            pdb_path = os.path.join(self.aligned_input_dir, pdb_fn)
-            u = mda.Universe(pdb_path)
+        pdb_fn = self.input_params['protein']['input_pdb']
+        pdb_path = os.path.join(self.aligned_input_dir, pdb_fn)
+        u = mda.Universe(pdb_path)
 
-            # Select protein by chain ID 
-            prot_sele = u.select_atoms(f'protein and chainid {self.input_params["protein"]["chains"][i]}')
-            prot_sele.write(os.path.join(self.prot_only_dir, pdb_fn))
+        # Select protein by chain ID 
+        prot_sele = u.select_atoms(f'protein and chainid {self.input_params["protein"]["chains"]}')
+        prot_sele.write(os.path.join(self.prot_only_dir, pdb_fn))
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated chain', self.input_params["protein"]["chains"], 'from input structure', flush=True)  
 
-            # Select ligand by resname or peptide_chain
-            lig_resname = self.input_params['ligand']['lig_resnames'][i]
-            peptide_chain = self.input_params['ligand']['peptide_chains'][i]
-            assert (lig_resname == False and peptide_chain != False) or (lig_resname != False and peptide_chain == False), f"Either lig_resnames or peptide_chains must be False at indice {i}."
-            if lig_resname != False:
-                lig_sele = u.select_atoms(f'resname {lig_resname}')
-            elif peptide_chain != False:
-                lig_sele = u.select_atoms(f'chainid {peptide_chain}')
-            lig_sele.write(os.path.join(self.lig_only_dir, pdb_fn))
+        # Select ligand by resname or peptide_chain
+        lig_resname = self.input_params['ligand']['lig_resname']
+        peptide_chain = self.input_params['ligand']['peptide_chain']
+        assert (lig_resname == False and peptide_chain != False) or (lig_resname != False and peptide_chain == False), f"Either lig_resname or peptide_chain must be False at indice {i}."
+        if lig_resname != False:
+            lig_sele = u.select_atoms(f'resname {lig_resname}')
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', lig_resname, 'from input structure', flush=True)
+        elif peptide_chain != False:
+            lig_sele = u.select_atoms(f'chainid {peptide_chain}')
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', peptide_chain, 'from input structure', flush=True)
+        lig_sele.write(os.path.join(self.lig_only_dir, pdb_fn))
 
     def _repair_crystal(self):
         """
         Uses the RepairProtein class to replace missing residues with UCSF Modeller. 
         """
         params = self.input_params['RepairProtein']
-        for i, file in enumerate(self.input_params['protein']['input_pdbs']):
+        file = self.input_params['protein']['input_pdb']
+        if 'secondary_template' in self.input_params['RepairProtein']:
+            secondary_temp = self.input_params['RepairProtein']['secondary_template']
+            if secondary_temp!= False and os.path.exists(secondary_temp):
                 protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
-                                                fasta_fn=params['fasta_path'], 
-                                                working_dir=params['working_dir'])
+                                                                fasta_fn=params['fasta_path'], 
+                                                                working_dir=params['working_dir'])
+                protein_reparer.run_with_secondary(pdb_out_fn=os.path.join(self.prot_only_dir, file),
+                                                  secondary_template_pdb=secondary_temp,
+                                                  tails=params['tails'],
+                                                  loops=params['loops'])
+            else:
+                protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
+                                                                fasta_fn=params['fasta_path'], 
+                                                                working_dir=params['working_dir'])
                 protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                     tails=params['tails'],
-                                    loops=None)
-                                    #loops=params['loops'])
-                
+                                    loops=params['loops'])
+        else:
+            protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
+                                                            fasta_fn=params['fasta_path'], 
+                                                            working_dir=params['working_dir'])
+            protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
+                                tails=params['tails'],
+                                loops=params['loops'])
+                                    
     def _add_environment(self, pH: float=7.0, membrane: bool=False, ion_strength: float=0.15):
         """
-        Add water, lipids, and hydrogens to protein.
+        Add water, lipids, and hydrogens to protein with the ProteinPreparer class.
         """
         # See if environment parameters are present
         if "environment" in self.input_params.keys():
@@ -152,32 +263,201 @@ class Bridgeport():
                 ion_strength = self.input_params["environment"]["ion_strength"]
         
         # Iterate through proteins
-        for i, prot_pdb_fn in enumerate(os.listdir(self.prot_only_dir)):
-            if membrane:
-                pp = ProteinPreparer(protein_pdb_fn=prot_pdb_fn,
+        self.prot_pdbs = []
+        pdb_fn = self.input_params['protein']['input_pdb']
+        pdb_path = os.path.join(self.prot_only_dir, pdb_fn)
+        if membrane:
+            pp = ProteinPreparer(pdb_path=pdb_path,
+                                 working_dir=self.prot_only_dir,
                                  pH=pH,
                                  env='MEM',
                                  ion_strength=ion_strength)
-            else:
-                pp = ProteinPreparer(protein_pdb_fn=prot_pdb_fn,
+        else:
+            pp = ProteinPreparer(pdb_path=pdb_path,
+                                 working_dir=self.prot_only_dir,
                                  pH=pH,
                                  env='SOL',
-                                 ion_strength=ion_strength)
+                                 ion_strength=ion_strength)            
+        self.prot_pdbs.append(pp.main())
+
+        # Remove unecessary .pqr and .log files
+        for fn in os.listdir(self.prot_only_dir):
+            if fn.endswith('.log') or fn.endswith('.pqr'):
+                os.remove(os.path.join(self.prot_only_dir, fn))
+    
+    def _ligand_prep(self, out_fm: str='sdf'):
+            """ 
+            Prepare ligand for OpenFF parameterization.
+
+            Parameters:
+            -----------
+                out_fm (Str):
+                    String of extension of intended format to write out. Default is .sdf. 
+            """
+            # Iterate through ligands
+            lig_fn = self.input_params['protein']['input_pdb']        
+
+            # Get crystal information from protein
+            crys_line = open(os.path.join(self.prot_only_dir, lig_fn.split('.')[0]+'_env.pdb'), 'r').readlines()[1]
+            assert crys_line.startswith('CRYS'), f"No crystal line found at top of {lig_fn.split('.')[0]}_env.pdb, found: {crys_line}."
+
+            # Get path to input ligand file
+            mol_path = os.path.join(self.lig_only_dir, lig_fn)
+
+            # Use obabel if small molecule to covert to .sdf
+            lig_resname = self.input_params['ligand']['lig_resname']
+            if lig_resname != False:
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found small molecule ligand with resname:', lig_resname, flush=True)
+
+                #Obabel conversion block
+                obConversion = openbabel.OBConversion()
+                formats = [mol_path.split('.')[-1], out_fm]
+                obConversion.SetInAndOutFormats(*formats)
+                mol = openbabel.OBMol()
+        
+                #Find Input
+                if os.path.isfile(mol_path):
+                    obConversion.ReadFile(mol, mol_path)
+                elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
+                    obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
+                else:
+                    raise FileNotFoundError('mol_fn was not found')
+                    
+                #Add Hydrogens
+                mol.AddHydrogens()
+                            
+                #Writeout the protonated file in the second format
+                out_fn = mol_path.split('.')[0] + '.sdf'
+                obConversion.WriteFile(mol, out_fn)
+
+                # Recursively written over original file type
+                if not os.path.exists(mol_path.split('.')[0] + '.pdb'):
+                    self._ligand_prep(out_fm=mol_path.split('.')[-1])
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', mol_path.split('.')[0] + '.pdb', mol_path.split('.')[0] + '.sdf', flush=True)
+
+            # Prepare peptide ligand
+            chain_id = self.input_params['ligand']['peptide_chain']
+            if chain_id != False:
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found peptide ligand with chainid:', chain_id, flush=True)
+                if "environment" in self.input_params.keys():
+                    if "pH" in self.input_params["environment"].keys():
+                        pH = self.input_params["environment"]["pH"]
+                    else:
+                        pH = 7.0
             
-            pp.main()
+                #Repair with RepairProtein
+                if 'peptide_fasta' in self.input_params['ligand']:
+                    pep_fasta = self.input_params['ligand']['peptide_fasta']
+                    if pep_fasta != False:
+                        protein_reparer = RepairProtein(pdb_fn=mol_path,
+                                                fasta_fn=pep_fasta, 
+                                                working_dir=self.input_params['RepairProtein']['working_dir'])
+                        protein_reparer.run(pdb_out_fn=mol_path,
+                                            tails=False,
+                                            loops=None)
+
+                # Protonate 
+                pp = ProteinPreparer(pdb_path=mol_path,
+                         working_dir=self.lig_only_dir,
+                         pH=pH,
+                         env='SOL',
+                         ion_strength=0) 
+                prot_mol_path = pp._protonate_with_pdb2pqr()
+                os.rename(prot_mol_path, mol_path)
+                for fn in os.listdir(self.lig_only_dir):
+                    if fn.endswith('log') or fn.endswith('pqr'):
+                        os.remove(os.path.join(self.lig_only_dir, fn))
+
+            # Add crys line
+            lig_lines = open(os.path.join(self.lig_only_dir, lig_fn), 'r').readlines()
+            lig_lines.insert(0, crys_line)
+            with open(os.path.join(self.lig_only_dir, lig_fn), 'w') as f:
+                for line in lig_lines:
+                    f.write(line)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', os.path.join(self.lig_only_dir, lig_fn), flush=True)
+            f.close()
+
+    def _generate_systems(self):
+        """
+        Generate forcefields with OpenFF using the ForcefieldHandler and OpenMMJoiner classes.
+        """
+        # Create systems dir
+        self.sys_dir = os.path.join(self.working_dir, 'systems')
+        if not os.path.exists(self.sys_dir):
+            os.mkdir(self.sys_dir)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Created systems directory:', self.sys_dir, flush=True)
+        
+        # Get names for file to iterate through
+        name = self.input_params['protein']['input_pdb'].split('.')[0] 
+        
+        # Iterate through files
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Building parameters for', name, flush=True)
+        # Generate protein system
+        prot_path = os.path.join(self.prot_only_dir, name+'_env.pdb')
+        assert os.path.exists(prot_path), f"Cannot find path to protein file in environment: {prot_path}"
+        print(prot_path)
+        prot_sys, prot_top, prot_pos = ForceFieldHandler(prot_path).main()
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
+
+        # Generate ligand system
+        if self.input_params['ligand']['lig_resname'] != False:
+            lig_path = os.path.join(self.lig_only_dir, name+'.sdf')
+        elif self.input_params['ligand']['peptide_chain'] != False:
+            lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
+
+        assert os.path.exists(lig_path), f"Cannot find path to ligand file: {lig_path}"
+        lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
+
+        # Combine systems 
+        sys, top, pos = Joiner((lig_sys, lig_top, lig_pos),
+                               (prot_sys, prot_top, prot_pos)).main()
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'System parameters built.', flush=True)
+
+        # Reposition at origin
+        box_vectors = sys.getDefaultPeriodicBoxVectors()
+        translate = Quantity(np.array((box_vectors[0].x,
+                                       box_vectors[1].y,
+                                       box_vectors[2].z))/2,
+                             unit=nanometer)
+
+        # Get energy
+        int = LangevinIntegrator(300 * kelvin, 1/picosecond, 0.001 * picosecond)
+        sim = Simulation(top, sys, int)
+        sim.context.setPositions(pos + translate)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
+
+        # Write out
+        with open(os.path.join(self.sys_dir, name+'.pdb'), 'w') as f:
+            PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
+        with open(os.path.join(self.sys_dir, name+'.xml'), 'w') as f:
+            f.write(XmlSerializer.serialize(sim.system))
+        
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system coordinates saved to', os.path.join(self.sys_dir, name+'.pdb'), flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system parameters saved to', os.path.join(self.sys_dir, name+'.xml'), flush=True)
+
             
 
 
+        
 
 
 
+
+                    
+
+    
+    
+    
+    
+    
+                    
+    
+                                        
+    
+    
+    
                 
-
-                                    
-
-
-
-            
-
-
-
+    
+    
+    

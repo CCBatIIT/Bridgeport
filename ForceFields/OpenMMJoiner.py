@@ -77,9 +77,13 @@ class Joiner():
         #NonBonded
         sys1_force_name = 'Nonbonded force'
         sys2_force_name = 'NonbondedForce'
-        
-        force_ind = [force.getName() for force in sys1.getForces()].index(sys1_force_name)
-        sys1_force = sys1.getForces()[force_ind]
+
+        try:
+            force_ind = [force.getName() for force in sys1.getForces()].index(sys1_force_name)
+            sys1_force = sys1.getForces()[force_ind]
+        except:
+            force_ind = [force.getName() for force in sys1.getForces()].index(sys2_force_name)
+            sys1_force = sys1.getForces()[force_ind]
         
         force_ind = [force.getName() for force in sys2.getForces()].index(sys2_force_name)
         sys2_force = sys2.getForces()[force_ind]
