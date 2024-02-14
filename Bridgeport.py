@@ -7,6 +7,7 @@ sys.path.append('RepairProtein')
 sys.path.append('ForceFields')
 sys.path.append('utils')
 import numpy as np
+from bp_utils import analogue_alignment
 from ProteinPreparer import ProteinPreparer
 from RepairProtein import RepairProtein
 from ForceFieldHandler import ForceFieldHandler
@@ -112,12 +113,76 @@ class Bridgeport():
 
         Output system .pdb and .xml file will be found in self.working_dir/systems
         """
+        # If analogue, create new intial structure
+        if self.input_params['ligand']['lig_resname'] == False:
+            if self.input_params['ligand']['peptide_chain'] == False:
+                if 'analogue_smiles' in self.input_params['ligand'] and self.input_params['ligand']['analogue_smiles'] != False:
+                    self.analogue_smiles=self.input_params['ligand']['analogue_smiles']
+                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with smiles:', self.analogue_smiles, flush=True)
+                    if 'analogue_name' in self.input_params['ligand'] and self.input_params['ligand']['analogue_name'] != False:
+                        self.analogue_name=self.input_params['ligand']['analogue_name']
+                        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with name:', self.analogue_name, flush=True)
+                        if 'known_structure' in self.input_params['ligand'] and self.input_params['ligand']['known_structure'] != False:
+                            self.analogue_pdb = self.input_params['ligand']['known_structure']
+                            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand file:', self.analogue_pdb, flush=True)
+                            if 'known_resname' in self.input_params['ligand'] and self.input_params['ligand']['known_resname'] != False:
+                                self.analogue_resname = self.input_params['ligand']['known_resname']
+                                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with resname:', self.analogue_resname, flush=True)
+    
+                                # Build analogue complex
+                                self._build_analogue_complex()
+                            
+        # Run 
         self._align()
         self._separate_lig_prot()
         self._repair_crystal()
         self._add_environment()
         self._ligand_prep()
         self._generate_systems()
+
+    def _build_analogue_complex(self):
+        """
+        Build a new input complex by replacing a ligand with an analogue.
+        """
+        # Build necessary directories
+        self.lig_only_dir = os.path.join(self.working_dir, 'ligands')
+        if not os.path.exists(self.lig_only_dir):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.lig_only_dir, flush=True)  
+            os.mkdir(self.lig_only_dir)        
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found directory for ligand structures:', self.lig_only_dir, flush=True)  
+        
+        # Get known ligand
+        name = self.input_params['protein']['input_pdb']
+        ref_u = mda.Universe(self.analogue_pdb)
+        ref_sele = ref_u.select_atoms('resname '+self.analogue_resname)
+        assert ref_sele.n_atoms > 0, f"Could not find any atoms with resname {self.analogue_resname}"
+        prot_sele = ref_u.select_atoms('protein')
+        assert prot_sele.n_atoms > 0, f"Could not find any protein atoms in {self.analogue_pdb}"
+
+        # Write to ligand folder
+        ref_lig_pdb = os.path.join(self.working_dir, 'ligands', name)
+        ref_sele.write(ref_lig_pdb)
+
+        # General aligned analogue
+        lig_path = os.path.join(self.lig_only_dir, self.analogue_name+'.pdb')
+        analogue_alignment(smiles=self.analogue_smiles,
+                           known_pdb=self.analogue_pdb,
+                           known_resname=self.analogue_resname,
+                           analogue_out_path=lig_path)
+        assert os.path.exists(lig_path), f"No output file exists at {lig_path}"
+
+        # Combine to create new initial complex
+        new_input_path = os.path.join(self.working_dir, self.input_params['protein']['input_pdb_dir'], self.analogue_name+'.pdb')
+        lig_sele = mda.Universe(lig_path).select_atoms('all')
+        u = mda.core.universe.Merge(prot_sele, lig_sele)
+        assert u.select_atoms('all').n_atoms == lig_sele.n_atoms + prot_sele.n_atoms, "Did not correctly merge ligand and protein AtomGroups."
+        u.select_atoms('all').write(new_input_path)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Build new inital complex.', flush=True)
+        self.input_params['protein']['input_pdb'] = self.analogue_name+'.pdb'
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Changing input_pdb to:', self.input_params['protein']['input_pdb'], flush=True)
+        self.input_params['ligand']['lig_resname'] = 'UNL'
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Changing ligand resname to:', self.input_params['ligand']['lig_resname'], flush=True)
     
     def _align(self):
         """
@@ -158,10 +223,7 @@ class Bridgeport():
 
             # Find matching resids
             matching_resids, matching_res_inds, matching_ref_res_inds = np.intersect1d(resids, ref_resids, return_indices=True)
-            # print('!!!', matching_resids, matching_res_inds, matching_ref_res_inds)
-            # sele = u.select_atoms('chainid ' + self.input_params['protein']['chains'] + ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) + ' and backbone')
             sele_str = 'chainid ' + self.input_params['protein']['chains'] + ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) + ' and backbone'
-            # ref_sele = ref.select_atoms('resid ' + ' '.join(str(ref_resids[res_ind]) for res_ind in matching_ref_res_inds) + ' and backbone')
             ref_sele_str = 'resid ' + ' '.join(str(ref_resids[res_ind]) for res_ind in matching_ref_res_inds) + ' and backbone'
             
             # Align
@@ -191,10 +253,10 @@ class Bridgeport():
 
         self.lig_only_dir = os.path.join(self.working_dir, 'ligands')
         if not os.path.exists(self.lig_only_dir):
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.prot_only_dir, flush=True)  
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.lig_only_dir, flush=True)  
             os.mkdir(self.lig_only_dir)        
         else:
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found directory for protein structures:', self.prot_only_dir, flush=True)  
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found directory for ligand structures:', self.lig_only_dir, flush=True)  
 
         # Iterate through input files
         pdb_fn = self.input_params['protein']['input_pdb']
@@ -209,7 +271,7 @@ class Bridgeport():
         # Select ligand by resname or peptide_chain
         lig_resname = self.input_params['ligand']['lig_resname']
         peptide_chain = self.input_params['ligand']['peptide_chain']
-        assert (lig_resname == False and peptide_chain != False) or (lig_resname != False and peptide_chain == False), f"Either lig_resname or peptide_chain must be False at indice {i}."
+        assert (lig_resname == False and peptide_chain != False) or (lig_resname != False and peptide_chain == False), f"Either lig_resname or peptide_chain must be False."
         if lig_resname != False:
             lig_sele = u.select_atoms(f'resname {lig_resname}')
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', lig_resname, 'from input structure', flush=True)
@@ -436,8 +498,7 @@ class Bridgeport():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system coordinates saved to', os.path.join(self.sys_dir, name+'.pdb'), flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system parameters saved to', os.path.join(self.sys_dir, name+'.xml'), flush=True)
 
-            
-
+    
 
         
 

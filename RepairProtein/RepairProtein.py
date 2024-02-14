@@ -85,7 +85,7 @@ class RepairProtein():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Template sequence:', self.fasta_fn, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Modeller intermediates will be written to:', self.working_dir, flush=True)
 
-    def run(self, pdb_out_fn: str, tails: List=False, loops: List=None):
+    def run(self, pdb_out_fn: str, tails: List=False, loops: List=False):
         """
         Run the remodelling.
 
@@ -120,7 +120,7 @@ class RepairProtein():
         self._build_homology_model()
 
         # Fix loops
-        if loops != None:
+        if loops != False:
             self._optimize_loops(loops)
 
         os.chdir(cwd)
@@ -270,7 +270,8 @@ class RepairProtein():
             traj = md.load_pdb(self.pdb_fn)
             mutated_atoms = traj.topology.select('resid '+ str(" ".join(self.mutated_residues[:,0])))
             sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
-            traj.atom_slice(sele).save_pdb(self.pdb_fn)
+            traj = traj.atom_slice(sele)
+            traj.save_pdb(self.pdb_fn)
 
             # Reparse target sequence from new .pdb
             shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
@@ -324,18 +325,11 @@ class RepairProtein():
                     sel.add(self.residue_range(f'{loop[0]}:A', f'{loop[1]}:A'))
                 return sel
 
-        # if known == None:
         self.loopmodel = MyLoop(self.env, 
                         inimodel=self.model.outputs[0]['name'],
                         sequence=self.name+'_fill',
                         loop_assess_methods=assess.DOPE)
-        # else:
-        #     self.loopmodel = MyLoop(self.env, 
-        #                     inimodel=self.model.outputs[0]['name'],
-        #                     knowns=known,
-        #                     sequence=self.name+'_fill',
-        #                     loop_assess_methods=assess.DOPE)
-
+        
         self.loopmodel.loop.starting_model = 1
         self.loopmodel.loop.ending_model = 1
         self.loopmodel.md_level = refine.fast

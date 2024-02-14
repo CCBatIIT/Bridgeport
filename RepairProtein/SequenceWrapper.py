@@ -135,18 +135,19 @@ def _find_missing_residues(temp_seq: str, tar_seq: str, verbose: bool=False):
                     # print(len(temp_seq), len(tar_seq))
                     # print('targ:', tar_seq)
                     # print('temp:', temp_seq)
+                    # print(temp_res, tar_res)
 
                     # Check for point mutation
-                    # print(temp_seq[:i], temp_seq[i:], '\n')
                     if tar_seq[i+1:i+5] == temp_seq[i+1:i+5]:
-                        # print('     ', tar_seq[:i], temp_res, tar_seq[i+1:])
-                        # print('Point', '\n')
+                        # print(temp_seq[i-10:i], temp_seq[i:i+10], '\n')
+                        # print(tar_seq[i-10:i], tar_seq[i:i+10])
+                        # print('Point' , i, i-tar_start_ind, '\n\n\n')
                         tar_seq = tar_seq[:i] + temp_res + tar_seq[i+1:]
                         mutated_residues.append([i - tar_start_ind, temp_res])
 
                     # Check for deletion
                     else:
-                        # print('     ', tar_seq[:i], temp_res, tar_seq[i+1:])
+                        # print(tar_seq[i-10:i], tar_seq[i:i+10])
                         # print('Del', '\n')
                         tar_seq = tar_seq[:i] + temp_res + tar_seq[i:]
                         missing_residues.append([i, temp_res])
@@ -176,7 +177,6 @@ def _find_missing_residues(temp_seq: str, tar_seq: str, verbose: bool=False):
         if not temp_seq == tar_seq:
             raise Exception(f"Sequences do not match. Attempts to match target sequence resulted in:n\\tTemplate: {temp_seq}\n\tTarget: {tar_seq}")
         elif verbose == True:
-            print('!!! verbose', verbose)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Missing Residues:', missing_residues, flush=True)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Mutated Residues:', mutated_residues, flush=True)
 

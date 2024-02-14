@@ -1,6 +1,7 @@
 import textwrap, sys, os, glob, shutil
 import numpy as np
 import MDAnalysis as mda
+from MDAnalysis.analysis.align import alignto
 import mdtraj as md
 from pdbfixer import PDBFixer
 from openbabel import openbabel
@@ -14,7 +15,87 @@ import openff.interchange
 from openmm.app import *
 from openmm import *
 from openmm.unit import *
+#rdkit
+from rdkit import Chem
+from rdkit.Chem import Draw, AllChem
+from rdkit.Chem.Draw import IPythonConsole
+from rdkit.Chem import rdFMCS
+from rdkit.Chem.Draw import rdDepictor
+rdDepictor.SetPreferCoordGen(True)
+IPythonConsole.drawOptions.minFontSize=20
 
+def analogue_alignment(smiles: str, known_pdb: str, known_resname: str, analogue_out_path: str):
+    """
+    Creates an aligned analogue of a known ligand structure.
+
+    Parameters:
+    -----------
+        smiles (str):
+            String of smiles that represent the analogue to generate.
+
+        known_pdb (str):
+            Path to pdb file that contains the known ligand to align analogue to.
+
+        known_resname (str):
+            Resname of ligand to parse in known_pdb.
+
+        analogue_out_path (str):
+            Path to pdb file to write of aligned analogue. 
+    """
+    # Open known ligand in rdkit and MDAnalysis
+    ref_mol = Chem.MolFromPDBFile(known_pdb)
+    ref_sele = mda.Universe(known_pdb).select_atoms('all')
+
+    # Create analogue with smiles
+    new_mol = Chem.MolFromSmiles(smiles)
+    AllChem.EmbedMolecule(new_mol)
+    new_mol_pdb_block = Chem.MolToPDBBlock(new_mol)
+    new_mol = Chem.MolFromPDBBlock(new_mol_pdb_block)
+    
+    # Get indices of max. common substructure 
+    ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
+
+    # Save atom names to align
+    ref_atom_sele_str = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds]
+    new_atom_sele_str = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds]
+    
+    # Write out analogue to .pdb file
+    Chem.MolToPDBFile(new_mol, analogue_out_path, flavor=2)
+
+    # Align analogue to reference 
+    new_u = mda.Universe(analogue_out_path)
+    new_sele = new_u.select_atoms('all')
+    ref_align_sele = ref_sele.select_atoms('')
+    for ref_atom in ref_atom_sele_str:
+        ref_align_sele = ref_align_sele + ref_sele.select_atoms('name '+ ref_atom)
+    new_align_sele = new_sele.select_atoms('')
+    for new_atom in new_atom_sele_str:
+        new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
+    alignto(mobile=new_align_sele,
+            reference=ref_align_sele)
+    new_sele.write(analogue_out_path)
+
+
+def return_max_common_substructure(mol1, mol2):
+    """
+    Return indices of maximum common substructure between two rdkit molecules
+    """
+    mcs = rdFMCS.FindMCS([mol1,mol2], matchValences=True, completeRingsOnly=True)
+    mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
+    match1 = mol1.GetSubstructMatch(mcs_mol)
+    target_atm1 = []
+    for i in match1:
+        atom = mol1.GetAtoms()[i]
+        target_atm1.append(atom.GetIdx())
+    match2 = mol2.GetSubstructMatch(mcs_mol)
+    target_atm2 = []
+    for i in match2:
+        atom = mol2.GetAtoms()[i]
+        target_atm2.append(atom.GetIdx())
+        
+    Draw.MolsToGridImage([mol1, mol2],highlightAtomLists=[target_atm1, target_atm2])
+    
+    return target_atm1, target_atm2
 
 def change_resname(pdb_file_in, pdb_file_out, resname_in, resname_out):
     """

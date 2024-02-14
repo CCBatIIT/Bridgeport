@@ -22,7 +22,10 @@ All the input files and parameters are specifid in the Bridgeprot_input.json:
     * "lig_resname" -> specifies the ligand resname in the input .pdb file. If the ligand is a peptide choose "false". Ligand resnames that start with and number are not easily recognized by MDAnalysis (which is used for parsing), so we recommend changing the ligand resname in that case.
     * "peptide_chain" -> If ligand is a peptide, specify the letter code that denotes the ligand, if not choose "false".
     * "peptide_fasta" -> If ligand is a peptide, specify the path to the .fasta file to repair the peptide if desired. If no repair is desired, choose "false", or remove argument.
-
+    * "analogue_smiles" -> String of smiles that represent the analogue to generate. Optional argument.
+    * "analogue_name" -> Name to generate new files with. 
+    * "known_structure" -> Path to pdb file that contains the known ligand to align analogue to. This should be the same path as "protein" "input_pdb" to start, Bridgeprot will correct automatically later. 
+    * "known_resname" ->  Resname of ligand to parse in known_pdb.
 * "protein"
     * "input_pdb_dir" -> Path to directory where the input .pdb can be found.
     * "input_pdb" -> Name of .pdb file to use as an input structure.
@@ -44,7 +47,8 @@ All the input files and parameters are specifid in the Bridgeprot_input.json:
 ## Examples
 ### 7vvk (membrane, peptide ligand)
 This example uses the PDBID 7vvk as the input structure and repairs both the protein and the peptide ligand. 
-### 8jr9 (membrange, small-molecule ligand, secondary template)
+### 8jr9 (membrane, small-molecule ligand, secondary template)
 This example uses the PDBID 8jr9 as the input structure and repairs the protein with the secondary template of the repaired 7vvk.pdb structure to properly model the extracellular domain. This example uses a small molecule ligand. 
-
+### 5zty analogue (membrane, analogue, small-molecule ligand)
+This example uses the protein and ligand from the PDBID 5zty but creates the final ligand from a smiles string and alignes maximum common substructure to ligand in 5zty.
 
