@@ -10,7 +10,7 @@ Construct the conda environment with the following command
 ## BridgePort Usage 
 Bridgeport can be easily run in 2 lines of code:
 
-BP = Bridgeport(input_json='Bridgeport_input.json')
+BP = Bridgeport(input_json='Bridgeport_input.json')\
 BP.run()
 
 ### Input .json files
