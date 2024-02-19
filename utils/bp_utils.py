@@ -48,10 +48,10 @@ def analogue_alignment(smiles: str, known_pdb: str, known_resname: str, analogue
 
     # Create analogue with smiles
     new_mol = Chem.MolFromSmiles(smiles)
-    AllChem.EmbedMolecule(new_mol)
     new_mol_pdb_block = Chem.MolToPDBBlock(new_mol)
     new_mol = Chem.MolFromPDBBlock(new_mol_pdb_block)
-    
+    AllChem.EmbedMolecule(new_mol)
+
     # Get indices of max. common substructure 
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
