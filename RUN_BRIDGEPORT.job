@@ -14,4 +14,4 @@ conda activate prep
 cd $SLURM_SUBMIT_DIR
 
 echo BRIDGEPORT BATCH JOB FOR $1
-python RUN_BRIDEPORT.py
+python RUN_BRIDEPORT.py $1
