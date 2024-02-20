@@ -75,6 +75,17 @@ def analogue_alignment(smiles: str, known_pdb: str, known_resname: str, analogue
             reference=ref_align_sele)
     new_sele.write(analogue_out_path)
 
+    # Remove CONECT records
+    write_lines = []
+    lines = open(analogue_out_path, 'r').readlines()
+    for line in lines:
+        if line.startswith('ATOM') or line.startswith('HETATM')
+            write_lines.append(line)
+
+    with open(analogue_out_path, 'w') as f:
+        for line in lines:
+            f.write(line)
+    f.close()
 
 def return_max_common_substructure(mol1, mol2):
     """
