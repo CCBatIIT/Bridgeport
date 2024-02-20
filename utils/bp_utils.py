@@ -78,7 +78,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_resname: str, analogue
     # Remove CONECT records
     write_lines = []
     lines = open(analogue_out_path, 'r').readlines()
-    for line in lines:
+    for line in write_lines:
         if line.startswith('ATOM') or line.startswith('HETATM'):
             write_lines.append(line)
 
