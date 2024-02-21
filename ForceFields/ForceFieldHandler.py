@@ -75,7 +75,7 @@ class ForceFieldHandler():
         and do do a protein, lipid, solvent system with openmm parameters.
         """
         if self.working_mode == 'OpenFF':
-            mol = openff.toolkit.Molecule.from_file(self.structure_file)
+            mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
             ff = openff.toolkit.ForceField(*self.xmls)
             cubic_box = openff.units.Quantity(30 * np.eye(3), openff.units.unit.angstrom)
             interchange = openff.interchange.Interchange.from_smirnoff(topology=[mol], force_field=ff, box=cubic_box)
