@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH --job-name="BRIDGEPORT"
+#SBATCH --output="/path/to/output/logs/Check.%j.%N.out"
+#SBATCH --partition=RM
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --account=ACCOUNT NUMBER
+#SBATCH -t 01:00:00
+
+source ~/.bashrc
+
+conda activate prep
+
+cd $SLURM_SUBMIT_DIR
+
+echo BRIDGEPORT BATCH JOB FOR $1
+python RUN_BRIDEPORT.py $1
