@@ -1,4 +1,4 @@
-import textwrap, sys, os
+import textwrap, sys, os, pathlib
 import numpy as np
 #OpenFF
 import openff
@@ -32,7 +32,10 @@ class ForceFieldHandler():
     """
     
     def __init__(self, structure_file, force_field_files=None):
-        default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 'OpenMM': ['amber14/protein.ff14SB.xml', 'amber14/lipid17.xml', './ForceFields/wat_opc3.xml']}
+        default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 
+                        'OpenMM': ['amber14/protein.ff14SB.xml', 
+                                   'amber14/lipid17.xml', 
+                                   f'{pathlib.Path(__file__).parent.resolve()}/wat_opc3.xml']}
         self.structure_file = structure_file
         # Parse the structure file to see if the user is in OpenFF or OpenMM mode
         self.working_mode = self._parse_file(structure_file)
@@ -75,7 +78,7 @@ class ForceFieldHandler():
         and do do a protein, lipid, solvent system with openmm parameters.
         """
         if self.working_mode == 'OpenFF':
-            mol = openff.toolkit.Molecule.from_file(self.structure_file)
+            mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
             ff = openff.toolkit.ForceField(*self.xmls)
             cubic_box = openff.units.Quantity(30 * np.eye(3), openff.units.unit.angstrom)
             interchange = openff.interchange.Interchange.from_smirnoff(topology=[mol], force_field=ff, box=cubic_box)

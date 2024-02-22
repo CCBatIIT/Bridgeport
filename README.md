@@ -22,6 +22,7 @@ All the input files and parameters are specifid in the Bridgeprot_input.json:
     * "lig_resname" -> specifies the ligand resname in the input .pdb file. If the ligand is a peptide choose "false". Ligand resnames that start with and number are not easily recognized by MDAnalysis (which is used for parsing), so we recommend changing the ligand resname in that case.
     * "peptide_chain" -> If ligand is a peptide, specify the letter code that denotes the ligand, if not choose "false".
     * "peptide_fasta" -> If ligand is a peptide, specify the path to the .fasta file to repair the peptide if desired. If no repair is desired, choose "false", or remove argument.
+    * "peptide_nonstandard_resids" -> If non-standard residues are present in the peptide, present the indicies of the non-standard residues in ascending order, 0-indexed. This step is only necessary if a .fasta file is provided as well. 
     * "analogue_smiles" -> String of smiles that represent the analogue to generate. Optional argument.
     * "analogue_name" -> Name to generate new files with. 
     * "known_structure" -> Path to pdb file that contains the known ligand to align analogue to. This should be the same path as "protein" "input_pdb" to start, Bridgeprot will correct automatically later. 

@@ -139,9 +139,9 @@ def _find_missing_residues(temp_seq: str, tar_seq: str, verbose: bool=False):
 
                     # Check for point mutation
                     if tar_seq[i+1:i+5] == temp_seq[i+1:i+5]:
-                        # print(temp_seq[i-10:i], temp_seq[i:i+10], '\n')
-                        # print(tar_seq[i-10:i], tar_seq[i:i+10])
-                        # print('Point' , i, i-tar_start_ind, '\n\n\n')
+                        print(temp_seq[i-10:i], temp_seq[i:i+10], '\n')
+                        print(tar_seq[i-10:i], tar_seq[i:i+10])
+                        print('Point' , i, i-tar_start_ind, '\n\n\n')
                         tar_seq = tar_seq[:i] + temp_res + tar_seq[i+1:]
                         mutated_residues.append([i - tar_start_ind, temp_res])
 
@@ -200,10 +200,11 @@ def _write_alignment_file(temp_seq: str, missing_residues: np.array, ali_fn: str
     for i, temp_res in enumerate(temp_seq):
 
         # Append structure list
-        if str(i) in missing_residues[:,0]:
-            struc_seq += '-'
-        else:
-            struc_seq += temp_res
+        if len(missing_residues) > 1:
+            if str(i) in missing_residues[:,0]:
+                struc_seq += '-'
+            else:
+                struc_seq += temp_res
                     
     # Read lines from reference
     ref_lines = [line for line in open(reference_pir_fn, 'r').readlines() if line != '\n']
@@ -274,6 +275,8 @@ def _write_alignment_file_secondary(temp_seq: str,
 
 def _sequence_to_file(seq):
     d = math.floor(len(seq) / 75)
+    if d == 0:
+        d = 1
     seq_75 = []
     for i in range(d):
         seq_75.append(seq[i*75:i*75+75])

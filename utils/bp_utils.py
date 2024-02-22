@@ -65,12 +65,15 @@ def analogue_alignment(smiles: str, known_pdb: str, known_resname: str, analogue
     # Align analogue to reference 
     new_u = mda.Universe(analogue_out_path)
     new_sele = new_u.select_atoms('all')
+    
     ref_align_sele = ref_sele.select_atoms('')
     for ref_atom in ref_atom_sele_str:
         ref_align_sele = ref_align_sele + ref_sele.select_atoms('name '+ ref_atom)
+        
     new_align_sele = new_sele.select_atoms('')
     for new_atom in new_atom_sele_str:
         new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
+        
     alignto(mobile=new_align_sele,
             reference=ref_align_sele)
     new_sele.write(analogue_out_path)

@@ -3,9 +3,11 @@ from datetime import datetime
 import mdtraj as md
 import MDAnalysis as mda
 from MDAnalysis.analysis.align import alignto
-sys.path.append('RepairProtein')
-sys.path.append('ForceFields')
-sys.path.append('utils')
+import pathlib
+bp_dir = pathlib.Path(__file__).parent.resolve()
+sys.path.append(os.path.join(bp_dir, 'RepairProtein'))
+sys.path.append(os.path.join(bp_dir, 'ForceFields'))
+sys.path.append(os.path.join(bp_dir, 'utils'))
 import numpy as np
 from bp_utils import analogue_alignment
 from ProteinPreparer import ProteinPreparer
@@ -16,6 +18,7 @@ from openmm.app import *
 from openmm import *
 from openmm.unit import *
 from openbabel import openbabel
+from pdbfixer import PDBFixer
 
 class Bridgeport():
     """
@@ -70,7 +73,7 @@ class Bridgeport():
             Generate forcefields with OpenFF using the ForcefieldHandler and OpenMMJoiner classes.    
     """
 
-    def __init__(self, input_json: str):
+    def __init__(self, input_json: str, verbose: bool=False):
         """
         Initialize Bridgeport objects.
 
@@ -78,6 +81,9 @@ class Bridgeport():
         -----------
             input_json (str):
                 String path to .json file that contains inputs
+
+            verbose (bool):
+                If true, show missing and mutated residues after each iteration of sequence alignment. Default is False. 
 
         Returns:
         --------
@@ -89,6 +95,7 @@ class Bridgeport():
         assert input_json.split('.')[1] == 'json', f"input_json: {input_json} is not a type .json."
 
         # Load input from json
+        self.verbose = verbose
         self.input_json = input_json
         self.input_params = json.load(open(self.input_json))
         self.working_dir = self.input_params['working_dir']
@@ -99,7 +106,12 @@ class Bridgeport():
                 for key2, item2 in self.input_params[key].items():
                     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//\t' + key2 + ':', item2, flush=True)       
             except:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + key + ':', item, flush=True)       
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + key + ':', item, flush=True)   
+
+        # Assign other dir locations
+        self.lig_only_dir = os.path.join(self.working_dir, 'ligands')
+        self.aligned_input_dir = os.path.join(self.working_dir, 'aligned_input_pdb')
+        self.prot_only_dir = os.path.join(self.working_dir, 'proteins')
 
     def run(self):
         """
@@ -145,7 +157,6 @@ class Bridgeport():
         Build a new input complex by replacing a ligand with an analogue.
         """
         # Build necessary directories
-        self.lig_only_dir = os.path.join(self.working_dir, 'ligands')
         if not os.path.exists(self.lig_only_dir):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.lig_only_dir, flush=True)  
             os.mkdir(self.lig_only_dir)        
@@ -190,7 +201,6 @@ class Bridgeport():
         The reference structure can include a structure from the OPM database for transmembrane proteins.
         """        
         # Create directory for aligned proteins 
-        self.aligned_input_dir = os.path.join(self.working_dir, 'aligned_input_pdb')
         if not os.path.exists(self.aligned_input_dir):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Creating directory for aligned input structures:', self.aligned_input_dir, flush=True)    
             os.mkdir(self.aligned_input_dir)
@@ -244,7 +254,6 @@ class Bridgeport():
         Separate ligand and protein based on chain and resname specified in input file.
         """
         # Create directories for separated .pdb files
-        self.prot_only_dir = os.path.join(self.working_dir, 'proteins')
         if not os.path.exists(self.prot_only_dir):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for protein structures:', self.prot_only_dir, flush=True)  
             os.mkdir(self.prot_only_dir)
@@ -309,7 +318,8 @@ class Bridgeport():
                                                             working_dir=params['working_dir'])
             protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                 tails=params['tails'],
-                                loops=params['loops'])
+                                loops=params['loops'],
+                                verbose=self.verbose)
                                     
     def _add_environment(self, pH: float=7.0, membrane: bool=False, ion_strength: float=0.15):
         """
@@ -406,7 +416,11 @@ class Bridgeport():
                         pH = self.input_params["environment"]["pH"]
                     else:
                         pH = 7.0
-            
+                if "peptide_nonstandard_resids" in self.input_params['ligand']:
+                    pep_nonstandard_resids = self.input_params['ligand']['peptide_nonstandard_resids']
+                else:
+                    pep_nonstandard_resids = None
+                print('!!!pep_nonstandard_resids', pep_nonstandard_resids)
                 #Repair with RepairProtein
                 if 'peptide_fasta' in self.input_params['ligand']:
                     pep_fasta = self.input_params['ligand']['peptide_fasta']
@@ -416,19 +430,73 @@ class Bridgeport():
                                                 working_dir=self.input_params['RepairProtein']['working_dir'])
                         protein_reparer.run(pdb_out_fn=mol_path,
                                             tails=False,
-                                            loops=None)
+                                            nstd_resids=pep_nonstandard_resids,
+                                            loops=False,
+                                            verbose=self.verbose)
 
                 # Protonate 
-                pp = ProteinPreparer(pdb_path=mol_path,
-                         working_dir=self.lig_only_dir,
-                         pH=pH,
-                         env='SOL',
-                         ion_strength=0) 
-                prot_mol_path = pp._protonate_with_pdb2pqr()
-                os.rename(prot_mol_path, mol_path)
-                for fn in os.listdir(self.lig_only_dir):
-                    if fn.endswith('log') or fn.endswith('pqr'):
-                        os.remove(os.path.join(self.lig_only_dir, fn))
+                if pep_nonstandard_resids == None:
+                    pp = ProteinPreparer(pdb_path=mol_path,
+                             working_dir=self.lig_only_dir,
+                             pH=pH,
+                             env='SOL',
+                             ion_strength=0) 
+                    prot_mol_path = pp._protonate_with_pdb2pqr()
+                    print(prot_mol_path)
+                    os.rename(prot_mol_path, mol_path)
+                    for fn in os.listdir(self.lig_only_dir):
+                        if fn.endswith('log') or fn.endswith('pqr'):
+                            os.remove(os.path.join(self.lig_only_dir, fn))
+
+                else:
+                   # Neutralize C-terminus
+                    if "neutral_C-term" in self.input_params['ligand']:
+                        if self.input_params['ligand']['neutral_C-term'] == True:
+                            pdb_lines = open(mol_path, 'r').readlines()
+                            oxt_line = ''
+                            for line in pdb_lines:
+                                if line.find('OXT') != -1:
+                                    oxt_line = line
+            
+                            nxt_line = [c for c in oxt_line]
+                            nxt_line[13] = 'N'
+                            nxt_line[-4] = 'N'
+                            nxt_line = ''.join(nxt_line)
+        
+                            with open(mol_path, 'w') as f:
+                                for line in pdb_lines:
+                                    if line.find('OXT') == -1:
+                                        f.write(line)
+                                    else:
+                                        f.write(nxt_line)
+
+                    #Obabel conversion block
+                    obConversion = openbabel.OBConversion()
+                    formats = [mol_path.split('.')[-1], out_fm]
+                    obConversion.SetInAndOutFormats(*formats)
+                    mol = openbabel.OBMol()
+            
+                    #Find Input
+                    if os.path.isfile(mol_path):
+                        obConversion.ReadFile(mol, mol_path)
+                    elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
+                        obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
+                    else:
+                        raise FileNotFoundError('mol_fn was not found')
+                        
+                    #Add Hydrogens
+                    mol.AddHydrogens()
+                                
+                    #Writeout the protonated file in the second format
+                    out_fn = mol_path.split('.')[0] + '.sdf'
+                    obConversion.WriteFile(mol, out_fn)
+    
+                    # Recursively written over original file type
+                    if not os.path.exists(mol_path.split('.')[0] + '.pdb'):
+                        self._ligand_prep(out_fm=mol_path.split('.')[-1])
+                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', mol_path.split('.')[0] + '.pdb', mol_path.split('.')[0] + '.sdf', flush=True)
+
+ 
 
             # Add crys line
             lig_lines = open(os.path.join(self.lig_only_dir, lig_fn), 'r').readlines()
@@ -457,7 +525,6 @@ class Bridgeport():
         # Generate protein system
         prot_path = os.path.join(self.prot_only_dir, name+'_env.pdb')
         assert os.path.exists(prot_path), f"Cannot find path to protein file in environment: {prot_path}"
-        print(prot_path)
         prot_sys, prot_top, prot_pos = ForceFieldHandler(prot_path).main()
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
 
@@ -465,7 +532,13 @@ class Bridgeport():
         if self.input_params['ligand']['lig_resname'] != False:
             lig_path = os.path.join(self.lig_only_dir, name+'.sdf')
         elif self.input_params['ligand']['peptide_chain'] != False:
-            lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
+            if "peptide_nonstandard_resids" in self.input_params['ligand']:
+                if self.input_params['ligand']['peptide_nonstandard_resids'] != False:
+                    lig_path = os.path.join(self.lig_only_dir, name+'.sdf')
+                else:    
+                    lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
+            else:    
+                lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
 
         assert os.path.exists(lig_path), f"Cannot find path to ligand file: {lig_path}"
         lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()

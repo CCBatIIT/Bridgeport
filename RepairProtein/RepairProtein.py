@@ -85,7 +85,7 @@ class RepairProtein():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Template sequence:', self.fasta_fn, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Modeller intermediates will be written to:', self.working_dir, flush=True)
 
-    def run(self, pdb_out_fn: str, tails: List=False, loops: List=False):
+    def run(self, pdb_out_fn: str, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False):
         """
         Run the remodelling.
 
@@ -97,11 +97,20 @@ class RepairProtein():
             tails (bool):
                 If True, add missing residues to N and C termini. Default is False.
 
+            nstd_resids (List):
+                If list is provided then nonstandard residues at these indices (0-indexed) will be conserved from input model to output structure.
+
             loops (2D-list):
-                If list is provided then loops will be optimized. Should be in format [[resid_1, resid_2], ...] to represent the loops. 
+                If list is provided then loops will be optimized. Should be in format [[resid_1, resid_2], ...] to represent the loops.
+
+            verbose (bool):
+                If true, show missing and mutated residues after each iteration of sequence alignment. Default is False. 
+
         """
         # Attributes
         self.pdb_out_fn = pdb_out_fn
+        self.verbose = verbose
+        self.nstd_resids = nstd_resids
 
         # Parse template sequence from .fasta
         self._get_temp_seq()
@@ -117,10 +126,12 @@ class RepairProtein():
         os.chdir(self.working_dir)
         self.env = Environ()
         self.env.io.atom_files_directory = ['.', self.working_dir]
-        self._build_homology_model()
+        if nstd_resids != None:
+            self.env.io.hetatm=True
+        self._build_homology_model(nstd_resids=nstd_resids)
 
         # Fix loops
-        if loops != False:
+        if loops != False and loops != None:
             self._optimize_loops(loops)
 
         os.chdir(cwd)
@@ -247,6 +258,13 @@ class RepairProtein():
         shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
         pdb_to_pir(self.name, self.working_dir)
         self.tar_seq = parse_sequence(self.tar_pir_fn)
+        if self.nstd_resids != None:
+            tar_seq_splt = self.tar_seq.split()
+            for nstd_resid in self.nstd_resids:
+                tar_seq_splt.insert(nstd_resid, '.')
+            self.tar_seq = ''.join(tar_seq_splt)
+        print('!!!nstd_resids')
+        print('!!!tar_seq', self.tar_seq)
         if hasattr(self, "secondary_template_pdb"):
             shutil.copy(self.secondary_template_pdb, self.working_dir + '/' + self.secondary_template_pdb.split('/')[-1])
             pdb_to_pir(self.secondary_name, self.working_dir)
@@ -282,12 +300,13 @@ class RepairProtein():
             if hasattr(self, "secondary_seq"):
                 sw = SeqWrap(self.temp_seq, self.tar_seq, self.secondary_seq)
             else:
-                sw = SeqWrap(self.temp_seq, self.tar_seq)            
-            sw.find_missing_residues(verbose=False)
+                sw = SeqWrap(self.temp_seq, self.tar_seq)  
+                sw.find_missing_residues(verbose=self.verbose)
+
             self.mutated_residues = sw.mutated_residues
 
             counter += 1
-            if counter == 2:
+            if counter == 3:
                 raise RuntimeError
 
         self.missing_residues = sw.missing_residues
@@ -296,11 +315,11 @@ class RepairProtein():
         sw.write_alignment_file(self.ali_fn, self.temp_pir_fn, self.secondary_pir_fn)
 
 
-    def _build_homology_model(self):
+    def _build_homology_model(self, nstd_resids):
         class MyModel(AutoModel):
             def select_atoms(self):
                 return Selection(self.residue_range('1:A', '1:A'))
-
+                    
         if hasattr(self, "secondary_name"):
             self.model = MyModel(self.env, 
                         alnfile = self.ali_fn, 
