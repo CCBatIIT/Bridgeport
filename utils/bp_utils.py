@@ -23,6 +23,7 @@ from rdkit.Chem import rdFMCS
 from rdkit.Chem.Draw import rdDepictor
 rdDepictor.SetPreferCoordGen(True)
 IPythonConsole.drawOptions.minFontSize=20
+from IPython.display import display
 
 def analogue_alignment(smiles: str, known_pdb: str, known_resname: str, analogue_out_path: str):
     """
@@ -107,7 +108,7 @@ def return_max_common_substructure(mol1, mol2):
         atom = mol2.GetAtoms()[i]
         target_atm2.append(atom.GetIdx())
         
-    Draw.MolsToGridImage([mol1, mol2],highlightAtomLists=[target_atm1, target_atm2])
+    display(Draw.MolsToGridImage([mol1, mol2],highlightAtomLists=[target_atm1, target_atm2]))
     
     return target_atm1, target_atm2
 

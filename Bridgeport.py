@@ -139,7 +139,6 @@ class Bridgeport():
                             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand file:', self.analogue_pdb, flush=True)
                             if 'known_resname' in self.input_params['ligand'] and self.input_params['ligand']['known_resname'] != False:
                                 self.analogue_resname = self.input_params['ligand']['known_resname']
-                                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with resname:', self.analogue_resname, flush=True)
     
                                 # Build analogue complex
                                 self._build_analogue_complex()
@@ -167,6 +166,8 @@ class Bridgeport():
         name = self.input_params['protein']['input_pdb']
         ref_u = mda.Universe(self.analogue_pdb)
         ref_sele = ref_u.select_atoms('resname '+self.analogue_resname)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with resname:', self.analogue_resname, 'and', ref_sele.n_atoms, 'number of atoms', flush=True)
+
         assert ref_sele.n_atoms > 0, f"Could not find any atoms with resname {self.analogue_resname}"
         prot_sele = ref_u.select_atoms('protein')
         assert prot_sele.n_atoms > 0, f"Could not find any protein atoms in {self.analogue_pdb}"
@@ -178,7 +179,7 @@ class Bridgeport():
         # General aligned analogue
         lig_path = os.path.join(self.lig_only_dir, self.analogue_name+'.pdb')
         analogue_alignment(smiles=self.analogue_smiles,
-                           known_pdb=self.analogue_pdb,
+                           known_pdb=ref_lig_pdb,
                            known_resname=self.analogue_resname,
                            analogue_out_path=lig_path)
         assert os.path.exists(lig_path), f"No output file exists at {lig_path}"
@@ -399,7 +400,7 @@ class Bridgeport():
                 mol.AddHydrogens()
                             
                 #Writeout the protonated file in the second format
-                out_fn = mol_path.split('.')[0] + '.sdf'
+                out_fn = mol_path.split('.')[0] + '.' + out_fm
                 obConversion.WriteFile(mol, out_fn)
 
                 # Recursively written over original file type
@@ -472,7 +473,7 @@ class Bridgeport():
 
                     #Obabel conversion block
                     obConversion = openbabel.OBConversion()
-                    formats = [mol_path.split('.')[-1], out_fm]
+                    formats = [mol_path.split('.')[-1], 'sdf']
                     obConversion.SetInAndOutFormats(*formats)
                     mol = openbabel.OBMol()
             
@@ -490,13 +491,29 @@ class Bridgeport():
                     #Writeout the protonated file in the second format
                     out_fn = mol_path.split('.')[0] + '.sdf'
                     obConversion.WriteFile(mol, out_fn)
-    
-                    # Recursively written over original file type
-                    if not os.path.exists(mol_path.split('.')[0] + '.pdb'):
-                        self._ligand_prep(out_fm=mol_path.split('.')[-1])
-                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', mol_path.split('.')[0] + '.pdb', mol_path.split('.')[0] + '.sdf', flush=True)
 
- 
+                    # WRITE PDB
+                    obConversion = openbabel.OBConversion()
+                    formats = [mol_path.split('.')[-1], 'pdb']
+                    obConversion.SetInAndOutFormats(*formats)
+                    mol = openbabel.OBMol()
+            
+                    #Find Input
+                    if os.path.isfile(mol_path):
+                        obConversion.ReadFile(mol, mol_path)
+                    elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
+                        obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
+                    else:
+                        raise FileNotFoundError('mol_fn was not found')
+                        
+                    #Add Hydrogens
+                    mol.AddHydrogens()
+                                
+                    #Writeout the protonated file in the second format
+                    out_fn = mol_path.split('.')[0] + '.pdb'
+                    obConversion.WriteFile(mol, out_fn)
+    
+                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', mol_path.split('.')[0] + '.pdb', mol_path.split('.')[0] + '.sdf', flush=True)
 
             # Add crys line
             lig_lines = open(os.path.join(self.lig_only_dir, lig_fn), 'r').readlines()
