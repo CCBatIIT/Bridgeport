@@ -1,5 +1,8 @@
-import textwrap, sys, os, pathlib
+import textwrap, sys, os, pathlib, json
 import numpy as np
+from rdkit import Chem
+from rdkit.Chem import Descriptors, Draw
+
 #OpenFF
 import openff
 import openff.units
@@ -9,6 +12,7 @@ import openff.interchange
 from openmm.app import *
 from openmm import *
 from openmm.unit import *
+
 
 class ForceFieldHandler():
     """
@@ -32,29 +36,33 @@ class ForceFieldHandler():
     """
     
     def __init__(self, structure_file, force_field_files=None):
-        default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 
+        self.default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 
                         'OpenMM': ['amber14/protein.ff14SB.xml', 
                                    'amber14/lipid17.xml', 
                                    f'{pathlib.Path(__file__).parent.resolve()}/wat_opc3.xml']}
         self.structure_file = structure_file
+        
         # Parse the structure file to see if the user is in OpenFF or OpenMM mode
         self.working_mode = self._parse_file(structure_file)
         
         #If force field files were provided, check their extensions, if not use the default
         if force_field_files is None:
-            self.xmls = default_xmls[self.working_mode]
+            self.xmls = self.default_xmls[self.working_mode]
         elif type(force_field_files) != list:
             raise Exception('force_field_files parameter must be specified as a list of strings')
         else:
             mode_parse = [self._parse_file(ff_file) for ff_file in force_field_files]
             mode_check = [elem == self.working_mode for elem in mode_parse]
+            self.xmls = self.default_xmls['OpenMM']
+            for ff in force_field_files:
+                self.xmls.insert(0, ff)
+            print('!!!self.xmls', self.xmls)
+
             if False in mode_check:
                 bad_index = mode_check.index(False)
                 bad_file = force_field_files[bad_index]
                 raise Exception(f'{bad_file} was found incompatible with the structure file')
-            self.xmls = force_field_files
-    
-    
+
     def _parse_file(self, file_fn):
         """
         Supported formats (SDF, PDB)
@@ -72,20 +80,25 @@ class ForceFieldHandler():
             raise Exception(f'The extension {ext} was not recognized!')
         return mode
 
-    def main(self):
+    def main(self, use_rdkit: bool=False):
         """
         The intended main usage case is to parameterize ligands with an SDF file and openff parameters
         and do do a protein, lipid, solvent system with openmm parameters.
         """
         if self.working_mode == 'OpenFF':
-            mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
+            if use_rdkit:
+                rdkit_mol = Chem.MolFromPDBFile(self.structure_file, removeHs=False, proximityBonding=False)
+                display(rdkit_mol)
+                mol = openff.toolkit.Molecule.from_rdkit(rdkit_mol, hydrogens_are_explicit=True, allow_undefined_stereo=True)
+            else:
+                mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
             ff = openff.toolkit.ForceField(*self.xmls)
             cubic_box = openff.units.Quantity(30 * np.eye(3), openff.units.unit.angstrom)
-            interchange = openff.interchange.Interchange.from_smirnoff(topology=[mol], force_field=ff, box=cubic_box)
-            positions = np.array(interchange.positions) * nanometer
-            sys = interchange.to_openmm_system()
-            top = interchange.to_openmm_topology()
-        
+            self.interchange = openff.interchange.Interchange.from_smirnoff(topology=[mol], force_field=ff, box=cubic_box)
+            positions = np.array(self.interchange.positions) * nanometer
+            sys = self.interchange.to_openmm_system()
+            top = self.interchange.to_openmm_topology()
+    
         elif self.working_mode == 'OpenMM':
             ff = ForceField(*self.xmls)
             pdb = PDBFile(self.structure_file)
@@ -93,3 +106,41 @@ class ForceFieldHandler():
             sys = ff.createSystem(top, nonbondedMethod=PME) # Make this an adjustable parameter later
 
         return (sys, top, positions)
+
+    def generate_custom_xml(self, out_xml, name):
+        """
+        Generate a custom .xml to pass to Handler
+        """
+
+        # Invoke main to create interchange object
+        self.working_mode = 'OpenFF'
+        self.xmls = self.default_xmls[self.working_mode]
+        _, _, _ = self.main(use_rdkit=True)
+
+        # Write out to .prmtop
+        out_pre = out_xml.split('.xml')[0]
+        out_prmtop = out_pre + '.prmtop'
+        self.interchange.to_prmtop(out_prmtop)
+
+        # Write write_xml_pretty_input.json
+        input_json = f'{pathlib.Path(__file__).parent.resolve()}/write_xml_pretty_input.json'
+        data = json.load(open(input_json, 'r'))
+
+        data['fname_prmtop'] = out_prmtop
+        data['fname_xml'] = out_xml
+        data['ff_prefix'] = str(name)
+
+        json.dump(data, open(input_json, 'w'), indent=6)
+        
+        # Use write_xml_pretty.py to convert .prmtop to .xml
+        os.system(f'python {pathlib.Path(__file__).parent.resolve()}/write_xml_pretty.py -i {input_json}')  
+
+        return out_xml
+
+def neutralizeMol(mol):
+    for a in mol.GetAtoms():
+        if a.GetNumRadicalElectrons()==1:
+             a.SetNumRadicalElectrons(0)         
+        if a.GetFormalCharge()!=0:
+             a.SetFormalCharge(0)         
+    return mol

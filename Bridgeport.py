@@ -19,6 +19,7 @@ from openmm import *
 from openmm.unit import *
 from openbabel import openbabel
 from pdbfixer import PDBFixer
+from rdkit import Chem
 
 class Bridgeport():
     """
@@ -435,86 +436,163 @@ class Bridgeport():
                                             loops=False,
                                             verbose=self.verbose)
 
-                # Protonate 
-                if pep_nonstandard_resids == None:
-                    pp = ProteinPreparer(pdb_path=mol_path,
-                             working_dir=self.lig_only_dir,
-                             pH=pH,
-                             env='SOL',
-                             ion_strength=0) 
-                    prot_mol_path = pp._protonate_with_pdb2pqr()
-                    print(prot_mol_path)
-                    os.rename(prot_mol_path, mol_path)
-                    for fn in os.listdir(self.lig_only_dir):
-                        if fn.endswith('log') or fn.endswith('pqr'):
-                            os.remove(os.path.join(self.lig_only_dir, fn))
+                # Protonate with pdb2pqr30
+                pp = ProteinPreparer(pdb_path=mol_path,
+                         working_dir=self.lig_only_dir,
+                         pH=pH,
+                         env='SOL',
+                         ion_strength=0) 
+                prot_mol_path = pp._protonate_with_pdb2pqr()
+                prot_mol_path = pp._protonate_with_PDBFixer()
+                os.rename(prot_mol_path, mol_path)
+                for fn in os.listdir(self.lig_only_dir):
+                    if fn.endswith('log') or fn.endswith('pqr'):
+                        os.remove(os.path.join(self.lig_only_dir, fn))
 
-                else:
-                   # Neutralize C-terminus
-                    if "neutral_C-term" in self.input_params['ligand']:
-                        if self.input_params['ligand']['neutral_C-term'] == True:
-                            pdb_lines = open(mol_path, 'r').readlines()
-                            oxt_line = ''
-                            for line in pdb_lines:
-                                if line.find('OXT') != -1:
-                                    oxt_line = line
-            
-                            nxt_line = [c for c in oxt_line]
-                            nxt_line[13] = 'N'
-                            nxt_line[-4] = 'N'
-                            nxt_line = ''.join(nxt_line)
+               # Neutralize C-terminus
+                if "neutral_C-term" in self.input_params['ligand'] or 'peptide_nonstandard_resids' in self.input_params['ligand']:
+                    if self.input_params['ligand']['neutral_C-term'] == True:
+                        pdb_lines = open(mol_path, 'r').readlines()
+                        oxt_line = ''
+                        for line in pdb_lines:
+                            if line.find('OXT') != -1:
+                                oxt_line = line
         
-                            with open(mol_path, 'w') as f:
-                                for line in pdb_lines:
-                                    if line.find('OXT') == -1:
-                                        f.write(line)
-                                    else:
-                                        f.write(nxt_line)
-
-                    #Obabel conversion block
-                    obConversion = openbabel.OBConversion()
-                    formats = [mol_path.split('.')[-1], 'sdf']
-                    obConversion.SetInAndOutFormats(*formats)
-                    mol = openbabel.OBMol()
-            
-                    #Find Input
-                    if os.path.isfile(mol_path):
-                        obConversion.ReadFile(mol, mol_path)
-                    elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
-                        obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
-                    else:
-                        raise FileNotFoundError('mol_fn was not found')
-                        
-                    #Add Hydrogens
-                    mol.AddHydrogens()
-                                
-                    #Writeout the protonated file in the second format
-                    out_fn = mol_path.split('.')[0] + '.sdf'
-                    obConversion.WriteFile(mol, out_fn)
-
-                    # WRITE PDB
-                    obConversion = openbabel.OBConversion()
-                    formats = [mol_path.split('.')[-1], 'pdb']
-                    obConversion.SetInAndOutFormats(*formats)
-                    mol = openbabel.OBMol()
-            
-                    #Find Input
-                    if os.path.isfile(mol_path):
-                        obConversion.ReadFile(mol, mol_path)
-                    elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
-                        obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
-                    else:
-                        raise FileNotFoundError('mol_fn was not found')
-                        
-                    #Add Hydrogens
-                    mol.AddHydrogens()
-                                
-                    #Writeout the protonated file in the second format
-                    out_fn = mol_path.split('.')[0] + '.pdb'
-                    obConversion.WriteFile(mol, out_fn)
+                        nxt_line = [c for c in oxt_line]
+                        nxt_line[13] = 'N'
+                        nxt_line[-4] = 'N'
+                        nxt_line = ''.join(nxt_line)
     
-                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', mol_path.split('.')[0] + '.pdb', mol_path.split('.')[0] + '.sdf', flush=True)
+                        with open(mol_path, 'w') as f:
+                            for line in pdb_lines:
+                                if line.find('OXT') == -1:
+                                    f.write(line)
+                                else:
+                                    f.write(nxt_line)
+    
+                # WRITE PDB
+                obConversion = openbabel.OBConversion()
+                formats = [mol_path.split('.')[-1], 'pdb']
+                obConversion.SetInAndOutFormats(*formats)
+                mol = openbabel.OBMol()
+        
+                #Find Input
+                if os.path.isfile(mol_path):
+                    obConversion.ReadFile(mol, mol_path)
+                elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
+                    obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
+                else:
+                    raise FileNotFoundError('mol_fn was not found')
+                    
+                #Add Hydrogens
+                mol.AddHydrogens()
+                            
+                #Writeout the protonated file
+                obConversion.WriteFile(mol, mol_path)
+                
+                #Clean up terminal 
+                if "neutral_C-term" in self.input_params['ligand'] or 'peptide_nonstandard_resids' in self.input_params['ligand']:
+                    if self.input_params['ligand']['neutral_C-term'] == True:
+                        lines = open(mol_path, 'r').readlines()
+                        prev_resid = 0
+                        write_lines = []
+                        H_counter = 0
+                        max_resid = max([int(line[24:26].strip()) for line in lines if line.startswith('ATOM')])
+                        for i, line in enumerate(lines):
+                            if line.startswith('ATOM'):
+                                atom, resid = line[12:16].strip(), int(line[24:26].strip())
+                                if resid >= prev_resid:
+                                    prev_resid = resid
+                                    if resid == max_resid:
+                                        if atom == 'H':
+                                            if H_counter > 0:
+                                                write_lines.append(line[:12] + f' H{H_counter}  NCT' + line[20:])
+                                            else:
+                                                write_lines.append(line[:17] + 'NCT' + line[20:])
+                                            H_counter += 1
+                                        else:
+                                            write_lines.append(line[:17] + 'NCT' + line[20:])
+                                    else:
+                                        write_lines.append(line)
+                            else:
+                                write_lines.append(line)
+        
+                        with open(mol_path, 'w') as f:
+                            for line in write_lines:
+                                f.write(line)
 
+                """
+                Get .xml for nonstandard residues
+                """
+
+                # Find residues that need custom .xml
+                u = mda.Universe(mol_path)
+                resids_present = np.unique(u.select_atoms('all').residues.resids)
+                print('!!!resids_present', resids_present)
+                custom_resids = []
+                neutral_C_flag = False
+                if 'peptide_nonstandard_resids' in self.input_params['ligand']:
+                    custom_resids = [resid+1 for resid in self.input_params['ligand']['peptide_nonstandard_resids']]
+                if "neutral_C-term" in self.input_params['ligand']:
+                    if self.input_params['ligand']['neutral_C-term'] == True:
+                        custom_resids.append(len(resids_present)) 
+                        neutral_C_flag = True
+                
+                # Iterate through custom_resids
+                self.custom_xml_paths = []
+                print('!!!custom_resids', custom_resids)
+                for resid in custom_resids:
+
+                    # Write fragment .pdb
+                    sele_str = 'resid ' + str(resid)
+                    print('!!!sele_str', sele_str)
+                    frag_sele = u.select_atoms(sele_str)
+                    resname = frag_sele.residues.resnames[0]
+                    print(frag_sele.n_atoms)
+                    frag_pdb = os.path.join(self.lig_only_dir, f'{mol_path.split('/')[-1].split('.')[0]}_resid_{resid}.pdb')
+                    frag_sele.write(frag_pdb)
+
+                    # Add Hs
+                    obConversion = openbabel.OBConversion()
+                    formats = ['pdb', 'pdb']
+                    obConversion.SetInAndOutFormats(*formats)
+                    mol = openbabel.OBMol()
+                    obConversion.ReadFile(mol, frag_pdb)
+                    mol.AddHydrogens()
+                    obConversion.WriteFile(mol, frag_pdb)
+
+                    # Name Hs
+                    lines = open(frag_pdb, 'r').readlines()
+                    H_counter = 99
+                    for i, line in enumerate(lines):
+                        if line.startswith('HETATM') or line.startswith('ATOM'):
+                            atom = line[12:16]
+                            if atom.strip() == 'H':
+                                if H_counter < 99:
+                                    lines[i] = line[:12] + f' H{H_counter}' + line[16:] 
+                                H_counter -= 1
+
+                    with open(frag_pdb, 'w') as f:
+                        f.writelines(lines)
+
+                    # Pass to ForceFieldHandler
+                    handler = ForceFieldHandler(frag_pdb)
+                    xml_fn = os.path.join(self.lig_only_dir, frag_pdb.split('.pdb')[0] + '.xml')
+                    self.custom_xml_paths.append(handler.generate_custom_xml(out_xml=xml_fn, name=resid))
+
+                    # Fix .xml
+                    lines = open(xml_fn, 'r').readlines()
+                    for i in range(H_counter+1, 99):
+                        lines = remove_atom_from_xml(lines, f'H{i}')
+                    if neutral_C_flag and resid == custom_resids[-1]:
+                        lines = add_externalBonds(lines, C_bond=False)
+                    else:
+                        lines = add_externalBonds(lines)
+                    lines = change_xml_resname(lines, resname)
+
+                    with open(xml_fn, 'w') as f:
+                        f.writelines(lines)
+                        
             # Add crys line
             lig_lines = open(os.path.join(self.lig_only_dir, lig_fn), 'r').readlines()
             lig_lines.insert(0, crys_line)
@@ -549,16 +627,14 @@ class Bridgeport():
         if self.input_params['ligand']['lig_resname'] != False:
             lig_path = os.path.join(self.lig_only_dir, name+'.sdf')
         elif self.input_params['ligand']['peptide_chain'] != False:
-            if "peptide_nonstandard_resids" in self.input_params['ligand']:
-                if self.input_params['ligand']['peptide_nonstandard_resids'] != False:
-                    lig_path = os.path.join(self.lig_only_dir, name+'.sdf')
-                else:    
-                    lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
-            else:    
-                lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
+            lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
 
         assert os.path.exists(lig_path), f"Cannot find path to ligand file: {lig_path}"
-        lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
+        if "peptide_nonstandard_resids" in self.input_params['ligand'] or 'neutral_C-term' in self.input_params['ligand']:
+            print('!!!self.custom_xml_paths', self.custom_xml_paths)
+            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=self.custom_xml_paths).main()
+        else:    
+            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
 
         # Combine systems 
@@ -589,7 +665,39 @@ class Bridgeport():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system parameters saved to', os.path.join(self.sys_dir, name+'.xml'), flush=True)
 
     
+def remove_atom_from_xml(xml_lines, atom_name):
+    write_lines = []
+    for line in xml_lines:
+        if line.find(f'name="{atom_name}"') != -1:
+            type = line.split('"')[5]
+    
+    for line in xml_lines:
+        if line.find(type) == -1:
+            if line.find(f'atomName2="{atom_name}"') == -1:
+                if line not in write_lines:
+                    write_lines.append(line)
 
+    return write_lines
+
+def add_externalBonds(xml_lines, N_bond: bool=True, C_bond: bool=True):
+    for i, line in enumerate(xml_lines):
+        if line.find('</Residue>') != -1:
+            end_residue_ind = i
+            break
+            
+    if N_bond:
+        xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="N"/>\n')
+        end_residue_ind += 1
+    if C_bond:
+        xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="C"/>\n')
+
+    return xml_lines
+
+def change_xml_resname(xml_lines, resname: str='UNL'):
+    line_ind = xml_lines.index('    <Residue name="RES">\n')
+    xml_lines[line_ind] = f'    <Residue name="{resname}">\n'
+    
+    return xml_lines
         
 
 
