@@ -372,7 +372,8 @@ class Bridgeport():
             lig_fn = self.input_params['protein']['input_pdb']        
 
             # Get crystal information from protein
-            crys_line = open(os.path.join(self.prot_only_dir, lig_fn.split('.')[0]+'_env.pdb'), 'r').readlines()[1]
+            # crys_line = open(os.path.join(self.prot_only_dir, lig_fn.split('.')[0]+'_env.pdb'), 'r').readlines()[1]
+            crys_line = 'CRYST1  127.402  133.748  139.505  90.00  90.00  90.00 P 1           1\n'
             assert crys_line.startswith('CRYS'), f"No crystal line found at top of {lig_fn.split('.')[0]}_env.pdb, found: {crys_line}."
 
             # Get path to input ligand file
@@ -469,64 +470,72 @@ class Bridgeport():
                                     f.write(line)
                                 else:
                                     f.write(nxt_line)
-    
-                # WRITE PDB
-                obConversion = openbabel.OBConversion()
-                formats = [mol_path.split('.')[-1], 'pdb']
-                obConversion.SetInAndOutFormats(*formats)
-                mol = openbabel.OBMol()
-        
-                #Find Input
-                if os.path.isfile(mol_path):
-                    obConversion.ReadFile(mol, mol_path)
-                elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
-                    obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
-                else:
-                    raise FileNotFoundError('mol_fn was not found')
-                    
-                #Add Hydrogens
-                mol.AddHydrogens()
-                            
-                #Writeout the protonated file
-                obConversion.WriteFile(mol, mol_path)
-                
-                #Clean up terminal 
-                if "neutral_C-term" in self.input_params['ligand'] or 'peptide_nonstandard_resids' in self.input_params['ligand']:
+
+                addHs = False
+                if "neutral_C-term" in self.input_params['ligand']:
                     if self.input_params['ligand']['neutral_C-term'] == True:
-                        lines = open(mol_path, 'r').readlines()
-                        prev_resid = 0
-                        write_lines = []
-                        H_counter = 0
-                        max_resid = max([int(line[24:26].strip()) for line in lines if line.startswith('ATOM')])
-                        for i, line in enumerate(lines):
-                            if line.startswith('ATOM'):
-                                atom, resid = line[12:16].strip(), int(line[24:26].strip())
-                                if resid >= prev_resid:
-                                    prev_resid = resid
-                                    if resid == max_resid:
-                                        if atom == 'H':
-                                            if H_counter > 0:
-                                                write_lines.append(line[:12] + f' HT{H_counter} NCT' + line[20:])
-                                            else:
-                                                write_lines.append(line[:17] + 'NCT' + line[20:])
-                                            H_counter += 1
+                        addHs = True
+                if 'peptide_nonstandard_resids' in self.input_params['ligand']:
+                    if self.input_parmas['ligand']['peptide_nonstandard_resids'] != False:
+                        addHs = True
+
+                if addHs == True:
+                    # WRITE PDB
+                    obConversion = openbabel.OBConversion()
+                    formats = [mol_path.split('.')[-1], 'pdb']
+                    obConversion.SetInAndOutFormats(*formats)
+                    mol = openbabel.OBMol()
+            
+                    #Find Input
+                    if os.path.isfile(mol_path):
+                        obConversion.ReadFile(mol, mol_path)
+                    elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
+                        obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
+                    else:
+                        raise FileNotFoundError('mol_fn was not found')
+                        
+                    #Add Hydrogens
+                    mol.AddHydrogens()
+                                
+                    #Writeout the protonated file
+                    obConversion.WriteFile(mol, mol_path)
+
+                    # Clean up extra Hs
+                    lines = open(mol_path, 'r').readlines()
+                    prev_resid = 0
+                    write_lines = []
+                    H_counter = 0
+                    max_resid = max([int(line[24:26].strip()) for line in lines if line.startswith('ATOM')])
+                    for i, line in enumerate(lines):
+                        if line.startswith('ATOM'):
+                            atom, resid = line[12:16].strip(), int(line[24:26].strip())
+                            if resid >= prev_resid:
+                                prev_resid = resid
+                                if resid == max_resid:
+                                    if atom == 'H':
+                                        if H_counter > 0:
+                                            write_lines.append(line[:12] + f' HT{H_counter} NCT' + line[20:])
                                         else:
                                             write_lines.append(line[:17] + 'NCT' + line[20:])
+                                        H_counter += 1
                                     else:
-                                        write_lines.append(line)
-                            else:
-                                write_lines.append(line)
-        
-                        with open(mol_path, 'w') as f:
-                            for line in write_lines:
-                                f.write(line)             
+                                        write_lines.append(line[:17] + 'NCT' + line[20:])
+                                else:
+                                    write_lines.append(line)
+                        else:
+                            write_lines.append(line)
+    
+                    with open(mol_path, 'w') as f:
+                        for line in write_lines:
+                            f.write(line)             
                         
             # Add crys line
             lig_lines = open(os.path.join(self.lig_only_dir, lig_fn), 'r').readlines()
             lig_lines.insert(0, crys_line)
             with open(os.path.join(self.lig_only_dir, lig_fn), 'w') as f:
                 for line in lig_lines:
-                    f.write(line)
+                    if line.startswith('ATOM') or line.startswith('HETATM') or line.startswith('CRYS'):
+                        f.write(line)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', os.path.join(self.lig_only_dir, lig_fn), flush=True)
             f.close()
 
@@ -560,14 +569,13 @@ class Bridgeport():
         assert os.path.exists(lig_path), f"Cannot find path to ligand file: {lig_path}"
 
         # Generate ligand system
-        if "peptide_nonstandard_resids" in self.input_params['ligand'] or 'neutral_C-term' in self.input_params['ligand']:
-            if "nonstandard_xml_paths" in self.input_params['ligand']:
-                custom_xml_paths = self.input_params['ligand']['nonstandard_xml_paths']
-                for xml in custom_xml_paths:
-                    if os.path.exists(xml):
-                        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found', xml,  flush=True)
-                    else:
-                        raise FileNotFoundError(f"Could not find {xml}.")
+        if "nonstandard_xml_paths" in self.input_params['ligand']:
+            custom_xml_paths = self.input_params['ligand']['nonstandard_xml_paths']
+            for xml in custom_xml_paths:
+                if os.path.exists(xml):
+                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found', xml,  flush=True)
+                else:
+                    raise FileNotFoundError(f"Could not find {xml}.")
 
             lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=custom_xml_paths, use_defaults=False).main()
         else:    

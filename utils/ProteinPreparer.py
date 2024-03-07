@@ -66,7 +66,8 @@ class ProteinPreparer():
         """
         self.protein_H_path = os.path.join(self.working_dir, self.prot_name + '_H.pdb')
         protein_pqr_path = os.path.join(self.working_dir, self.prot_name + '.pqr')
-        my_cmd = f'pdb2pqr30 --ff AMBER --log-level CRITICAL --nodebump --keep-chain --ffout AMBER --pdb-output {self.protein_H_path} --with-ph {at_pH} {self.receptor_path} {protein_pqr_path}'
+        # my_cmd = f'pdb2pqr30 --ff AMBER --log-level CRITICAL --nodebump --keep-chain --ffout AMBER --pdb-output {self.protein_H_path} --with-ph {at_pH} {self.receptor_path} {protein_pqr_path}'
+        my_cmd = f'pdb2pqr30 --ff AMBER --nodebump --keep-chain --ffout AMBER --pdb-output {self.protein_H_path} --with-ph {at_pH} {self.receptor_path} {protein_pqr_path}'
         print('Protanting using command line')
         print(f'Running {my_cmd}')
         exit_status = os.system(my_cmd)
