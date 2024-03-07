@@ -35,10 +35,10 @@ class ForceFieldHandler():
         
     """
     
-    def __init__(self, structure_file, force_field_files=None):
+    def __init__(self, structure_file, force_field_files=None, use_defaults: bool=True):
         self.default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 
                         'OpenMM': ['amber14/protein.ff14SB.xml', 
-                                   'amber14/lipid17.xml', 
+                                   'amber14/lipid17.xml',
                                    f'{pathlib.Path(__file__).parent.resolve()}/wat_opc3.xml']}
         self.structure_file = structure_file
         
@@ -46,14 +46,17 @@ class ForceFieldHandler():
         self.working_mode = self._parse_file(structure_file)
         
         #If force field files were provided, check their extensions, if not use the default
-        if force_field_files is None:
+        if force_field_files is None and use_defaults == True:
             self.xmls = self.default_xmls[self.working_mode]
         elif type(force_field_files) != list:
             raise Exception('force_field_files parameter must be specified as a list of strings')
         else:
             mode_parse = [self._parse_file(ff_file) for ff_file in force_field_files]
             mode_check = [elem == self.working_mode for elem in mode_parse]
-            self.xmls = self.default_xmls['OpenMM']
+            if use_defaults == True:
+                self.xmls = self.default_xmls['OpenMM']
+            else:
+                self.xmls = []
             for ff in force_field_files:
                 self.xmls.insert(0, ff)
             print('!!!self.xmls', self.xmls)

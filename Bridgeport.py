@@ -431,7 +431,7 @@ class Bridgeport():
                                                 fasta_fn=pep_fasta, 
                                                 working_dir=self.input_params['RepairProtein']['working_dir'])
                         protein_reparer.run(pdb_out_fn=mol_path,
-                                            tails=False,
+                                            tails=True,
                                             nstd_resids=pep_nonstandard_resids,
                                             loops=False,
                                             verbose=self.verbose)
@@ -506,7 +506,7 @@ class Bridgeport():
                                     if resid == max_resid:
                                         if atom == 'H':
                                             if H_counter > 0:
-                                                write_lines.append(line[:12] + f' H{H_counter}  NCT' + line[20:])
+                                                write_lines.append(line[:12] + f' HT{H_counter} NCT' + line[20:])
                                             else:
                                                 write_lines.append(line[:17] + 'NCT' + line[20:])
                                             H_counter += 1
@@ -519,79 +519,7 @@ class Bridgeport():
         
                         with open(mol_path, 'w') as f:
                             for line in write_lines:
-                                f.write(line)
-
-                """
-                Get .xml for nonstandard residues
-                """
-
-                # Find residues that need custom .xml
-                u = mda.Universe(mol_path)
-                resids_present = np.unique(u.select_atoms('all').residues.resids)
-                print('!!!resids_present', resids_present)
-                custom_resids = []
-                neutral_C_flag = False
-                if 'peptide_nonstandard_resids' in self.input_params['ligand']:
-                    custom_resids = [resid+1 for resid in self.input_params['ligand']['peptide_nonstandard_resids']]
-                if "neutral_C-term" in self.input_params['ligand']:
-                    if self.input_params['ligand']['neutral_C-term'] == True:
-                        custom_resids.append(len(resids_present)) 
-                        neutral_C_flag = True
-                
-                # Iterate through custom_resids
-                self.custom_xml_paths = []
-                print('!!!custom_resids', custom_resids)
-                for resid in custom_resids:
-
-                    # Write fragment .pdb
-                    sele_str = 'resid ' + str(resid)
-                    print('!!!sele_str', sele_str)
-                    frag_sele = u.select_atoms(sele_str)
-                    resname = frag_sele.residues.resnames[0]
-                    print(frag_sele.n_atoms)
-                    frag_pdb = os.path.join(self.lig_only_dir, f'{mol_path.split('/')[-1].split('.')[0]}_resid_{resid}.pdb')
-                    frag_sele.write(frag_pdb)
-
-                    # Add Hs
-                    obConversion = openbabel.OBConversion()
-                    formats = ['pdb', 'pdb']
-                    obConversion.SetInAndOutFormats(*formats)
-                    mol = openbabel.OBMol()
-                    obConversion.ReadFile(mol, frag_pdb)
-                    mol.AddHydrogens()
-                    obConversion.WriteFile(mol, frag_pdb)
-
-                    # Name Hs
-                    lines = open(frag_pdb, 'r').readlines()
-                    H_counter = 99
-                    for i, line in enumerate(lines):
-                        if line.startswith('HETATM') or line.startswith('ATOM'):
-                            atom = line[12:16]
-                            if atom.strip() == 'H':
-                                if H_counter < 99:
-                                    lines[i] = line[:12] + f' H{H_counter}' + line[16:] 
-                                H_counter -= 1
-
-                    with open(frag_pdb, 'w') as f:
-                        f.writelines(lines)
-
-                    # Pass to ForceFieldHandler
-                    handler = ForceFieldHandler(frag_pdb)
-                    xml_fn = os.path.join(self.lig_only_dir, frag_pdb.split('.pdb')[0] + '.xml')
-                    self.custom_xml_paths.append(handler.generate_custom_xml(out_xml=xml_fn, name=resid))
-
-                    # Fix .xml
-                    lines = open(xml_fn, 'r').readlines()
-                    for i in range(H_counter+1, 99):
-                        lines = remove_atom_from_xml(lines, f'H{i}')
-                    if neutral_C_flag and resid == custom_resids[-1]:
-                        lines = add_externalBonds(lines, C_bond=False)
-                    else:
-                        lines = add_externalBonds(lines)
-                    lines = change_xml_resname(lines, resname)
-
-                    with open(xml_fn, 'w') as f:
-                        f.writelines(lines)
+                                f.write(line)             
                         
             # Add crys line
             lig_lines = open(os.path.join(self.lig_only_dir, lig_fn), 'r').readlines()
@@ -617,22 +545,31 @@ class Bridgeport():
         
         # Iterate through files
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Building parameters for', name, flush=True)
+        
         # Generate protein system
         prot_path = os.path.join(self.prot_only_dir, name+'_env.pdb')
         assert os.path.exists(prot_path), f"Cannot find path to protein file in environment: {prot_path}"
         prot_sys, prot_top, prot_pos = ForceFieldHandler(prot_path).main()
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
 
-        # Generate ligand system
+        # Get ligand path
         if self.input_params['ligand']['lig_resname'] != False:
             lig_path = os.path.join(self.lig_only_dir, name+'.sdf')
         elif self.input_params['ligand']['peptide_chain'] != False:
             lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
-
         assert os.path.exists(lig_path), f"Cannot find path to ligand file: {lig_path}"
+
+        # Generate ligand system
         if "peptide_nonstandard_resids" in self.input_params['ligand'] or 'neutral_C-term' in self.input_params['ligand']:
-            print('!!!self.custom_xml_paths', self.custom_xml_paths)
-            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=self.custom_xml_paths).main()
+            if "nonstandard_xml_paths" in self.input_params['ligand']:
+                custom_xml_paths = self.input_params['ligand']['nonstandard_xml_paths']
+                for xml in custom_xml_paths:
+                    if os.path.exists(xml):
+                        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found', xml,  flush=True)
+                    else:
+                        raise FileNotFoundError(f"Could not find {xml}.")
+
+            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=custom_xml_paths, use_defaults=False).main()
         else:    
             lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
@@ -697,6 +634,44 @@ def change_xml_resname(xml_lines, resname: str='UNL'):
     line_ind = xml_lines.index('    <Residue name="RES">\n')
     xml_lines[line_ind] = f'    <Residue name="{resname}">\n'
     
+    return xml_lines
+
+def fix_types(xml_lines):
+    #Get atom types
+    atom_types = {}
+    res_start_ind = xml_lines.index('    <Residue name="RES">\n') + 1
+    res_stop_ind = xml_lines.index('    </Residue>\n')
+    atom_lines = [xml_lines[i] for i in range(res_start_ind, res_stop_ind) if xml_lines[i].startswith('      <Atom')]
+    for line in atom_lines:
+        _, _, _, name, _, type, _ = line.split('"')
+        atom_types[type] = name
+
+    # Fix atom types in dict
+    for type, name in atom_types.items():
+        if name.startswith('H'):
+
+            # Handle terminal hydrogens
+            if name.startswith('HT'):
+                new_type = type.split('-')[0] + '-' + 'HT'
+                
+            # Handle hydrogens with similar naming scheme
+            elif name[-1].isdigit() and not name[-2].isdigit() and len(name) == 3:
+                new_type = type.split('-')[0] + '-' + name
+                
+            else:
+                new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
+                
+        else:
+            new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
+            
+        atom_types[type] = new_type
+
+    # Find and replace w/ new atom types
+    for old_type, new_type in atom_types.items():
+        for i, line in enumerate(xml_lines):
+            if line.find(old_type) != -1:
+                xml_lines[i] = line.replace(old_type, new_type)
+
     return xml_lines
         
 

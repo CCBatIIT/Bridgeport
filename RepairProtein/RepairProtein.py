@@ -95,7 +95,7 @@ class RepairProtein():
                 String path to write repaired .pdb file. 
 
             tails (bool):
-                If True, add missing residues to N and C termini. Default is False.
+                If True, add missing residues to N and C termini. Default is False. List of indices to cleave tails can also be provided [start_resid, end_resid]
 
             nstd_resids (List):
                 If list is provided then nonstandard residues at these indices (0-indexed) will be conserved from input model to output structure.
@@ -138,12 +138,15 @@ class RepairProtein():
 
         # Delete tails if necessary
         if tails != False:
-            traj = md.load_pdb(self.pdb_out_fn)
-            top = traj.topology
-            resid_range = ' '.join(str(i) for i in range(tails[0], tails[1]))
-            sele = top.select(f'resid {resid_range}')
-            traj = traj.atom_slice(sele)
-            traj.save_pdb(self.pdb_out_fn)
+            if tails == True:
+                pass
+            else:
+                traj = md.load_pdb(self.pdb_out_fn)
+                top = traj.topology
+                resid_range = ' '.join(str(i) for i in range(tails[0], tails[1]))
+                sele = top.select(f'resid {resid_range}')
+                traj = traj.atom_slice(sele)
+                traj.save_pdb(self.pdb_out_fn)
         else:
             traj = md.load_pdb(self.pdb_out_fn)
             top = traj.topology
@@ -208,12 +211,15 @@ class RepairProtein():
 
         # Delete tails if necessary
         if tails != False:
-            traj = md.load_pdb(self.pdb_out_fn)
-            top = traj.topology
-            resid_range = ' '.join(str(i) for i in range(tails[0], tails[1]))
-            sele = top.select(f'resid {resid_range}')
-            traj = traj.atom_slice(sele)
-            traj.save_pdb(self.pdb_out_fn)
+            if tails == True:
+                pass
+            else:
+                traj = md.load_pdb(self.pdb_out_fn)
+                top = traj.topology
+                resid_range = ' '.join(str(i) for i in range(tails[0], tails[1]))
+                sele = top.select(f'resid {resid_range}')
+                traj = traj.atom_slice(sele)
+                traj.save_pdb(self.pdb_out_fn)
         else:
             traj = md.load_pdb(self.pdb_out_fn)
             top = traj.topology
