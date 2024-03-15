@@ -59,7 +59,6 @@ class ForceFieldHandler():
                 self.xmls = []
             for ff in force_field_files:
                 self.xmls.insert(0, ff)
-            print('!!!self.xmls', self.xmls)
 
             if False in mode_check:
                 bad_index = mode_check.index(False)

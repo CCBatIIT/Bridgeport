@@ -269,8 +269,8 @@ class RepairProtein():
             for nstd_resid in self.nstd_resids:
                 tar_seq_splt.insert(nstd_resid, '.')
             self.tar_seq = ''.join(tar_seq_splt)
-        print('!!!nstd_resids')
-        print('!!!tar_seq', self.tar_seq)
+        # print('!!!nstd_resids')
+        # print('!!!tar_seq', self.tar_seq)
         if hasattr(self, "secondary_template_pdb"):
             shutil.copy(self.secondary_template_pdb, self.working_dir + '/' + self.secondary_template_pdb.split('/')[-1])
             pdb_to_pir(self.secondary_name, self.working_dir)

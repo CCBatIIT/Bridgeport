@@ -381,7 +381,14 @@ class Bridgeport():
 
             # Use obabel if small molecule to covert to .sdf
             lig_resname = self.input_params['ligand']['lig_resname']
+            small_molecule_params = False
             if lig_resname != False:
+                small_molecule_params = True
+            elif 'small_molecule_params' in self.input_params['ligand']:
+                if self.input_params['ligand']['small_molecule_params'] == True:
+                    small_molecule_params = True
+
+            if small_molecule_params:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found small molecule ligand with resname:', lig_resname, flush=True)
 
                 #Obabel conversion block
@@ -393,8 +400,8 @@ class Bridgeport():
                 #Find Input
                 if os.path.isfile(mol_path):
                     obConversion.ReadFile(mol, mol_path)
-                elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
-                    obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
+                elif os.path.isfile(os.path.join(self.lig_only_dir, mol_path)):
+                    obConversion.ReadFile(mol, os.path.join(self.lig_only_dir, mol_path))
                 else:
                     raise FileNotFoundError('mol_fn was not found')
                     
@@ -412,7 +419,7 @@ class Bridgeport():
 
             # Prepare peptide ligand
             chain_id = self.input_params['ligand']['peptide_chain']
-            if chain_id != False:
+            if chain_id != False and not small_molecule_params:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found peptide ligand with chainid:', chain_id, flush=True)
                 if "environment" in self.input_params.keys():
                     if "pH" in self.input_params["environment"].keys():
@@ -423,7 +430,6 @@ class Bridgeport():
                     pep_nonstandard_resids = self.input_params['ligand']['peptide_nonstandard_resids']
                 else:
                     pep_nonstandard_resids = None
-                print('!!!pep_nonstandard_resids', pep_nonstandard_resids)
                 #Repair with RepairProtein
                 if 'peptide_fasta' in self.input_params['ligand']:
                     pep_fasta = self.input_params['ligand']['peptide_fasta']
@@ -431,6 +437,7 @@ class Bridgeport():
                         protein_reparer = RepairProtein(pdb_fn=mol_path,
                                                 fasta_fn=pep_fasta, 
                                                 working_dir=self.input_params['RepairProtein']['working_dir'])
+
                         protein_reparer.run(pdb_out_fn=mol_path,
                                             tails=True,
                                             nstd_resids=pep_nonstandard_resids,
@@ -489,8 +496,8 @@ class Bridgeport():
                     #Find Input
                     if os.path.isfile(mol_path):
                         obConversion.ReadFile(mol, mol_path)
-                    elif os.path.isfile(os.path.join(self.abs_work_dir, mol_path)):
-                        obConversion.ReadFile(mol, os.path.join(self.abs_work_dir, mol_path))
+                    elif os.path.isfile(os.path.join(self.lig_only_dir, mol_path)):
+                        obConversion.ReadFile(mol, os.path.join(self.lig_only_dir, mol_path))
                     else:
                         raise FileNotFoundError('mol_fn was not found')
                         
@@ -562,7 +569,7 @@ class Bridgeport():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
 
         # Get ligand path
-        if self.input_params['ligand']['lig_resname'] != False:
+        if self.input_params['ligand']['lig_resname'] != False or ('small_molecule_params' in self.input_params['ligand'] and self.input_params['ligand']['small_molecule_params'] != False):
             lig_path = os.path.join(self.lig_only_dir, name+'.sdf')
         elif self.input_params['ligand']['peptide_chain'] != False:
             lig_path = os.path.join(self.lig_only_dir, name+'.pdb')
