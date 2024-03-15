@@ -21,7 +21,7 @@
         "working_dir": "/home/exouser/Bridgeport/tests/modeller_intermediates", 
         "fasta_path": "/home/exouser/Bridgeport/tests/fasta/CB2.fasta",
         "tails": [19,319],
-        "loops": [[222, 235]ana],
+        "loops": [[222, 235]],
         "secondary_template": false
     },
 

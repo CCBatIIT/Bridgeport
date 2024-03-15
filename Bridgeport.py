@@ -127,22 +127,36 @@ class Bridgeport():
         Output system .pdb and .xml file will be found in self.working_dir/systems
         """
         # If analogue, create new intial structure
-        if self.input_params['ligand']['lig_resname'] == False:
-            if self.input_params['ligand']['peptide_chain'] == False:
-                if 'analogue_smiles' in self.input_params['ligand'] and self.input_params['ligand']['analogue_smiles'] != False:
-                    self.analogue_smiles=self.input_params['ligand']['analogue_smiles']
-                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with smiles:', self.analogue_smiles, flush=True)
-                    if 'analogue_name' in self.input_params['ligand'] and self.input_params['ligand']['analogue_name'] != False:
-                        self.analogue_name=self.input_params['ligand']['analogue_name']
-                        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with name:', self.analogue_name, flush=True)
-                        if 'known_structure' in self.input_params['ligand'] and self.input_params['ligand']['known_structure'] != False:
-                            self.analogue_pdb = self.input_params['ligand']['known_structure']
-                            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand file:', self.analogue_pdb, flush=True)
-                            if 'known_resname' in self.input_params['ligand'] and self.input_params['ligand']['known_resname'] != False:
-                                self.analogue_resname = self.input_params['ligand']['known_resname']
-    
-                                # Build analogue complex
-                                self._build_analogue_complex()
+        if self.input_params['ligand']['lig_resname'] == False and self.input_params['ligand']['peptide_chain'] == False:
+            if 'analogue_smiles' in self.input_params['ligand'] and self.input_params['ligand']['analogue_smiles'] != False:
+                self.analogue_smiles=self.input_params['ligand']['analogue_smiles']
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with smiles:', self.analogue_smiles, flush=True)
+            else:
+                raise Exception('"analogue_smiles" must be specified if "lig_resname" and "peptide_chain" are False.')
+            if 'analogue_name' in self.input_params['ligand'] and self.input_params['ligand']['analogue_name'] != False:
+                self.analogue_name=self.input_params['ligand']['analogue_name']
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with name:', self.analogue_name, flush=True)
+            else:
+                raise Exception('"analogue_name" must be specified if "lig_resname" and "peptide_chain" are False.')
+            if 'known_structure' in self.input_params['ligand'] and self.input_params['ligand']['known_structure'] != False:
+                self.analogue_pdb = self.input_params['ligand']['known_structure']
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand file:', self.analogue_pdb, flush=True)
+            else:
+                raise Exception('"known_structure" must be specified if "lig_resname" and "peptide_chain" are False.')
+            if 'known_resname' in self.input_params['ligand'] and self.input_params['ligand']['known_resname'] != False:
+                self.analogue_resname = self.input_params['ligand']['known_resname']
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand resname:', self.analogue_resname, flush=True)
+            elif 'known_chainid' in self.input_params['ligand'] and self.input_params['ligand']['known_chainid'] != False:
+                self.analogue_chainid = self.input_params['ligand']['known_chainid']
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand chainid:', self.analogue_chainid, flush=True)
+            else:
+                raise Exception('"known_resname" or "known_chainid" must be specified if "lig_resname" and "peptide_chain" are False.')
+
+                                
+        # Build analogue complex
+        if hasattr(self, "analogue_smiles") and hasattr(self, "analogue_name") and hasattr(self, "analogue_pdb"):
+            if hasattr(self, "analogue_resname") or hasattr(self, "analogue_chainid"):
+                self._build_analogue_complex()
                             
         # Run 
         self._align()
@@ -166,9 +180,12 @@ class Bridgeport():
         # Get known ligand
         name = self.input_params['protein']['input_pdb']
         ref_u = mda.Universe(self.analogue_pdb)
-        ref_sele = ref_u.select_atoms('resname '+self.analogue_resname)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with resname:', self.analogue_resname, 'and', ref_sele.n_atoms, 'number of atoms', flush=True)
-
+        if hasattr(self, 'analogue_resname'):
+            ref_sele = ref_u.select_atoms('resname '+self.analogue_resname)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with resname:', self.analogue_resname, 'and', ref_sele.n_atoms, 'number of atoms', flush=True)
+        elif hasattr(self, 'analogue_chainid'):
+            ref_sele = ref_u.select_atoms('chainid '+ self.analogue_chainid)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with chainid:', self.analogue_chainid, 'and', ref_sele.n_atoms, 'number of atoms', flush=True)
         assert ref_sele.n_atoms > 0, f"Could not find any atoms with resname {self.analogue_resname}"
         prot_sele = ref_u.select_atoms('protein')
         assert prot_sele.n_atoms > 0, f"Could not find any protein atoms in {self.analogue_pdb}"
@@ -181,7 +198,6 @@ class Bridgeport():
         lig_path = os.path.join(self.lig_only_dir, self.analogue_name+'.pdb')
         analogue_alignment(smiles=self.analogue_smiles,
                            known_pdb=ref_lig_pdb,
-                           known_resname=self.analogue_resname,
                            analogue_out_path=lig_path)
         assert os.path.exists(lig_path), f"No output file exists at {lig_path}"
 
@@ -282,7 +298,6 @@ class Bridgeport():
         # Select ligand by resname or peptide_chain
         lig_resname = self.input_params['ligand']['lig_resname']
         peptide_chain = self.input_params['ligand']['peptide_chain']
-        assert (lig_resname == False and peptide_chain != False) or (lig_resname != False and peptide_chain == False), f"Either lig_resname or peptide_chain must be False."
         if lig_resname != False:
             lig_sele = u.select_atoms(f'resname {lig_resname}')
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', lig_resname, 'from input structure', flush=True)
