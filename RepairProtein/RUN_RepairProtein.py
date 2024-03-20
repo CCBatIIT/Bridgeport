@@ -1,4 +1,6 @@
 """
+COMMAND LINE USAGE IS DEPRECATED...
+
 Use the RepairProtein class to repair any given .pdb that is in the directory. 
 This script is contingent on all the target proteins having the same template sequence. 
 

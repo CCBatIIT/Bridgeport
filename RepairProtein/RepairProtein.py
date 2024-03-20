@@ -1,8 +1,3 @@
-
-"""
-TODO: Add chain options, thermodynamic mutations, unnatural residues?
-"""
-
 import shutil, os
 from modeller import *
 from modeller.automodel import *
@@ -18,27 +13,58 @@ from typing import List
 
 class RepairProtein():
     """
-    Repair a broken protein 
-
-    Attributes:
-    -----------
-        pdb_fn (str):
-            String path to .pdb file to repair.
-
-        fasta_fn (str):
-            String path to .fasta file that contains sequence to use as a template to repair the protein .pdb.     
-
-        working_dir (str):
-            String path to working directory where all intermediate files made by UCSF modeller will be stored. Default is current working directory. 
-
-        name (str):
-            Name of pdb without .pdb extension
-
-        pdb_out_fn (str):
-            String path to write repaired .pdb file. 
-
-
+    The RepairProtein class is designed to repair incomplete or damaged protein structures, providing tools for the addition, removal, or modification of atomic details to produce a corrected structure suitable for simulation. Leveraging the capabilities of UCSF Modeller, this class facilitates homology modeling, loop optimization, and the maintenance of non-standard residues within the protein model. Additionally, it incorporates secondary structure templates to enhance model accuracy.
     
+    Features:
+    ---------
+        - Automated repair of missing and mutated residues in protein structures.
+        - Utilizes template sequences from FASTA files for accurate remodeling.
+        - Supports optimization of loop regions for improved structure prediction.
+        - Capable of preserving non-standard residues during the repair process.
+        - Integrates with Modeller and OpenMM for a comprehensive structure repair workflow.
+    
+    Attributes:
+    ------------
+        pdb_fn (str): 
+            Path to the input .pdb file to be repaired.
+       
+        fasta_fn (str): 
+            Path to the .fasta file containing the template sequence.
+       
+        working_dir (str): 
+            Directory for storing intermediate files created during the repair process. Defaults to the current directory.
+      
+        name (str): 
+            Identifier derived from the input .pdb file, excluding the file extension.
+      
+        pdb_out_fn (str): 
+            Path for saving the repaired .pdb file.
+    
+    
+    Methods
+    init(self, pdb_fn: str, fasta_fn: str, working_dir: str='./'): 
+        Initializes the repair process by setting up file paths and directories.
+  
+    run(self, pdb_out_fn: str, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False): 
+        Executes the repair, including homology modeling and optional loop optimization. Allows for verbose output detailing missing and mutated residues.
+   
+    run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=None): 
+        Executes the repair using a secondary structure template to guide the modeling of missing secondary structures.
+  
+    _get_temp_seq(self): 
+        Parses the template sequence from the provided .fasta file.
+  
+    _get_tar_seq(self): 
+        Extracts the target sequence from the provided .pdb file, considering non-standard residues.
+  
+    _align_sequences(self): 
+        Aligns the template and target sequences to identify missing or mutated residues.
+  
+    _build_homology_model(self, nstd_resids): 
+        Constructs a homology model using UCSF Modeller, incorporating non-standard residues if specified.
+  
+    _optimize_loops(self, loops): 
+        Optimizes specified loop regions within the protein model.
     """
 
     def __init__(self, pdb_fn: str, fasta_fn: str, working_dir: str='./'):
@@ -55,18 +81,6 @@ class RepairProtein():
 
             working_dir (str):
                 String path to working directory where all intermediate files made by UCSF modeller will be stored. Default is current working directory. 
-
-            temp_seq (str):
-                String of template sequence.
-
-            tar_seq (str):
-                String of target sequence.
-
-            missing_residues (np.array): 
-                2-D Array of indices of missing sequence entries and what the missing entry is. e.g. [[0, 'A'], [1, 'B'], [4, 'E'], ....]
-
-            term_residues (List):
-                List of indices that represent the index N and C terminus of target sequence in template sequence. e.g. [4, 345]
         """
 
         # Initialize variables
@@ -94,8 +108,8 @@ class RepairProtein():
             pdb_out_fn (str):
                 String path to write repaired .pdb file. 
 
-            tails (bool):
-                If True, add missing residues to N and C termini. Default is False. List of indices to cleave tails can also be provided [start_resid, end_resid]
+            tails (List):
+                List of indices to parse the extra tails. EX: [30, 479].
 
             nstd_resids (List):
                 If list is provided then nonstandard residues at these indices (0-indexed) will be conserved from input model to output structure.
@@ -182,6 +196,29 @@ class RepairProtein():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
 
     def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=None):
+        """
+        Run the remodelling using a secondary structure to appropriately model secondary structure that is missing in input file. 
+
+        Parameters:
+        -----------
+            secondary_template_pdb (str):
+                String path to secondary template to use during modelling. 
+        
+            pdb_out_fn (str):
+                String path to write repaired .pdb file. 
+
+            tails (List):
+                List of indices to parse the extra tails. EX: [30, 479].
+
+            nstd_resids (List):
+                If list is provided then nonstandard residues at these indices (0-indexed) will be conserved from input model to output structure.
+
+            loops (2D-list):
+                If list is provided then loops will be optimized. Should be in format [[resid_1, resid_2], ...] to represent the loops.
+
+            verbose (bool):
+                If true, show missing and mutated residues after each iteration of sequence alignment. Default is False. 
+        """
         # Attributes
         self.pdb_out_fn = pdb_out_fn
         self.secondary_template_pdb = secondary_template_pdb
@@ -255,11 +292,17 @@ class RepairProtein():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
             
     def _get_temp_seq(self):
+        """
+        Parse the template sequence from provided .fasta file
+        """
         self.temp_pir_fn = self.working_dir + '/' + self.name + '.pir'
         fasta_to_pir(self.fasta_fn, self.temp_pir_fn)
         self.temp_seq = parse_sequence(self.temp_pir_fn)
 
     def _get_tar_seq(self):
+        """
+        Parse the target sequence from provided .pdb file
+        """
         self.tar_pir_fn = self.working_dir + '/' + self.name + '.pir'
         shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
         pdb_to_pir(self.name, self.working_dir)
@@ -280,6 +323,9 @@ class RepairProtein():
             self.secondary_pir_fn = None
             
     def _align_sequences(self):
+        """
+        Write the necessary alignment file for Modeller to build the appropriate residues. 
+        """
         if hasattr(self, "secondary_seq"):
             sw = SeqWrap(self.temp_seq, self.tar_seq, self.secondary_seq)
         else:
@@ -322,6 +368,9 @@ class RepairProtein():
 
 
     def _build_homology_model(self, nstd_resids):
+        """
+        Build a homology model with Modeller.AutoModel
+        """
         class MyModel(AutoModel):
             def select_atoms(self):
                 return Selection(self.residue_range('1:A', '1:A'))
@@ -343,6 +392,9 @@ class RepairProtein():
         self.model.write(self.pdb_out_fn, no_ter=True)
 
     def _optimize_loops(self, loops):
+        """
+        Optimize loops of homology model with Modeller.LoopModel
+        """
         class MyLoop(LoopModel):
             def select_loop_atoms(self):
                 sel = Selection()

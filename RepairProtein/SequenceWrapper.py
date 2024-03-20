@@ -28,7 +28,10 @@ class SequenceWrapper():
                 String sequence that is the template. e.g. 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.
             
             target_sequence (str):
-                String sequence that is should match the template. e.g. 'CDGHLMNOTVXY'
+                String sequence that is should match the target. e.g. 'CDGHLMNOTVXY'
+
+            secondary_template_sequence (str):
+                String sequence that should match the secondary template structure. Default is None. 
         """
 
         # Assert
@@ -67,6 +70,10 @@ class SequenceWrapper():
 
             reference_pir_fn (str):
                 String path to get structural information from. This .pir file should be created from the .pdb that is in need of mending.
+
+            secondary_pir_fn (str):
+                String path to get structural information from for secondary template. This .pir file should be created from the .pdb that is in need of mending. Default is None.
+
         """
         # Write the alignment file
         if hasattr(self, "missing_residues_secondary"):
@@ -80,13 +87,29 @@ class SequenceWrapper():
             _write_alignment_file(temp_seq=self.temp_seq, missing_residues=self.missing_residues, ali_fn=ali_fn, reference_pir_fn=reference_pir_fn)
         
 
-"""Sequence Methods. These methods are used by the SequenceWrapper class to effectively map the indices and identity of missing residues of a protein sequence
+"""
+These methods provides essential functionality for handling and manipulating protein sequences, particularly in the context of preparing input for UCSF Modeller. It enables the identification of missing residues in a target sequence when compared to a template sequence and facilitates the creation of PIR and alignment files required by Modeller for protein structure repair and homology modeling.
+
 
 Methods:
 --------
-    _find_missing_residues: Iterates through sequences to find missing residues and locations
-    _write_alignment_file: Write the input for UCSF Modeller. 
-
+    _find_missing_residues(temp_seq, tar_seq, verbose): 
+        Identifies missing and mutated residues in the target sequence compared to a template sequence.
+    
+    _write_alignment_file(temp_seq, missing_residues, ali_fn, reference_pir_fn): 
+        Creates an alignment file (.ali) for UCSF Modeller based on the template sequence and identified missing residues.
+   
+    _write_alignment_file_secondary(temp_seq, missing_residues, missing_residues_secondary, ali_fn, reference_pir_fn, secondary_pir_fn): 
+        Similar to _write_alignment_file but includes handling for a secondary template structure.
+   
+    _sequence_to_file(seq): 
+        Helper function that formats a sequence string for inclusion in a file, breaking it into lines of appropriate length.
+    
+    _write_struc_section(writer_obj, struc_seq, ref_lines): 
+        Writes the structure section of the alignment file.
+    
+    _write_seq_section(writer_obj, temp_seq, ref_lines): 
+        Writes the sequence section of the alignment file.
 """
 
 
@@ -188,6 +211,12 @@ def _write_alignment_file(temp_seq: str, missing_residues: np.array, ali_fn: str
 
     Parameters:
     -----------
+        temp_seq (str):
+            String of template sequence. 
+
+        missing_residues (np.array):
+            Array with inidices of missing residues. 
+    
         ali_fn (str):
             String path to write .ali file.
 
@@ -230,11 +259,23 @@ def _write_alignment_file_secondary(temp_seq: str,
 
     Parameters:
     -----------
+        temp_seq (str):
+            String of template sequence. 
+
+        missing_residues (np.array):
+            Array with inidices of missing residues. 
+
+        missing_residues_secondary (np.array):
+            Array with inidices of missing residues in secondary.         
+    
         ali_fn (str):
             String path to write .ali file.
 
         reference_pir_fn (str):
             String path to get structural information from. This .pir file should be created from the .pdb that is in need of mending.
+
+        secondary_pir_fn (str):
+            String path to get structural information from for secondary structure. This .pir file should be created from the .pdb that is in need of mending.
     """
 
     # Make sequence lists
