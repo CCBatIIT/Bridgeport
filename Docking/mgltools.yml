@@ -1,0 +1,8 @@
+name: mgltools
+channels:
+  - bioconda
+  - conda-canary
+  - defaults
+dependencies:
+  - mgltools=1.5.7=h9ee0642_1
+prefix: /home/dcooper/.conda/envs/mgltools
