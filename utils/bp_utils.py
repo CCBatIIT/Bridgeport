@@ -25,8 +25,9 @@ from rdkit.Chem.Draw import rdDepictor
 rdDepictor.SetPreferCoordGen(True)
 IPythonConsole.drawOptions.minFontSize=20
 from IPython.display import display
+from typing import List
 
-def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str):
+def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, analogue_atoms: List[str]=[], known_atoms: List[str]=[], known_resids: List[int]=[]):
     """
     Creates an aligned analogue of a known ligand structure.
 
@@ -55,9 +56,9 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str):
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
     # Save atom names to align
-    ref_sele_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds]
-    ref_sele_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds]
-    new_sele_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds]
+    ref_sele_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] + [atom for atom in known_atoms]
+    ref_sele_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds] + [resid for resid in known_resids]
+    new_sele_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] + [atom for atom in analogue_atoms]
 
     # Generate and iterate through conformers
     conformer_rmsds = np.empty(100)
@@ -79,7 +80,7 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str):
         new_align_sele = new_sele.select_atoms('')
         for new_atom in new_sele_atoms:
             new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
-    
+
         alignto(mobile=new_align_sele,
                 reference=ref_align_sele)
     
@@ -125,6 +126,8 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str):
             f.write(line)
     f.close()
 
+    print('!!!RMSD', RMSD)
+    
     return RMSD
 
 def return_max_common_substructure(mol1, mol2):

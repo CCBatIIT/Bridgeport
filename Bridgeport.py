@@ -154,7 +154,18 @@ class Bridgeport():
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand chainid:', self.analogue_chainid, flush=True)
             else:
                 raise Exception('"known_resname" or "known_chainid" must be specified if "lig_resname" and "peptide_chain" are False.')
-
+            if 'add_analogue_atoms' in self.input_params['ligand'] and self.input_params['ligand']['add_analogue_atoms'] != False:
+                self.analogue_atoms = self.input_params['ligand']['add_analogue_atoms']
+            else:
+                self.analogue_atoms = []
+            if 'add_known_atoms' in self.input_params['ligand'] and self.input_params['ligand']['add_known_atoms'] != False:
+                self.known_atoms = self.input_params['ligand']['add_known_atoms']
+            else:
+                self.known_atoms = []
+            if 'add_known_resids' in self.input_params['ligand'] and self.input_params['ligand']['add_known_resids'] != False:
+                self.known_resids = self.input_params['ligand']['add_known_resids']
+            else:
+                self.known_resids = []
                                 
         # Build analogue complex
         if hasattr(self, "analogue_smiles") and hasattr(self, "analogue_name") and hasattr(self, "analogue_pdb"):
@@ -201,7 +212,11 @@ class Bridgeport():
         lig_path = os.path.join(self.lig_only_dir, self.analogue_name+'.pdb')
         analogue_alignment(smiles=self.analogue_smiles,
                            known_pdb=ref_lig_pdb,
-                           analogue_out_path=lig_path)
+                           analogue_out_path=lig_path,
+                           analogue_atoms=self.analogue_atoms,
+                           known_atoms=self.known_atoms,
+                           known_resids = self.known_resids)
+        
         assert os.path.exists(lig_path), f"No output file exists at {lig_path}"
 
         # Combine to create new initial complex
