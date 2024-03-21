@@ -16,7 +16,45 @@ class ProteinPreparer():
         Addition of Missing atoms and side chains
         Protonation at user specified pH
         Creation of environment (Membrane and Solvent, Solvet) at user specified ion conc
+    
+    Attributes:
+    ------------
+        receptor_path (str): 
+            The path to the PDB file that contains the protein structure intended for preparation.
+        
+        prot_name (str): 
+            The name of the protein, extracted from the input file path, which is used in naming the output files.
+        
+        working_dir (str): 
+            The directory designated for storing all the intermediate and output files.
+        
+        pH (float): 
+            Specifies the pH level at which the protein is to be protonated; the default value is 7.
+        
+        env (str): 
+            Defines the type of environment to be created around the protein; 'MEM' indicates a combination of a membrane and solvent, while 'SOL' specifies a solvent-only environment.
+            
+        ion (float): 
+            The ionic strength of the solvent, measured in molar units, with a default value of 0.15 M NaCl.
+
+    Methods:
+    ---------
+        init(pdb_path, working_dir: str, pH=7, env='MEM', ion_strength=0.15): 
+            Initializes the ProteinPreparer class with specified parameters for protein preparation, including the path to the PDB file, working directory, pH level for protonation, environmental setup (membrane and solvent or solvent only), and ion strength.
+        
+        main(): 
+            Coordinates the main workflow for preparing the protein structure for molecular simulation. This includes steps for protonation, adding missing atoms and side chains, and setting up the simulation environment as specified by the user.
+        
+        _protonate_with_pdb2pqr(at_pH=7): 
+            Protonates the protein structure at the specified pH using pdb2pqr30, which also adds missing atoms but not missing residues. Outputs file paths to the protonated pdb and pqr files.
+        
+        _protonate_with_PDBFixer(at_pH=7): 
+            An alternative method to protonate the protein using PDBFixer, which can add missing hydrogens at the specified pH. This method is used if pdb2pqr30 is not employed or for additional protonation adjustments.
+        
+        _run_PDBFixer(mode: str = "MEM", out_file_fn: str = None, padding = 1.5, ionicStrength = 0.15): 
+            Generates a solvated and possibly membrane-added system based on the specified mode. It uses PDBFixer to create an environment around the protein, either with just solvent or with both membrane and solvent, according to the user's choice.
     """
+    
     def __init__(self, pdb_path, working_dir: str, pH=7, env='MEM', ion_strength=0.15):
         """
         Parameters:
@@ -59,9 +97,13 @@ class ProteinPreparer():
     def _protonate_with_pdb2pqr(self, at_pH=7):
         """
         Protonates the given structure using pdb2pqr30 on the linux command line
+        
         Parameters:
+        -----------
             at_pH: pH for protonation (default 7)
+            
         Returns:
+        --------
             2-tuple = (protein_H_fn, protein_pqr_fn); file paths (as strings) to the protonated pdb and pqr file
         """
         self.protein_H_path = os.path.join(self.working_dir, self.prot_name + '_H.pdb')

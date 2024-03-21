@@ -2,6 +2,7 @@ import textwrap, sys, os, glob, shutil
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.analysis.align import alignto
+from MDAnalysis.analysis.rms import rmsd
 import mdtraj as md
 from pdbfixer import PDBFixer
 from openbabel import openbabel
@@ -54,9 +55,41 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str):
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
     # Save atom names to align
-    ref_atom_sele_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds]
-    ref_atom_sele_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds]
-    new_atom_sele_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds]
+    ref_sele_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds]
+    ref_sele_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds]
+    new_sele_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds]
+
+    # Generate and iterate through conformers
+    conformer_rmsds = np.empty(100)
+    for i in range(100):
+        #Generate conformer
+        AllChem.EmbedMolecule(new_mol, randomSeed=i)
+        
+        # Write out analogue to .pdb file
+        Chem.MolToPDBFile(new_mol, analogue_out_path, flavor=2)
+    
+        # Align analogue to reference 
+        new_u = mda.Universe(analogue_out_path)
+        new_sele = new_u.select_atoms('all')
+        
+        ref_align_sele = ref_sele.select_atoms('')
+        for ref_atom, ref_resid in zip(ref_sele_atoms, ref_sele_resids):
+            ref_align_sele = ref_align_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
+            
+        new_align_sele = new_sele.select_atoms('')
+        for new_atom in new_sele_atoms:
+            new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
+    
+        alignto(mobile=new_align_sele,
+                reference=ref_align_sele)
+    
+        # Compute rmsd of aligned MCS
+        RMSD = rmsd(ref_align_sele.positions.copy(), new_align_sele.positions.copy())
+        conformer_rmsds[i] = RMSD
+
+    # Use best random seed
+    #Generate conformer
+    AllChem.EmbedMolecule(new_mol, randomSeed=list(conformer_rmsds).index(conformer_rmsds.min()))
     
     # Write out analogue to .pdb file
     Chem.MolToPDBFile(new_mol, analogue_out_path, flavor=2)
@@ -66,16 +99,19 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str):
     new_sele = new_u.select_atoms('all')
     
     ref_align_sele = ref_sele.select_atoms('')
-    for ref_atom, ref_resid in zip(ref_atom_sele_atoms, ref_atom_sele_resids):
+    for ref_atom, ref_resid in zip(ref_sele_atoms, ref_sele_resids):
         ref_align_sele = ref_align_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
         
     new_align_sele = new_sele.select_atoms('')
-    for new_atom in new_atom_sele_atoms:
+    for new_atom in new_sele_atoms:
         new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
 
     alignto(mobile=new_align_sele,
             reference=ref_align_sele)
     new_sele.write(analogue_out_path)
+
+    # Compute rmsd of aligned MCS
+    RMSD = rmsd(ref_align_sele.positions.copy(), new_align_sele.positions.copy())
 
     # Remove CONECT records
     write_lines = []
@@ -88,6 +124,8 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str):
         for line in write_lines:
             f.write(line)
     f.close()
+
+    return RMSD
 
 def return_max_common_substructure(mol1, mol2):
     """
