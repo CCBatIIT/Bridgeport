@@ -16,7 +16,10 @@ from openmm.unit import *
 
 class ForceFieldHandler():
     """
-    A Class for parameterization of a structure file. Returns the necessary elements to construct an openmm simulation, System, Topology, and Positions. SDF File - Ligand to be parameterized with OpenFF PDB File - Environment File to be parameterized with Amber FF14SB, Lipid17, OPC3 XML Files - Override the defaults with optional user specified files. Extensions must be offxml for an sdf file or xml for a pdb file.
+    A Class for parameterization of a structure file. Returns the necessary elements to construct an openmm simulation, System, Topology, and Positions.
+    SDF File - Ligand to be parameterized with OpenFF
+    PDB File - Environment File to be parameterized with Amber FF14SB, Lipid17, OPC3 XML Files
+    - Override the defaults with optional user specified files. Extensions must be offxml for an sdf file or xml for a pdb file.
     
     Default Usage:
     --------------
@@ -64,6 +67,14 @@ class ForceFieldHandler():
     """
     
     def __init__(self, structure_file, force_field_files=None, use_defaults: bool=True):
+        """
+        Parameters:
+            structure_file: string: Path to an SDF or PDB file containing the structure to be parameterized.
+            force_field_files: [string]: Default Nonetype - provide a list of strings to use user-defined force field files
+            use_defaults: bool: Default True - change to False when providing user defined force field files (when force_field_files != None)
+        Returns:
+            None
+        """
         self.default_xmls = {'OpenFF': ['openff-2.1.0.offxml'], 
                         'OpenMM': ['amber14/protein.ff14SB.xml', 
                                    'amber14/lipid17.xml',
@@ -95,8 +106,15 @@ class ForceFieldHandler():
 
     def _parse_file(self, file_fn):
         """
-        Supported formats (SDF, PDB)
-        Currently parses sdf files as openff format and pdb files for openmm
+        A short method to determine the type of force field file to use based on the extension of the structure file provided.
+        Currently SDF structure files -> OFFXML (OpenFF) forcefield files
+                  PDB structure files -> XML (OpenMM) forcefield files
+        Current support is only for these two files types
+
+        Parameters:
+            file_fn: string: path to the structure file
+        Returns
+            mode: string: either "OpenFF" or "OpenMM", this string indicates which type of default force field to use
         """
         ext = os.path.splitext(file_fn)[-1]
         supported_openff_types = ['.sdf', '.offxml']
@@ -112,16 +130,24 @@ class ForceFieldHandler():
 
     def main(self, use_rdkit: bool=False):
         """
-        The intended main usage case is to parameterize ligands with an SDF file and openff parameters
-        and do do a protein, lipid, solvent system with openmm parameters.
+        The intended main usage case.  Parameterize ligands from an SDF file with OpenFF (.offxml) parameters and
+        environment/protein from a PDB file with OpenMM (.xml) parameters.
+
+        Paremeters:
+            use_rdkit: bool: Default=False - When a custom force field for the ligand is necessary, and the ligand is 
+                a pdb file, this should be True.  Takes an intermediate step to load an RDKit molecule from the pdb file
+                and then load an OpenFF molecule from the RDKit molecule - as opposed to loading the OpenFF molecule directly
+                from the structure file.
+        Returns:
+            (sys, top, positions): tuple - A 3-tuple of OpenMM System, OpenMM Topology, and coordinate array of positions
         """
         if self.working_mode == 'OpenFF':
             if use_rdkit:
                 rdkit_mol = Chem.MolFromPDBFile(self.structure_file, removeHs=False, proximityBonding=False)
                 display(rdkit_mol)
-                mol = openff.toolkit.Molecule.from_rdkit(rdkit_mol, hydrogens_are_explicit=True, allow_undefined_stereo=True)
+                mol = openff.toolkit.Molecule.from_rdkit(rdkit_mol, hydrogens_are_explicit=True)
             else:
-                mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
+                mol = openff.toolkit.Molecule.from_file(self.structure_file)
             ff = openff.toolkit.ForceField(*self.xmls)
             cubic_box = openff.units.Quantity(30 * np.eye(3), openff.units.unit.angstrom)
             self.interchange = openff.interchange.Interchange.from_smirnoff(topology=[mol], force_field=ff, box=cubic_box)
@@ -139,15 +165,19 @@ class ForceFieldHandler():
 
     def generate_custom_xml(self, out_xml: str, name: str):
         """
-        Generate a custom .xml to pass to Handler.
+        Generate a custom .xml to pass to Handler.  This is done by loading the self.structure_file into OpenFF, parameterizing,
+        and writing out prmtop.  This is used as input to a custom python script (write_xml_pretty.py) which generates an OpenMM
+        XML file from a prmtop file.
 
         Parameters:
-        -----------
-            out_xml (str): 
-                String path to output.xml file. 
+            out_xml: string: Path to the created xml file
+            name: string: atom-prefix for the xml file (atomtypes will be name-H, name-CA for example)
+
+        Returns:
+            None
         """
 
-        # Invoke main to create interchange object
+        # Invoke main to define the self.interchange object (as OpenFF Interchange)
         self.working_mode = 'OpenFF'
         self.xmls = self.default_xmls[self.working_mode]
         _, _, _ = self.main(use_rdkit=True)
@@ -169,11 +199,3 @@ class ForceFieldHandler():
         
         # Use write_xml_pretty.py to convert .prmtop to .xml
         os.system(f'python {pathlib.Path(__file__).parent.resolve()}/write_xml_pretty.py -i {input_json}')  
-
-# def neutralizeMol(mol):
-#     for a in mol.GetAtoms():
-#         if a.GetNumRadicalElectrons()==1:
-#              a.SetNumRadicalElectrons(0)         
-#         if a.GetFormalCharge()!=0:
-#              a.SetFormalCharge(0)         
-#     return mol
