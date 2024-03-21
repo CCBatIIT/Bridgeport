@@ -1,6 +1,7 @@
 # RepairProtein Module
 
 The RepairProtein module is designed for repairing and remodeling protein structures using a combination of template sequences, structural information, and homology modeling techniques. It leverages UCSF Modeller for constructing missing parts and refining the overall structure of proteins based on template sequences provided in FASTA format.
+![alt_text](https://github.com/CCBatIIT/Bridgeport/blob/main/RepairProtein/RepairProteinImage.png)
 
 ## Features
 
