@@ -22,8 +22,15 @@ class MotorRow():
     
     def __init__(self, system_xml, pdb_file, working_directory):
         """
-        Parse the xml into openmm an openmm system
-        Sets the self.system parameter
+        Parse the xml into an openmm system; sets the self.system attribute from the xml file; sets the self.topology attribute from pdb_file
+
+        Parameters:
+            system_xml: string: path to the xml file that was generated using Bridgeport
+            pdb_file: string: path to the pdb file that was generated using Bridgeport
+            working directory: string: the directory to store simulation data in
+
+        Returns:
+            None
         """
         #If the working dir is absolute, leave it alone, otherwise make it abs
         if os.path.isabs(working_directory):
@@ -62,6 +69,13 @@ class MotorRow():
         3 - NPT with MonteCarlo Membrane Barostat
         4 - NPT with MonteCarlo Barostat
         5 - NPT with MonteCarlo Barostat
+
+        Parameters:
+            pdb_in: string: path to the pdb file (same as init) - the initial structure
+
+        Returns:
+            state_fn: string: path to the XML serialized state file
+            pdb_fn: string: path to the final structure of the equilibration simulation.
         """
         #IF the pdb is absolute, store other files in that same directory (where the pdb is)
         if os.path.isabs(pdb_in):
@@ -89,6 +103,10 @@ class MotorRow():
     def _describe_state(self, sim: Simulation, name: str = "State"):
         """
         Report the energy of an openmm simulation
+
+        Parameters:
+            sim: Simulation: The OpenMM Simulation object to report the energy of
+            name: string: Default="State" - An optional identifier to help distinguish what energy is being reported
         """
         state = sim.context.getState(getEnergy=True, getForces=True)
         max_force = max(np.sqrt(v.x**2 + v.y**2 + v.z**2) for v in state.getForces())
@@ -109,7 +127,11 @@ class MotorRow():
 
     def _write_state(self, sim: Simulation, xml_fn: str):
         """
-        Serialize the openmm State as an xml file
+        Serialize the State of an OpenMM Simulation to an XML file.
+
+        Parameters:
+            sim: Simulation: The OpenMM Simulation to serialize the State of
+            xml_fn: string: The path to the xmlfile to write the serialized State to
         """
         state = sim.context.getState(getPositions=True, getVelocities=True, enforcePeriodicBox=True)
         contents = XmlSerializer.serialize(state)
@@ -120,16 +142,24 @@ class MotorRow():
     
     def _write_system(self, sim: Simulation, xml_fn: str):
         """
-        Serialize the openmm system as an xml file
+        Serialize the System of an OpenMM Simulation to an XML file.
+
+        Parameters:
+            sim: Simulation: The OpenMM Simulation to serialize the System of
+            xml_fn: string: The path to the xmlfile to write the serialized System to
         """
         with open(xml_fn, 'w') as f:
             f.write(XmlSerializer.serialize(sim.system))
         print(f'Wrote: {xml_fn}')
 
 
-    def _write_structure(self, sim: Simulation, pdb_fn:str=None):
+    def _write_structure(self, sim: Simulation, pdb_fn: str):
         """
-        Writes the structure of the given simulation object to pdb_fn
+        Write the structure of an OpenMM Simulation to a PDB file.
+
+        Parameters:
+            sim: Simulation: The OpenMM Simulation to write the structure of
+            pdb_fn: string: The path to the PDB file to write the structure to
         """
         with open(pdb_fn, 'w') as f:
             PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
@@ -204,12 +234,33 @@ class MotorRow():
                   fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, nstdout=1000,
                   fn_stdout=None, ndcd=5000, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
         """
-        Run different simulations based on the step number
+        Run different hard-coded Simulations based on the step number
         1 - NVT with Heavy Restraints on the Protein and Membrane (Z) coords
         2 - NVT with no restraints
         3 - NPT with MonteCarlo Membrane Barostat
         4 - NPT with MonteCarlo Barostat
         5 - NPT with MonteCarlo Barostat
+        
+        Parameters:
+            state_in: string: path to a serialize OpenMM State as an xml file
+            stepnum: int: Which step of the protocol to run.  This determines the addition of restraints/barostats
+            state_xml_out: string: Default None - xml file path to write the output State of the step to
+            pdb_out: string: Default None - pdb file path to write the last frame of the current step's simulation to
+            fc_pos: float: Default 300.0 - Strength of the harmonic restraint holding heavy atoms in step 1 (units KJ/nm^2)
+            nsteps: int: Default 125000 - Number of Simulation steps to take
+            temp: float: Default 300 - Temperature of the Simulation (for setting initial velocities) (unit Kelvin)
+            dt: float: Default 2.0 - Timestep of the simulation (unit femtosecond)
+            nstdout: int: Default 1000 - Number of steps to take between writing information to the State Data Reporter
+            fn_stdout: string: Default None - If provided, will write the State Data Reporter data to this file name
+            ndcd: int: Default 5000 - Number of steps to take between recording frames in the DCD trajectory file
+            fn_dcd: string: Default None - If provided, will write the DCD trajectory file to this file name
+            press: float: Default 1.0 - pressure for the Barostat during NPT simulations (unit bar)
+            positions_from_pdb: string: Default None - For step one specifically, this must be provided to determine heavy atoms,
+                                                        establish restraints, and set initial positions
+
+        Returns:
+            state_xml_out: string: Path to the written XML file containing the serialized State after the step has been run
+            pdb_out: string: Path to the written PDB file containing the structure after the simulation has been run (last frame)
         """
         #Before ANY STEP
         start = datetime.now()
