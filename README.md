@@ -12,7 +12,7 @@ conda env create -f conda_setup.yml
 Bridgeport can be easily run in 2 lines of code:
 
 ```python
-BP = Bridgeport(input_json='Bridgeport_input.json')\
+BP = Bridgeport(input_json='Bridgeport_input.json')
 BP.run()
 ```
 
