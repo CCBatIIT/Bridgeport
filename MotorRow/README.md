@@ -3,8 +3,8 @@
 This module executes a five stage equilibration protocol specific to membrane proteins.  These are:
 1. Minimization (Typical OpenMM Minimization)​
 2. 250 ps of NVT with restraints​
-2.1. Restraint 1 – All Protein Heavy Atoms​
-2.2. Restraint 2 – Z Coordinate of Membrane Heavy Atoms​
+    1. Restraint 1 – All Protein Heavy Atoms​
+    2. Restraint 2 – Z Coordinate of Membrane Heavy Atoms​
 3. 250 ps of NVT without restraints​
 4. 500 ps of NPT with Monte Carlo Membrane Barostat​
 5. 500 ps of NPT with Monte Carlo Barostat
