@@ -54,7 +54,10 @@ class Bridgeport():
                 6. Generate an OpenMM system. 
 
             Output system .pdb and .xml file will be found in self.working_dir/systems
-    
+        
+        _build_analogue_complex():
+            Build a new input complex by replacing a ligand with an analogue.
+
         _align():
             Align initial structure to a reference structure. The reference structure can include a structure from the OPM database for transmembrane proteins.
         
@@ -632,77 +635,77 @@ class Bridgeport():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system parameters saved to', os.path.join(self.sys_dir, name+'.xml'), flush=True)
 
     
-def remove_atom_from_xml(xml_lines, atom_name):
-    write_lines = []
-    for line in xml_lines:
-        if line.find(f'name="{atom_name}"') != -1:
-            type = line.split('"')[5]
+# def remove_atom_from_xml(xml_lines, atom_name):
+#     write_lines = []
+#     for line in xml_lines:
+#         if line.find(f'name="{atom_name}"') != -1:
+#             type = line.split('"')[5]
     
-    for line in xml_lines:
-        if line.find(type) == -1:
-            if line.find(f'atomName2="{atom_name}"') == -1:
-                if line not in write_lines:
-                    write_lines.append(line)
+#     for line in xml_lines:
+#         if line.find(type) == -1:
+#             if line.find(f'atomName2="{atom_name}"') == -1:
+#                 if line not in write_lines:
+#                     write_lines.append(line)
 
-    return write_lines
+#     return write_lines
 
-def add_externalBonds(xml_lines, N_bond: bool=True, C_bond: bool=True):
-    for i, line in enumerate(xml_lines):
-        if line.find('</Residue>') != -1:
-            end_residue_ind = i
-            break
+# def add_externalBonds(xml_lines, N_bond: bool=True, C_bond: bool=True):
+#     for i, line in enumerate(xml_lines):
+#         if line.find('</Residue>') != -1:
+#             end_residue_ind = i
+#             break
             
-    if N_bond:
-        xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="N"/>\n')
-        end_residue_ind += 1
-    if C_bond:
-        xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="C"/>\n')
+#     if N_bond:
+#         xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="N"/>\n')
+#         end_residue_ind += 1
+#     if C_bond:
+#         xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="C"/>\n')
 
-    return xml_lines
+#     return xml_lines
 
-def change_xml_resname(xml_lines, resname: str='UNL'):
-    line_ind = xml_lines.index('    <Residue name="RES">\n')
-    xml_lines[line_ind] = f'    <Residue name="{resname}">\n'
+# def change_xml_resname(xml_lines, resname: str='UNL'):
+#     line_ind = xml_lines.index('    <Residue name="RES">\n')
+#     xml_lines[line_ind] = f'    <Residue name="{resname}">\n'
     
-    return xml_lines
+#     return xml_lines
 
-def fix_types(xml_lines):
-    #Get atom types
-    atom_types = {}
-    res_start_ind = xml_lines.index('    <Residue name="RES">\n') + 1
-    res_stop_ind = xml_lines.index('    </Residue>\n')
-    atom_lines = [xml_lines[i] for i in range(res_start_ind, res_stop_ind) if xml_lines[i].startswith('      <Atom')]
-    for line in atom_lines:
-        _, _, _, name, _, type, _ = line.split('"')
-        atom_types[type] = name
+# def fix_types(xml_lines):
+#     #Get atom types
+#     atom_types = {}
+#     res_start_ind = xml_lines.index('    <Residue name="RES">\n') + 1
+#     res_stop_ind = xml_lines.index('    </Residue>\n')
+#     atom_lines = [xml_lines[i] for i in range(res_start_ind, res_stop_ind) if xml_lines[i].startswith('      <Atom')]
+#     for line in atom_lines:
+#         _, _, _, name, _, type, _ = line.split('"')
+#         atom_types[type] = name
 
-    # Fix atom types in dict
-    for type, name in atom_types.items():
-        if name.startswith('H'):
+#     # Fix atom types in dict
+#     for type, name in atom_types.items():
+#         if name.startswith('H'):
 
-            # Handle terminal hydrogens
-            if name.startswith('HT'):
-                new_type = type.split('-')[0] + '-' + 'HT'
+#             # Handle terminal hydrogens
+#             if name.startswith('HT'):
+#                 new_type = type.split('-')[0] + '-' + 'HT'
                 
-            # Handle hydrogens with similar naming scheme
-            elif name[-1].isdigit() and not name[-2].isdigit() and len(name) == 3:
-                new_type = type.split('-')[0] + '-' + name
+#             # Handle hydrogens with similar naming scheme
+#             elif name[-1].isdigit() and not name[-2].isdigit() and len(name) == 3:
+#                 new_type = type.split('-')[0] + '-' + name
                 
-            else:
-                new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
+#             else:
+#                 new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
                 
-        else:
-            new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
+#         else:
+#             new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
             
-        atom_types[type] = new_type
+#         atom_types[type] = new_type
 
-    # Find and replace w/ new atom types
-    for old_type, new_type in atom_types.items():
-        for i, line in enumerate(xml_lines):
-            if line.find(old_type) != -1:
-                xml_lines[i] = line.replace(old_type, new_type)
+#     # Find and replace w/ new atom types
+#     for old_type, new_type in atom_types.items():
+#         for i, line in enumerate(xml_lines):
+#             if line.find(old_type) != -1:
+#                 xml_lines[i] = line.replace(old_type, new_type)
 
-    return xml_lines
+#     return xml_lines
         
 
 

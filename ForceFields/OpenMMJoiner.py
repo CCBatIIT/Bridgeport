@@ -12,13 +12,37 @@ from openmm.unit import *
 
 class Joiner():
     """
-    A Class for aadding two openmm system, topology, and position sets.
-    INTENDED USAGE CASE - Adding an OpenFF Ligand System to an OpenMM Environment
+    A Class for adding two OpenMM system, topology, and position sets. This tool is intended for use cases such as adding an OpenFF Ligand System to an OpenMM Environment setup, allowing for comprehensive simulations involving both small molecules and complex biological systems.
     
-    Parameters
-        Ligand_Set: (System, Topology, Positions) as 3-tuple 
-        Receptor_Set: (System, Topology, Positions) as 3-tuple
+    Parameters:
+    -----------
+        Ligand_Set: 
+            (System, Topology, Positions) as a 3-tuple representing the ligand to be added.
+            
+        Receptor_Set: 
+            (System, Topology, Positions) as a 3-tuple representing the receptor or environment.
+    
+    Attributes:
+    ------------
+        lig_sys, lig_top, lig_pos: Components of the Ligand set, comprising the OpenMM system, topology, and positions, respectively.
+        
+        rec_sys, rec_top, rec_pos: Components of the Receptor set, comprising the OpenMM system, topology, and positions, respectively.
+        
+    Methods:
+    ---------
+        init(self, Ligand_Set, Receptor_Set): 
+            Initializes the Joiner instance with the provided Ligand and Receptor sets.
+            
+        main(self): 
+            Combines the ligand and receptor sets into a single set of system, topology, and positions. Returns a 3-tuple of these combined components.
+       
+        _join_two_topologies(self, tops: tuple, poss: tuple): 
+            Joins two OpenMM topologies and their associated positions. The first index is added to the second. Parameters include a two-tuple of topologies and a two-tuple of positions.
+            
+        _join_two_systems(self, sys1: System, sys2: System): 
+            Joins two OpenMM systems by adding the elements of system1 to system2. This method is intended to combine a ligand system with a receptor system. Parameters include sys1 (the system to be added) and sys2 (the system to which sys1 is added).
     """
+    
     def __init__(self, Ligand_Set, Receptor_Set):
         assert type(Ligand_Set) == type(Receptor_Set) and len(Ligand_Set) == len(Receptor_Set)
         assert False not in [type(Ligand_Set[i]) == type(Receptor_Set[i]) for i in range(3)]
