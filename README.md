@@ -2,6 +2,8 @@
 ## Overview
 The Bridgeport module serves as a comprehensive tool for preparing crystal structures for simulation using OpenMM. It integrates several steps necessary for the preparation of both protein and ligand molecules, ensuring they are ready for molecular dynamics simulation. The process includes alignment to a reference structure, separation of ligand and protein, repair and addition of missing residues and atoms, protonation, solvation, and the generation of a complete OpenMM system ready for simulation. This module streamlines the preparation process, combining functionalities from various tools and libraries such as MDAnalysis, mdtraj, OpenMM, PDBFixer, and RDKit, into a singular, cohesive workflow.
 
+![alt text](https://github.com/CCBatIIT/Bridgeport/blob/main/Bridgeport_Flowchart.png)
+
 ## Environment
 Construct the conda environment with the following command
 ```bash
