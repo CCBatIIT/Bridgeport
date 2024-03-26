@@ -3,6 +3,7 @@ import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.analysis.align import alignto
 from MDAnalysis.analysis.rms import rmsd
+from MDAnalysis.analysis.bat import BAT
 import mdtraj as md
 from pdbfixer import PDBFixer
 from openbabel import openbabel
@@ -27,9 +28,9 @@ IPythonConsole.drawOptions.minFontSize=20
 from IPython.display import display
 from typing import List
 
-def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, analogue_atoms: List[str]=[], known_atoms: List[str]=[], known_resids: List[int]=[]):
+def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, analogue_atoms: List[str]=[], known_atoms: List[str]=[], known_resids: List[int]=[], rmsd_thres: float=2.0):
     """
-    Creates an aligned analogue of a known ligand structure.
+    Creates an aligned analogue of a known ligand structure. 
 
     Parameters:
     -----------
@@ -41,10 +42,26 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
 
         analogue_out_path (str):
             Path to pdb file to write of aligned analogue. 
+
+        analogue_atoms(List[str]):
+            List of atoms in analogue that have matching atoms in known_pdb. EX: ['C12', 'N1', 'O2']
+
+        known_atoms (List[str]):
+            List of known atom names in reference structure to add to the alignment RMSD evaluation. Must match order of analogue_atoms. EX: ['CA', 'N', 'O']
+
+        known_resids (List[int]):
+            List of known resids of atoms in known_atoms. EX:['UNK', 'UNK']   
+
+    Returns:
+    --------
+        RMSD (float):
+            RMSD of similar atoms after alignment protocol. 
     """
     # Open known ligand in rdkit and MDAnalysis
     ref_mol = Chem.MolFromPDBFile(known_pdb)
+    Chem.MolToPDBFile(ref_mol, known_pdb)
     ref_sele = mda.Universe(known_pdb).select_atoms('all')
+    ref_sele.write(known_pdb)
 
     # Create analogue with smiles
     new_mol = Chem.MolFromSmiles(smiles)
@@ -55,79 +72,61 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
     # Get indices of max. common substructure 
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
-    # Save atom names to align
-    ref_sele_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] + [atom for atom in known_atoms]
-    ref_sele_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds] + [resid for resid in known_resids]
-    new_sele_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] + [atom for atom in analogue_atoms]
-
-    # Generate and iterate through conformers
-    conformer_rmsds = np.empty(100)
-    for i in range(100):
+    RMSD = rmsd_thres + 1
+    counter = 0
+    while RMSD > rmsd_thres:
         #Generate conformer
-        AllChem.EmbedMolecule(new_mol, randomSeed=i)
+        AllChem.EmbedMolecule(new_mol, randomSeed=counter)
         
         # Write out analogue to .pdb file
-        Chem.MolToPDBFile(new_mol, analogue_out_path, flavor=2)
+        Chem.MolToPDBFile(new_mol, analogue_out_path)
     
-        # Align analogue to reference 
+        #Get reference atoms to align
+        ref_align_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] 
+        ref_align_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds] 
+        ref_align_sele = ref_sele.select_atoms('')
+        for ref_atom, ref_resid in zip(ref_align_atoms, ref_align_resids):
+            ref_align_sele = ref_align_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
+
+        # Get matching reference atoms 
+        ref_match_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] + [atom for atom in known_atoms]
+        ref_match_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds] + [resid for resid in known_resids]
+        ref_match_sele = ref_sele.select_atoms('')
+        for ref_atom, ref_resid in zip(ref_match_atoms, ref_match_resids):
+            ref_match_sele = ref_match_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
+
+        # Get analogue atoms to align
         new_u = mda.Universe(analogue_out_path)
         new_sele = new_u.select_atoms('all')
-        
-        ref_align_sele = ref_sele.select_atoms('')
-        for ref_atom, ref_resid in zip(ref_sele_atoms, ref_sele_resids):
-            ref_align_sele = ref_align_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
-            
         new_align_sele = new_sele.select_atoms('')
-        for new_atom in new_sele_atoms:
+        new_align_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] 
+        for new_atom in new_align_atoms:
             new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
 
+        # Get analogue matching atoms
+        new_match_sele = new_sele.select_atoms('')
+        new_match_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] + [atom for atom in analogue_atoms]
+        for new_atom in new_match_atoms:
+            new_match_sele = new_match_sele + new_sele.select_atoms('name ' + new_atom)
+            
+        # Match internal coordinates   
+        ref_match_sele.write('test.pdb')
+        ref_match_sele = mda.Universe('test.pdb').select_atoms('all')
+        new_sele = match_internal_coordinates(ref_match_sele, ref_match_atoms, ref_match_resids, new_sele, new_match_atoms)
+        if os.path.exists('test.pdb'):
+            os.remove('test.pdb')  
+            
+        # Align analogue to reference
         alignto(mobile=new_align_sele,
                 reference=ref_align_sele)
-    
-        # Compute rmsd of aligned MCS
-        RMSD = rmsd(ref_align_sele.positions.copy(), new_align_sele.positions.copy())
-        conformer_rmsds[i] = RMSD
 
-    # Use best random seed
-    #Generate conformer
-    AllChem.EmbedMolecule(new_mol, randomSeed=list(conformer_rmsds).index(conformer_rmsds.min()))
-    
-    # Write out analogue to .pdb file
-    Chem.MolToPDBFile(new_mol, analogue_out_path, flavor=2)
+        # Evaluate RMSD
+        RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
+        print(RMSD)
+        counter += 1
 
-    # Align analogue to reference 
-    new_u = mda.Universe(analogue_out_path)
-    new_sele = new_u.select_atoms('all')
-    
-    ref_align_sele = ref_sele.select_atoms('')
-    for ref_atom, ref_resid in zip(ref_sele_atoms, ref_sele_resids):
-        ref_align_sele = ref_align_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
-        
-    new_align_sele = new_sele.select_atoms('')
-    for new_atom in new_sele_atoms:
-        new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
+    new_sele.write(analogue_out_path, bonds=None)
 
-    alignto(mobile=new_align_sele,
-            reference=ref_align_sele)
-    new_sele.write(analogue_out_path)
-
-    # Compute rmsd of aligned MCS
-    RMSD = rmsd(ref_align_sele.positions.copy(), new_align_sele.positions.copy())
-
-    # Remove CONECT records
-    write_lines = []
-    lines = open(analogue_out_path, 'r').readlines()
-    for line in lines:
-        if line.startswith('ATOM') or line.startswith('HETATM'):
-            write_lines.append(line)
-
-    with open(analogue_out_path, 'w') as f:
-        for line in write_lines:
-            f.write(line)
-    f.close()
-
-    print('!!!RMSD', RMSD)
-    
     return RMSD
 
 def return_max_common_substructure(mol1, mol2):
@@ -150,6 +149,93 @@ def return_max_common_substructure(mol1, mol2):
     display(Draw.MolsToGridImage([mol1, mol2],highlightAtomLists=[target_atm1, target_atm2]))
     
     return target_atm1, target_atm2
+
+def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, ref_match_resids: List, mobile: mda.AtomGroup, mobile_match_atoms: List):
+    """
+    Return an MDAnalysis.AtomGroup with internal coordinates that match a reference. 
+
+    Parameters:
+    -----------
+        ref_match (mda.AtomGroup)
+            Selection of chemically equivalent atoms to calculate internal angles to copy to new molecule (mobile).
+
+        ref_match_atoms (List[str])
+            List of atom names that correspond to the atoms that have an equivalent atom in the mobile group. EX: ['CA', 'CB']
+
+        ref_match_resids (List[int])
+            List of resids of atoms in ref_match_atoms. EX:['UNK', 'UNK']
+
+        mobile (mda.AtomGroup)
+            Selection of atoms to change internal angles to match those of ref_match. 
+
+        mobile_match_atoms (List[str]):
+            List of atom names that correspond to the matching atom in mobile compared to ref_match_atoms. EX: ['C12', 'C13']
+
+    Returns:
+    --------
+        mobile (mda.AtomGroup)
+            Selection of atoms with torsions that reflect the internal coordinates present in ref_match. 
+    """
+
+    def return_BAT(atomGroup: mda.AtomGroup):
+        R = BAT(atomGroup)
+        R.run()
+        bat = R.results.bat.copy()
+        tors = bat[0, -len(R._torsion_XYZ_inds):]
+        
+        return R, bat, tors
+    
+    def torsion_inds_to_names(atomGroup: mda.AtomGroup, tors: np.array):
+        atom_names = atomGroup.atoms.names
+        atom_resids = atomGroup.atoms.resids
+        tors_atom_names = np.empty(tors.shape, dtype='<U6')
+        tors_atom_resids = np.empty(tors.shape, dtype=int)
+        for i, atom_inds in enumerate(tors):
+            for j, ind in enumerate(atom_inds):
+                tors_atom_names[i,j] = atom_names[ind]
+                tors_atom_resids[i,j] = atom_resids[ind]
+    
+        return tors_atom_names, tors_atom_resids
+                
+    def convert_ref_to_mobile_torsion_names(ref_tors_names, ref_tors_resids, ref_match_names, ref_match_resids, mobile_match_names):
+        ref_to_mobile = np.empty(ref_tors_names.shape, dtype='<U6')
+        for i, (atoms, resids) in enumerate(zip(ref_tors_names, ref_tors_resids)):
+            for j, (atom, resid) in enumerate(zip(atoms, resids)):
+                for k, (ref_atom, ref_resid) in enumerate(zip(ref_match_names, ref_match_resids)):
+                    if ref_atom == atom and ref_resid == resid:
+                        ref_to_mobile[i,j] = mobile_match_names[k]
+    
+        return ref_to_mobile
+    
+    def change_torsions(mobile_tors, mobile_tors_names, ref_converted, ref_tors):
+        new_tors = mobile_tors.copy()
+        for i, mobile_names in enumerate(mobile_tors_names):
+            for j, ref_names in enumerate(ref_converted):
+                if list(mobile_names) == list(ref_names):
+                    new_tors[i] = ref_tors[j]
+                elif list(mobile_names) == list(np.flip(ref_names)):
+                    new_tors[i] = ref_tors[j] - np.pi
+    
+        return new_tors
+
+
+    mobile_R, mobile_bat, mobile_tors = return_BAT(mobile)
+    for fragment in ref_match.fragments:    
+        ref_R, ref_bat, ref_tors = return_BAT(fragment)
+        
+        ref_tors_inds = np.array(ref_R._torsion_XYZ_inds)
+        mobile_tors_inds = np.array(mobile_R._torsion_XYZ_inds)
+        
+        ref_tors_names, ref_tors_resids = torsion_inds_to_names(fragment, ref_tors_inds)
+        mobile_tors_names, _ = torsion_inds_to_names(mobile, mobile_tors_inds)
+        
+        ref_converted = convert_ref_to_mobile_torsion_names(ref_tors_names, ref_tors_resids, ref_match_atoms, ref_match_resids, mobile_match_atoms)
+        mobile_tors = change_torsions(mobile_tors, mobile_tors_names, ref_converted, ref_tors)
+    
+        mobile_bat[0, -len(mobile_tors):] = mobile_tors
+        mobile.positions = mobile_R.Cartesian(mobile_bat[0])
+
+    return mobile
 
 def change_resname(pdb_file_in, pdb_file_out, resname_in, resname_out):
     """

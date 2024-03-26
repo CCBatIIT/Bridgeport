@@ -171,6 +171,7 @@ class Bridgeport():
         if hasattr(self, "analogue_smiles") and hasattr(self, "analogue_name") and hasattr(self, "analogue_pdb"):
             if hasattr(self, "analogue_resname") or hasattr(self, "analogue_chainid"):
                 self._build_analogue_complex()
+
                             
         # Run 
         self._align()
@@ -208,14 +209,16 @@ class Bridgeport():
         ref_lig_pdb = os.path.join(self.working_dir, 'ligands', name)
         ref_sele.write(ref_lig_pdb)
 
-        # General aligned analogue
+        # Generate aligned analogue
         lig_path = os.path.join(self.lig_only_dir, self.analogue_name+'.pdb')
-        analogue_alignment(smiles=self.analogue_smiles,
+        rmsd = analogue_alignment(smiles=self.analogue_smiles,
                            known_pdb=ref_lig_pdb,
                            analogue_out_path=lig_path,
                            analogue_atoms=self.analogue_atoms,
                            known_atoms=self.known_atoms,
                            known_resids = self.known_resids)
+
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Aligned analogue to reference with RMSD:', str(rmsd), flush=True)
         
         assert os.path.exists(lig_path), f"No output file exists at {lig_path}"
 
@@ -225,7 +228,7 @@ class Bridgeport():
         u = mda.core.universe.Merge(prot_sele, lig_sele)
         assert u.select_atoms('all').n_atoms == lig_sele.n_atoms + prot_sele.n_atoms, "Did not correctly merge ligand and protein AtomGroups."
         u.select_atoms('all').write(new_input_path)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Build new inital complex.', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Built new inital complex.', flush=True)
         self.input_params['protein']['input_pdb'] = self.analogue_name+'.pdb'
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Changing input_pdb to:', self.input_params['protein']['input_pdb'], flush=True)
         self.input_params['ligand']['lig_resname'] = 'UNL'
