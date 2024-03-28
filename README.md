@@ -63,3 +63,6 @@ This example uses the PDBID 7vvk as the input structure and repairs both the pro
 This example uses the PDBID 8jr9 as the input structure and repairs the protein with the secondary template of the repaired 7vvk.pdb structure to properly model the extracellular domain. This example uses a small molecule ligand. 
 ### 5zty analogue (membrane, analogue, small-molecule ligand)
 This example uses the protein and ligand from the PDBID 5zty but creates the final ligand from a smiles string and alignes maximum common substructure to ligand in 5zty.
+
+### Leu-Enkphalin (membrane, small-peptide ligand that is an analogue of Endomorphin-1 (8f7r))
+This example showcases how to use the small molecule alignment, including specifying extra atoms to match that are not recognized as the maximum common substructure from rdkit. 
