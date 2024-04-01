@@ -1,10 +1,12 @@
-import os, shutil
+import os, shutil, sys
 import mdtraj as md
 import numpy as np
 from openmm.app import *
 from openmm import *
 from openmm.unit import *
 from datetime import datetime
+from MotorRow_utils import *
+from typing import List
 
 class MotorRow():
     """
@@ -109,22 +111,11 @@ class MotorRow():
             name: string: Default="State" - An optional identifier to help distinguish what energy is being reported
         """
         state = sim.context.getState(getEnergy=True, getForces=True)
-        max_force = max(np.sqrt(v.x**2 + v.y**2 + v.z**2) for v in state.getForces())
-        print(f"{name} has energy {round(state.getPotentialEnergy()._value, 2)} kJ/mol ",
-              f"with maximum force {round(max_force, 2)} kJ/(mol nm)")
-
-
-    def _unpack_infiles(self, xml, pdb):
-        """
-        Parse XML and PDB into Openmm System Topology adn Positions
-        """
-        print(f'Unpacking {xml}, {pdb}')
-        pdb = PDBFile(pdb)
-        with open(xml) as f:
-            system = XmlSerializer.deserialize(f.read())
-        return system, pdb.topology, pdb.positions
-       
-
+        self.PE = round(state.getPotentialEnergy()._value, 2)
+        max_force = round(max(np.sqrt(v.x**2 + v.y**2 + v.z**2) for v in state.getForces()), 2)
+        print(f"{name} has energy {self.PE} kJ/mol ", f"with maximum force {max_force} kJ/(mol nm)")
+      
+        
     def _write_state(self, sim: Simulation, xml_fn: str):
         """
         Serialize the State of an OpenMM Simulation to an XML file.
@@ -164,38 +155,9 @@ class MotorRow():
         with open(pdb_fn, 'w') as f:
             PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
         print(f'Wrote: {pdb_fn}')
-
-
-    def _get_positions_from_pdb(self, fname_pdb):
-        nameMembrane = ['DPP', 'POP']
-        with open(fname_pdb, 'r') as f_pdb:
-            l_pdb = f_pdb.read().split('\n')
-            
-        coords = []
-        prt_heavy_atoms = []
-        mem_heavy_atoms = []
-        iatom = 0
-        
-        for line in l_pdb[:-1]:
-            if line[:6] in ['ATOM  ', 'HETATM']:
-                words = line[30:].split()
-                x = float(words[0])
-                y = float(words[1])
-                z = float(words[2])
-    
-                coords.append(Vec3(x, y, z))
-    
-                if line[17:20] in nameMembrane and words[-1] != 'H':
-                    mem_heavy_atoms.append(iatom)
-                elif line[:6] in ['ATOM  '] and words[-1] != 'H':
-                    prt_heavy_atoms.append(iatom)
-                
-                iatom += 1
-    
-        return np.array(coords), prt_heavy_atoms, mem_heavy_atoms
         
 
-    def _minimize(self, pdb_in:str, pdb_out:str=None, state_xml_out:str=None, temp=300.0, dt=2.0):
+    def _minimize(self, pdb_in:str, pdb_out:str=None, state_xml_out:str=None, temp=300.0, dt=2.0, lig_resname: str=None, mcs: List[str]=None, fc_pos: float=40.0):
         """
         Minimizes the structure of pdb_in
         
@@ -206,7 +168,19 @@ class MotorRow():
             pdb_out - FilePath to the output structure
         """
         start = datetime.now()
-        system, _, positions = self._unpack_infiles(self.system_xml, pdb_in)
+        system, _, positions = unpack_infiles(self.system_xml, pdb_in)
+
+        # Add restraint if specified 
+        if mcs != None and lig_resname != None:
+            crds, prt_heavy_atoms, mem_heavy_atoms, lig_heavy_atoms = get_positions_from_pdb(pdb_in, lig_resname=lig_resname)
+            lig_heavy_atom_inds = np.array(lig_heavy_atoms)[:,0].astype(int)
+            lig_heavy_atom_names = np.array(lig_heavy_atoms)[:,1]
+            mcs_atom_inds = parse_atom_inds(lig_heavy_atom_inds, lig_heavy_atom_names, mcs)
+
+            system = restrain_atoms(system, crds, prt_heavy_atoms, fc_pos)
+            system = restrain_atoms(system, crds, mem_heavy_atoms, fc_pos)
+            system = restrain_atoms(system, crds, mcs_atom_inds, fc_pos) 
+
         integrator = LangevinIntegrator(temp*kelvin, 1/picosecond, dt*femtosecond)
         simulation = Simulation(self.topology, system, integrator)
         simulation.context.setPositions(positions)
@@ -217,16 +191,11 @@ class MotorRow():
         print(f'Minimization completed in {end}')
         
         if pdb_out is not None:
-            pass
-        else:
-            pdb_out = os.path.join(self.abs_work_dir, f'minimized.pdb')
-        self._write_structure(simulation, pdb_out)
-        
+            self._write_structure(simulation, pdb_out)
+
         if state_xml_out is not None:
-            pass
-        else:
-            state_xml_out = os.path.join(self.abs_work_dir, f'minimized_state.xml')
-        self._write_state(simulation, state_xml_out)
+            self._write_state(simulation, state_xml_out)
+            
         return state_xml_out, pdb_out
 
 
@@ -274,7 +243,7 @@ class MotorRow():
         #STEP SPECIFIC ACTIONS
         if stepnum == 1:
             assert positions_from_pdb is not None
-            crds, prt_heavy, mem_heavy = self._get_positions_from_pdb(positions_from_pdb)
+            crds, prt_heavy, mem_heavy, lig_heavy_atoms = get_positions_from_pdb(positions_from_pdb)
             prt_rest = CustomExternalForce('fc_pos*periodicdistance(x,y,z,x0,y0,z0)^2')
             prt_rest.addGlobalParameter('fc_pos', fc_pos)
             prt_rest.addPerParticleParameter('x0')
