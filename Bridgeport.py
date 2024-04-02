@@ -8,7 +8,9 @@ bp_dir = pathlib.Path(__file__).parent.resolve()
 sys.path.append(os.path.join(bp_dir, 'RepairProtein'))
 sys.path.append(os.path.join(bp_dir, 'ForceFields'))
 sys.path.append(os.path.join(bp_dir, 'utils'))
+sys.path.append(os.path.join(bp_dir, 'MotorRow'))
 import numpy as np
+from MotorRow import MotorRow
 from bp_utils import analogue_alignment
 from ProteinPreparer import ProteinPreparer
 from RepairProtein import RepairProtein
@@ -167,24 +169,38 @@ class Bridgeport():
             else:
                 self.known_resids = []
                                 
+        
+        # Align first
+        self._align()
+        
         # Build analogue complex
         if hasattr(self, "analogue_smiles") and hasattr(self, "analogue_name") and hasattr(self, "analogue_pdb"):
             if hasattr(self, "analogue_resname") or hasattr(self, "analogue_chainid"):
                 self._build_analogue_complex()
-
-                            
+      
         # Run 
-        self._align()
         self._separate_lig_prot()
         self._repair_crystal()
         self._add_environment()
         self._ligand_prep()
         self._generate_systems()
 
+        # Choose analogue complex, if applicable
+        if hasattr(self, "analogue_pdbs"):
+            self._choose_analogue_conformer()
+
     def _build_analogue_complex(self):
         """
         Build a new input complex by replacing a ligand with an analogue.
         """
+        # REMOVE
+        self.analogue_chainid = 'P'
+        self.analogue_atoms = ["N4", "C19", "O6", "C20", "N5", "C21", "C22", "C23", "C24", "C25", "C26",  "C27", "O7"]
+        self.known_atoms = ["N", "C", "O", "CA", "N", "CB", "CG", "CD1", "CE1", "CZ", "CE2", "CD2", "OH"]
+        self.known_resids = [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        self.analogue_name = "MetEnk"
+        self.analogue_smiles = "CSCC[C@@H](C(=O)O)NC(=O)[C@H](CC1=CC=CC=C1)NC(=O)CNC(=O)CNC(=O)[C@H](CC2=CC=C(C=C2)O)N"
+        
         # Build necessary directories
         if not os.path.exists(self.lig_only_dir):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.lig_only_dir, flush=True)  
@@ -194,7 +210,7 @@ class Bridgeport():
         
         # Get known ligand
         name = self.input_params['protein']['input_pdb']
-        ref_u = mda.Universe(self.analogue_pdb)
+        ref_u = mda.Universe(self.aligned_pdb)
         if hasattr(self, 'analogue_resname'):
             ref_sele = ref_u.select_atoms('resname '+self.analogue_resname)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with resname:', self.analogue_resname, 'and', ref_sele.n_atoms, 'number of atoms', flush=True)
@@ -209,19 +225,33 @@ class Bridgeport():
         ref_lig_pdb = os.path.join(self.working_dir, 'ligands', name)
         ref_sele.write(ref_lig_pdb)
 
+        # Check for user-specified parameters
+        if 'analogue_rmsd_thres' in self.input_params['ligand'] and self.input_params['ligand']['analogue_rmsd_thres'] != False:
+            rmsd_thres = self.input_params['ligand']['analogue_rmsd_thres']
+        else:
+            rmsd_thres = 3.0
+
+        if 'analogue_n_conformers' in self.input_params['ligand'] and self.input_params['ligand']['analogue_n_conformers'] != False:
+            n_confs = self.input_params['ligand']['analogue_n_conformers']
+        else:
+            n_confs = 100        
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Preparing to generate', n_confs, 'analogue conformations under RMSD threshold of:', rmsd_thres, 'Angstrom.', flush=True)  
+        
         # Generate aligned analogue
         lig_path = os.path.join(self.lig_only_dir, self.analogue_name+'.pdb')
-        rmsd = analogue_alignment(smiles=self.analogue_smiles,
+        self.analogue_dir, self.analogue_mcs = analogue_alignment(smiles=self.analogue_smiles,
                            known_pdb=ref_lig_pdb,
                            analogue_out_path=lig_path,
                            analogue_atoms=self.analogue_atoms,
                            known_atoms=self.known_atoms,
-                           known_resids = self.known_resids)
+                           known_resids = self.known_resids,
+                           rmsd_thres=rmsd_thres,
+                           n_conformers=n_confs)
 
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Aligned analogue to reference with RMSD:', str(rmsd), flush=True)
+        self.analogue_pdbs = os.listdir(self.analogue_dir)
+        print(self.analogue_dir, self.analogue_pdbs)
+        lig_path = os.path.join(self.analogue_dir, self.analogue_pdbs[0])
         
-        assert os.path.exists(lig_path), f"No output file exists at {lig_path}"
-
         # Combine to create new initial complex
         new_input_path = os.path.join(self.working_dir, self.input_params['protein']['input_pdb_dir'], self.analogue_name+'.pdb')
         lig_sele = mda.Universe(lig_path).select_atoms('all')
@@ -282,7 +312,8 @@ class Bridgeport():
                           'reference': ref_sele_str})
             
             # Save 
-            u.select_atoms('all').write(os.path.join(self.aligned_input_dir, pdb))
+            self.aligned_pdb = os.path.join(self.aligned_input_dir, pdb)
+            u.select_atoms('all').write(self.aligned_pdb)
 
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//WARNING: Cannot find input structure:', input_pdb_path, "Skipping for now...", flush=True)  
@@ -644,89 +675,95 @@ class Bridgeport():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
 
         # Write out
-        with open(os.path.join(self.sys_dir, name+'.pdb'), 'w') as f:
+        self.final_pdb = os.path.join(self.sys_dir, name+'.pdb')
+        self.final_xml = os.path.join(self.sys_dir, name+'.xml')
+        with open(self.final_pdb, 'w') as f:
             PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
-        with open(os.path.join(self.sys_dir, name+'.xml'), 'w') as f:
+        with open(self.final_xml, 'w') as f:
             f.write(XmlSerializer.serialize(sim.system))
         
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system coordinates saved to', os.path.join(self.sys_dir, name+'.pdb'), flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system parameters saved to', os.path.join(self.sys_dir, name+'.xml'), flush=True)
 
-    
-# def remove_atom_from_xml(xml_lines, atom_name):
-#     write_lines = []
-#     for line in xml_lines:
-#         if line.find(f'name="{atom_name}"') != -1:
-#             type = line.split('"')[5]
-    
-#     for line in xml_lines:
-#         if line.find(type) == -1:
-#             if line.find(f'atomName2="{atom_name}"') == -1:
-#                 if line not in write_lines:
-#                     write_lines.append(line)
 
-#     return write_lines
-
-# def add_externalBonds(xml_lines, N_bond: bool=True, C_bond: bool=True):
-#     for i, line in enumerate(xml_lines):
-#         if line.find('</Residue>') != -1:
-#             end_residue_ind = i
-#             break
+    def _choose_analogue_conformer(self):
+        """
+        """
+        # REMOVE
+        self.final_pdb = '/home/exouser/MOR/systems/MetEnk.pdb'
+        self.final_xml = '/home/exouser/MOR/systems/MetEnk.xml'
+  
+        def __minimize_new_lig_coords(ref_traj, lig_sele, conf_path, lig_resname='UNL', min_out_pdb=None):
+            temp_conf_pdb = 'temp_complex.pdb'
             
-#     if N_bond:
-#         xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="N"/>\n')
-#         end_residue_ind += 1
-#     if C_bond:
-#         xml_lines.insert(end_residue_ind, '      <ExternalBond atomName="C"/>\n')
+            # Get ligand positions
+            lig_pos = md.load_pdb(conf_path).xyz[0]
 
-#     return xml_lines
+            # Adjust in reference complex
+            traj.xyz[0, lig_sele, :] = lig_pos
+            traj.save_pdb(temp_conf_pdb)
 
-# def change_xml_resname(xml_lines, resname: str='UNL'):
-#     line_ind = xml_lines.index('    <Residue name="RES">\n')
-#     xml_lines[line_ind] = f'    <Residue name="{resname}">\n'
-    
-#     return xml_lines
+            # Minimize
+            row = MotorRow(self.final_xml, temp_conf_pdb, 'NA')
+            if min_out_pdb != None:
+                row._minimize(temp_conf_pdb, pdb_out=min_out_pdb, lig_resname='UNK', mcs=self.analogue_mcs)
+            else:
+                row._minimize(temp_conf_pdb, lig_resname='UNK', mcs=self.analogue_mcs)
 
-# def fix_types(xml_lines):
-#     #Get atom types
-#     atom_types = {}
-#     res_start_ind = xml_lines.index('    <Residue name="RES">\n') + 1
-#     res_stop_ind = xml_lines.index('    </Residue>\n')
-#     atom_lines = [xml_lines[i] for i in range(res_start_ind, res_stop_ind) if xml_lines[i].startswith('      <Atom')]
-#     for line in atom_lines:
-#         _, _, _, name, _, type, _ = line.split('"')
-#         atom_types[type] = name
+            return row.PE
 
-#     # Fix atom types in dict
-#     for type, name in atom_types.items():
-#         if name.startswith('H'):
-
-#             # Handle terminal hydrogens
-#             if name.startswith('HT'):
-#                 new_type = type.split('-')[0] + '-' + 'HT'
-                
-#             # Handle hydrogens with similar naming scheme
-#             elif name[-1].isdigit() and not name[-2].isdigit() and len(name) == 3:
-#                 new_type = type.split('-')[0] + '-' + name
-                
-#             else:
-#                 new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
-                
-#         else:
-#             new_type = type.split('-')[0] + '-' + ''.join([i for i in name if not i.isdigit()])
+        # Remove CONECT records from self.final_pdb
+        lines = [l for l in open(self.final_pdb, 'r').readlines() if not l.startswith('CONECT')]
+        with open(self.final_pdb, 'w') as f:
+            f.writelines(lines)
             
-#         atom_types[type] = new_type
+        # Load initial structure
+        traj = md.load_pdb(self.final_pdb)
+        lig_sele = traj.topology.select(f'resname UNK')
+        assert len(lig_sele) > 0
 
-#     # Find and replace w/ new atom types
-#     for old_type, new_type in atom_types.items():
-#         for i, line in enumerate(xml_lines):
-#             if line.find(old_type) != -1:
-#                 xml_lines[i] = line.replace(old_type, new_type)
+        # Iterate through analogue conformers
+        temp_conf_pdb = 'temp_complex.pdb'
+        potential_energies = np.zeros(len(self.analogue_pdbs))
+        for i, conf_pdb in enumerate(self.analogue_pdbs):
+            conf_path = os.path.join(self.analogue_dir, conf_pdb)
+            protonate_ligand(conf_path)
+            potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
 
-#     return xml_lines
+        # Choose minimum PE
+        conf_pdb = self.analogue_pdbs[list(potential_energies).index(potential_energies.min())]
+        conf_path = os.path.join(analogue_dir, conf_pdb)
+        final_PE = __minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)
+
+        # Change to conformer with min. PE
+        print('Final w/ PE:', final_PE)        
+
+        # Clean 
+        os.remove(temp_conf_pdb)
+        os.remove(self.analogue_dir)
+
+
+
+def protonate_ligand(mol_path):
+    
+    #Obabel conversion block
+    obConversion = openbabel.OBConversion()
+    obConversion.SetInAndOutFormats(*['pdb', 'pdb'])
+    mol = openbabel.OBMol()
+
+    #Find Input
+    if os.path.isfile(mol_path):
+        obConversion.ReadFile(mol, mol_path)
+    elif os.path.isfile(os.path.join(self.lig_only_dir, mol_path)):
+        obConversion.ReadFile(mol, os.path.join(self.lig_only_dir, mol_path))
+    else:
+        raise FileNotFoundError('mol_fn was not found')
         
-
-
+    #Add Hydrogens
+    mol.AddHydrogens()
+                
+    #Writeout the protonated file in the second format
+    obConversion.WriteFile(mol, mol_path)
 
 
                     

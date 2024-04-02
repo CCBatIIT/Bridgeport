@@ -20,6 +20,7 @@ def get_positions_from_pdb(fname_pdb, lig_resname: str=None):
     for line in l_pdb[:-1]:
         if line[:6] in ['ATOM  ', 'HETATM']:
             resname = line[17:20]
+
             words = line[30:].split()
             x = float(words[0])
             y = float(words[1])
@@ -30,13 +31,17 @@ def get_positions_from_pdb(fname_pdb, lig_resname: str=None):
             if line[17:20] in nameMembrane and words[-1] != 'H':
                 mem_heavy_atoms.append(iatom)
             elif line[:6] in ['ATOM  '] and words[-1] != 'H':
-                prt_heavy_atoms.append(iatom)
+                if lig_resname != None and resname == lig_resname and words[-1] != 'H':
+                    lig_atom_name = line[12:16].strip().strip('x')
+                    lig_heavy_atoms.append([iatom, lig_atom_name])
+                else:
+                    prt_heavy_atoms.append(iatom)
             elif lig_resname != None and resname == lig_resname and words[-1] != 'H':
                 lig_atom_name = line[12:16].strip().strip('x')
                 lig_heavy_atoms.append([iatom, lig_atom_name])
 
             iatom += 1
-            
+
     return np.array(coords), prt_heavy_atoms, mem_heavy_atoms, lig_heavy_atoms
 
 def restrain_atoms(system, crds, atom_inds, fc_pos: float=20.0):

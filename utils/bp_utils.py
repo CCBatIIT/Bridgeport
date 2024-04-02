@@ -28,7 +28,7 @@ IPythonConsole.drawOptions.minFontSize=20
 from IPython.display import display
 from typing import List
 
-def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, analogue_atoms: List[str]=[], known_atoms: List[str]=[], known_resids: List[int]=[], rmsd_thres: float=2.0):
+def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, analogue_atoms: List[str]=[], known_atoms: List[str]=[], known_resids: List[int]=[], rmsd_thres: float=None, n_conformers: int=100):
     """
     Creates an aligned analogue of a known ligand structure. 
 
@@ -72,11 +72,9 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
     # Get indices of max. common substructure 
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
-    RMSD = rmsd_thres + 1
-    counter = 0
-    while RMSD > rmsd_thres:
+    for i in range(n_conformers):
         #Generate conformer
-        AllChem.EmbedMolecule(new_mol, randomSeed=counter)
+        AllChem.EmbedMolecule(new_mol, randomSeed=i)
         
         # Write out analogue to .pdb file
         Chem.MolToPDBFile(new_mol, analogue_out_path)
@@ -122,12 +120,21 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
 
         # Evaluate RMSD
         RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
-        print(RMSD)
-        counter += 1
 
-    new_sele.write(analogue_out_path, bonds=None)
+        # Write out conformer
+        try:
+            analogue_name = analogue_out_path.split('/')[-1].split('.pdb')[0]
+            analogue_out_dir = os.path.join(analogue_out_path.split(f'{analogue_name}.pdb')[0], 'analogue_conformers')
+        except:
+            analogue_name = 'analogue'
+            analogue_out_dir = os.path.join(os.getcwd(), 'analogue_conformers')
+            
+        if not os.path.exists(analogue_out_dir):
+            os.mkdir(analogue_out_dir)
+        conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(i) + '.pdb')
+        new_sele.write(conformer_out_path, bonds=None)
 
-    return RMSD
+    return analogue_out_dir, new_match_atoms
 
 def return_max_common_substructure(mol1, mol2):
     """
