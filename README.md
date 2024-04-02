@@ -25,6 +25,11 @@ All the input files and parameters are specifid in the Bridgeprot_input.json:
 - **"working_dir"**: specifies where all output and intermediate directories will be created.
 
 #### "ligand"
+Ligands can be generated using an experimental structure. If the ligand is a small molecule, select the resname in the input.pdb with "lig_resname". If the ligand is a peptide, select the chainid in the input.pdb with "peptide_chainid". 
+
+Bridgeprot is also capable of generating ligand analogues based on a known ligand-protein complex. This workflow consists of forcing the maximum common substructure (MCS) between the analogue and the known structure to have matching torsions and the MCS of the analogue is aligned to that of the known ligand. Then, then a specified number of conformations of functional groups unique to the analogue are generated that maintain a certain RMSD threshold of the MCS and any other specified atoms that are matching in the known ligand and analogue. Then, each conformation is prepared in complex with the receptor and minimized to avoid steric clashes between the receptor and analogue. The lowest potential energy conformation, after minimization, becomes the final conformation of the analogue. 
+
+If you want to generate an analogue of a known structure: Make sure lig_resname and peptide_chain are set to false. Provide the SMILES string for you analogue with the "analogue_smiles" key. Provide the name of your analogue with "analogue_name". Provide a path to the known structure with "known_structure" that contains the experimental ligand to align analogue to with a "known_resname" or "known_chainid". 
 
 - **"lig_resname"**: specifies the ligand resname in the input .pdb file. If the ligand is a peptide choose "false". Ligand resnames that start with and number are not easily recognized by MDAnalysis (which is used for parsing), so we recommend changing the ligand resname in that case.
 - **"peptide_chain"**: If ligand is a peptide, specify the letter code that denotes the ligand, if not choose "false".
@@ -35,6 +40,10 @@ All the input files and parameters are specifid in the Bridgeprot_input.json:
 - **"known_structure"**: Path to pdb file that contains the known ligand to align analogue to. This should be the same path as "protein" "input_pdb" to start, Bridgeport will correct automatically later. 
 - **"known_resname"**:  Resname of ligand to parse in known_structure, if known ligand is a small molecule.
 - **"known_chainid"**: Chainid of ligand to parse in known_structure, if known ligand is a peptide.
+- **"add_known_atoms"**: List of atom names that are also in analogue, but not recognized in the MCS. These atoms are used to compare the RMSD during conformer generation.
+- **"add_known_resids"**: List of resids that match each atom in "add_known_atoms". This should always be specified, but is especially helpful in cases where the known ligand is a peptide and each residue may have the same atoms names (ex: CA, N, C, O, etc.)
+- **"add_analogue_atoms"**: List of atoms names that match each atom in "add_known_atoms". For example if "add_known_atoms" is ['C21', 'C23', 'N5'] than add_analogue_atoms should be a list of the equivalent atoms in the analogue structure, such as ['C22', 'C24', 'N5']. It may be helpful to run Bridgeport without specifying any of the "add" arguments to generate the .pdb file of the ligand to better understand the atom names that will be generated from the provided "analogue_smiles". 
+- **"analogue_rmsd_thres"***: RMSD threshold that analogue conformer generation cannot exceed. RMSD is calculated of MCS and other specified atoms in "add_known_atoms", "add_known_resids", and "add_analogue_atoms"
 - **"small_molecule_params"**: If analogue is a peptide, setting this option to true will choose to parameterize it as a small molecule with Smirnoff from OpenFF. 
 
 #### "protein"
