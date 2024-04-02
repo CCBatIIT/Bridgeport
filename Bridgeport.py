@@ -193,14 +193,6 @@ class Bridgeport():
         """
         Build a new input complex by replacing a ligand with an analogue.
         """
-        # REMOVE
-        self.analogue_chainid = 'P'
-        self.analogue_atoms = ["N4", "C19", "O6", "C20", "N5", "C21", "C22", "C23", "C24", "C25", "C26",  "C27", "O7"]
-        self.known_atoms = ["N", "C", "O", "CA", "N", "CB", "CG", "CD1", "CE1", "CZ", "CE2", "CD2", "OH"]
-        self.known_resids = [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        self.analogue_name = "MetEnk"
-        self.analogue_smiles = "CSCC[C@@H](C(=O)O)NC(=O)[C@H](CC1=CC=CC=C1)NC(=O)CNC(=O)CNC(=O)[C@H](CC2=CC=C(C=C2)O)N"
-        
         # Build necessary directories
         if not os.path.exists(self.lig_only_dir):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.lig_only_dir, flush=True)  
@@ -218,7 +210,7 @@ class Bridgeport():
             ref_sele = ref_u.select_atoms('chainid '+ self.analogue_chainid)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with chainid:', self.analogue_chainid, 'and', ref_sele.n_atoms, 'number of atoms', flush=True)
         assert ref_sele.n_atoms > 0, f"Could not find any atoms with resname {self.analogue_resname}"
-        prot_sele = ref_u.select_atoms('protein')
+        prot_sele = ref_u.select_atoms(f'chainid {self.input_params["protein"]["chains"]}')
         assert prot_sele.n_atoms > 0, f"Could not find any protein atoms in {self.analogue_pdb}"
 
         # Write to ligand folder
@@ -253,7 +245,7 @@ class Bridgeport():
         lig_path = os.path.join(self.analogue_dir, self.analogue_pdbs[0])
         
         # Combine to create new initial complex
-        new_input_path = os.path.join(self.working_dir, self.input_params['protein']['input_pdb_dir'], self.analogue_name+'.pdb')
+        new_input_path = os.path.join(self.aligned_input_dir, self.analogue_name+'.pdb')
         lig_sele = mda.Universe(lig_path).select_atoms('all')
         u = mda.core.universe.Merge(prot_sele, lig_sele)
         assert u.select_atoms('all').n_atoms == lig_sele.n_atoms + prot_sele.n_atoms, "Did not correctly merge ligand and protein AtomGroups."
@@ -689,10 +681,7 @@ class Bridgeport():
     def _choose_analogue_conformer(self):
         """
         """
-        # REMOVE
-        self.final_pdb = '/home/exouser/MOR/systems/MetEnk.pdb'
-        self.final_xml = '/home/exouser/MOR/systems/MetEnk.xml'
-  
+
         def __minimize_new_lig_coords(ref_traj, lig_sele, conf_path, lig_resname='UNL', min_out_pdb=None):
             temp_conf_pdb = 'temp_complex.pdb'
             
@@ -728,6 +717,7 @@ class Bridgeport():
         for i, conf_pdb in enumerate(self.analogue_pdbs):
             conf_path = os.path.join(self.analogue_dir, conf_pdb)
             protonate_ligand(conf_path)
+            align_ligand(self.final_pdb, 'UNK', conf_path)
             potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
 
         # Choose minimum PE
@@ -765,8 +755,12 @@ def protonate_ligand(mol_path):
     #Writeout the protonated file in the second format
     obConversion.WriteFile(mol, mol_path)
 
-
-                    
+def align_ligand(ref_path, ref_resname, conf_path):
+    conf_u = mda.Universe(conf_path)
+    ref_sele = mda.Universe(ref_path).select_atoms(f'resname {ref_resname}')
+    _, _ = alignto(conf_u, ref_sele)
+    conf_u.select_atoms('all').write(conf_path)
+    
 
     
     
