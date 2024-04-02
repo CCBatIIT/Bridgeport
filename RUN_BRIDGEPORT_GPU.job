@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --job-name="BRIDGEPORT"
+#SBATCH --output="/expanse/lustre/projects/iit119/dcooper/MOR/logs/Check.%j.%N.out"
+#SBATCH --partition=gpu-shared
+#SBATCH --gpus=1
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem=8G
+#SBATCH --account=iit119
+#SBATCH -t 12:00:00
+
+source ~/.bashrc
+
+conda activate prep
+
+cd $SLURM_SUBMIT_DIR
+
+echo BRIDGEPORT BATCH JOB FOR $1
+python RUN_BRIDGEPORT.py $1
