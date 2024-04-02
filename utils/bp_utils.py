@@ -57,6 +57,15 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
         RMSD (float):
             RMSD of similar atoms after alignment protocol. 
     """
+    # Get name
+    try:
+        analogue_name = analogue_out_path.split('/')[-1].split('.pdb')[0]
+        analogue_out_dir = os.path.join(analogue_out_path.split(f'{analogue_name}.pdb')[0], 'analogue_conformers')
+    except:
+        analogue_name = 'analogue'
+        analogue_out_dir = os.path.join(os.getcwd(), 'analogue_conformers')
+
+    
     # Open known ligand in rdkit and MDAnalysis
     ref_mol = Chem.MolFromPDBFile(known_pdb)
     Chem.MolToPDBFile(ref_mol, known_pdb)
@@ -108,11 +117,12 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
             new_match_sele = new_match_sele + new_sele.select_atoms('name ' + new_atom)
             
         # Match internal coordinates   
-        ref_match_sele.write('test.pdb')
-        ref_match_sele = mda.Universe('test.pdb').select_atoms('all')
+        ref_bat_pdb = f'{name}_mcs.pdb'
+        ref_match_sele.write(ref_bat_pdb)
+        ref_match_sele = mda.Universe(ref_bat_pdb).select_atoms('all')
         new_sele = match_internal_coordinates(ref_match_sele, ref_match_atoms, ref_match_resids, new_sele, new_match_atoms)
-        if os.path.exists('test.pdb'):
-            os.remove('test.pdb')  
+        if os.path.exists(ref_bat_pdb):
+            os.remove(ref_bat_pdb)  
             
         # Align analogue to reference
         alignto(mobile=new_align_sele,
@@ -121,14 +131,7 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
         # Evaluate RMSD
         RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
 
-        # Write out conformer
-        try:
-            analogue_name = analogue_out_path.split('/')[-1].split('.pdb')[0]
-            analogue_out_dir = os.path.join(analogue_out_path.split(f'{analogue_name}.pdb')[0], 'analogue_conformers')
-        except:
-            analogue_name = 'analogue'
-            analogue_out_dir = os.path.join(os.getcwd(), 'analogue_conformers')
-            
+        # Write out conformer            
         if not os.path.exists(analogue_out_dir):
             os.mkdir(analogue_out_dir)
         conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(i) + '.pdb')
