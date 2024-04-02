@@ -712,7 +712,7 @@ class Bridgeport():
         assert len(lig_sele) > 0
 
         # Iterate through analogue conformers
-        temp_conf_pdb = 'temp_complex.pdb'
+        temp_conf_pdb =  self.analogue_name + '_temp_complex.pdb'
         potential_energies = np.zeros(len(self.analogue_pdbs))
         for i, conf_pdb in enumerate(self.analogue_pdbs):
             conf_path = os.path.join(self.analogue_dir, conf_pdb)
