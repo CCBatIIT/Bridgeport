@@ -1,4 +1,4 @@
-import os, sys, json
+import os, sys, json, shutil
 from datetime import datetime
 import mdtraj as md
 import MDAnalysis as mda
@@ -714,6 +714,11 @@ class Bridgeport():
 
             return temp_conf_pdb, row.PE
 
+        # Make directory to store minimized files
+        min_sys_dir = os.path.join(self.sys_dir, self.analogue_name + '_minimized_conformers')
+        if not os.path.exists(min_sys_dir):
+            os.mkdir(min_sys_dir)
+        
         # Remove CONECT records from self.final_pdb
         lines = [l for l in open(self.final_pdb, 'r').readlines() if not l.startswith('CONECT')]
         with open(self.final_pdb, 'w') as f:
@@ -727,23 +732,22 @@ class Bridgeport():
         # Iterate through analogue conformers
         potential_energies = np.zeros(len(self.analogue_pdbs))
         for i, conf_pdb in enumerate(self.analogue_pdbs):
-            print('!!!conf_pdb', conf_pdb)
             conf_path = os.path.join(self.analogue_dir, conf_pdb)
-            print('!!!conf_path', conf_path)
             protonate_ligand(conf_path)
-            print('!!!conf_path', conf_path)
             if align_ligand(self.final_pdb, 'UNK', conf_path):
-                temp_conf_pdb, potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
+                min_out_path = os.path.join(min_sys_dir, conf_pdb)
+                temp_conf_pdb, potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=min_out_path)
             else:
                 potential_energies[i] = 0
 
         # Choose minimum PE
         conf_pdb = self.analogue_pdbs[list(potential_energies).index(potential_energies.min())]
         conf_path = os.path.join(self.analogue_dir, conf_pdb)
+        shutil.copy(self.final_pdb, self.sys_dir + '_' + self.analogue_name + '_init.pdb')
         temp_conf_pdb, final_PE = __minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)
 
         # Change to conformer with min. PE
-        print('Final w/ PE:', final_PE)        
+        print('Final PE:', final_PE)        
 
         # Clean 
         if os.path.exists(temp_conf_pdb):
@@ -771,20 +775,16 @@ def protonate_ligand(mol_path):
     obConversion.WriteFile(mol, mol_path)
 
 def align_ligand(ref_path, ref_resname, conf_path):
-    print('!!! ref_path', ref_path)
-    print('!!! conf_path align', conf_path) 
-
     try:
         conf_u = mda.Universe(conf_path)
-        print('!!! conf_u n_atoms:', conf_u.select_atoms('all').n_atoms)
         ref_sele = mda.Universe(ref_path).select_atoms(f'resname {ref_resname}')
-        print('!!! ref_sele.n_atoms:', ref_sele.n_atoms, 'ref_sele:', ref_sele.atoms.names)
         _, _ = alignto(conf_u, ref_sele)
         conf_u.select_atoms('all').write(conf_path)
 
         return True
 
     except:
+        print('Could not return the same number of atoms for reasonable alignment for', conf_path)
         return False
     
 
