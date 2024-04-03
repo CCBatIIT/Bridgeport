@@ -776,7 +776,7 @@ def align_ligand(ref_path, ref_resname, conf_path):
     print('!!! ref_path', ref_path)
     print('!!! conf_path align', conf_path) 
     conf_u = mda.Universe(conf_path)
-    print('!!! conf_u.n_atoms:', conf_u.n_atoms)
+    print('!!! conf_u n_atoms:', conf_u.select_atoms('all').n_atoms)
     ref_sele = mda.Universe(ref_path).select_atoms(f'resname {ref_resname}')
     print('!!! ref_sele.n_atoms:', ref_sele.n_atoms, 'ref_sele:', ref_sele.atoms.names)
     _, _ = alignto(conf_u, ref_sele)
