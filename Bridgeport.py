@@ -193,6 +193,15 @@ class Bridgeport():
         """
         Build a new input complex by replacing a ligand with an analogue.
         """
+
+        #REMOVE 
+        # self.analogue_smiles = "CSCC[C@@H](C(=O)O)NC(=O)[C@H](CC1=CC=CC=C1)NC(=O)CNC(=O)CNC(=O)[C@H](CC2=CC=C(C=C2)O)N"
+        # self.analogue_name = "MetEnk"
+        # self.analogue_chainid = 'P'
+        # self.known_atoms = ["N", "C", "O", "CA", "N", "CB", "CG", "CD1", "CE1", "CZ", "CE2", "CD2", "OH"]
+        # self.known_resids = [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        # self.analogue_atoms = ["N4", "C19", "O6", "C20", "N5", "C21", "C22", "C23", "C24", "C25", "C26",  "C27", "O7"]
+        
         # Build necessary directories
         if not os.path.exists(self.lig_only_dir):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Making directory for ligand structures:', self.lig_only_dir, flush=True)  
@@ -682,8 +691,12 @@ class Bridgeport():
         """
         """
 
+        # REMOVE
+        # self.final_pdb = '/home/exouser/MOR/systems/MetEnk.pdb'
+        # self.final_xml = '/home/exouser/MOR/systems/MetEnk.xml'
+        
         def __minimize_new_lig_coords(ref_traj, lig_sele, conf_path, lig_resname='UNL', min_out_pdb=None):
-            temp_conf_pdb = 'temp_complex.pdb'
+            temp_conf_pdb = self.analogue_name + '_temp_complex.pdb'
             
             # Get ligand positions
             lig_pos = md.load_pdb(conf_path).xyz[0]
@@ -728,8 +741,10 @@ class Bridgeport():
         print('Final w/ PE:', final_PE)        
 
         # Clean 
-        os.remove(temp_conf_pdb)
-        os.remove(self.analogue_dir)
+        if os.path.exists(temp_conf_pdb):
+            os.remove(temp_conf_pdb)
+        if os.ptah.exists(self.analogue_dir):
+            os.remove(self.analogue_dir)
 
 
 

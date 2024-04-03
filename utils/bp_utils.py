@@ -58,14 +58,11 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
             RMSD of similar atoms after alignment protocol. 
     """
     # Get name
-    try:
-        analogue_name = analogue_out_path.split('/')[-1].split('.pdb')[0]
-        analogue_out_dir = os.path.join(analogue_out_path.split(f'{analogue_name}.pdb')[0], 'analogue_conformers')
-    except:
-        analogue_name = 'analogue'
-        analogue_out_dir = os.path.join(os.getcwd(), 'analogue_conformers')
-
-    
+    analogue_name = analogue_out_path.split('/')[-1].split('.pdb')[0]
+    print(analogue_name)
+    print(analogue_out_path.split(f'{analogue_name}.pdb')[0])
+    analogue_out_dir = os.path.join(analogue_out_path.split(f'{analogue_name}.pdb')[0], analogue_name + '_conformers')
+ 
     # Open known ligand in rdkit and MDAnalysis
     ref_mol = Chem.MolFromPDBFile(known_pdb)
     Chem.MolToPDBFile(ref_mol, known_pdb)
