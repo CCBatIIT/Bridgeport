@@ -732,8 +732,10 @@ class Bridgeport():
             print('!!!conf_path', conf_path)
             protonate_ligand(conf_path)
             print('!!!conf_path', conf_path)
-            align_ligand(self.final_pdb, 'UNK', conf_path)
-            temp_conf_pdb, potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
+            if align_ligand(self.final_pdb, 'UNK', conf_path):
+                temp_conf_pdb, potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
+            else:
+                potential_energies[i] = 0
 
         # Choose minimum PE
         conf_pdb = self.analogue_pdbs[list(potential_energies).index(potential_energies.min())]
@@ -775,12 +777,19 @@ def protonate_ligand(mol_path):
 def align_ligand(ref_path, ref_resname, conf_path):
     print('!!! ref_path', ref_path)
     print('!!! conf_path align', conf_path) 
-    conf_u = mda.Universe(conf_path)
-    print('!!! conf_u n_atoms:', conf_u.select_atoms('all').n_atoms)
-    ref_sele = mda.Universe(ref_path).select_atoms(f'resname {ref_resname}')
-    print('!!! ref_sele.n_atoms:', ref_sele.n_atoms, 'ref_sele:', ref_sele.atoms.names)
-    _, _ = alignto(conf_u, ref_sele)
-    conf_u.select_atoms('all').write(conf_path)
+
+    try:
+        conf_u = mda.Universe(conf_path)
+        print('!!! conf_u n_atoms:', conf_u.select_atoms('all').n_atoms)
+        ref_sele = mda.Universe(ref_path).select_atoms(f'resname {ref_resname}')
+        print('!!! ref_sele.n_atoms:', ref_sele.n_atoms, 'ref_sele:', ref_sele.atoms.names)
+        _, _ = alignto(conf_u, ref_sele)
+        conf_u.select_atoms('all').write(conf_path)
+
+        return True
+
+    except:
+        return False
     
 
     
