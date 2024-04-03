@@ -727,8 +727,11 @@ class Bridgeport():
         # Iterate through analogue conformers
         potential_energies = np.zeros(len(self.analogue_pdbs))
         for i, conf_pdb in enumerate(self.analogue_pdbs):
+            print('!!!conf_pdb', conf_pdb)
             conf_path = os.path.join(self.analogue_dir, conf_pdb)
+            print('!!!conf_path', conf_path)
             protonate_ligand(conf_path)
+            print('!!!conf_path, conf_path)
             align_ligand(self.final_pdb, 'UNK', conf_path)
             temp_conf_pdb, potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
 
@@ -770,8 +773,12 @@ def protonate_ligand(mol_path):
     obConversion.WriteFile(mol, mol_path)
 
 def align_ligand(ref_path, ref_resname, conf_path):
+    print('!!! ref_path', ref_path)
+    print('!!! conf_path align', conf_path) 
     conf_u = mda.Universe(conf_path)
+    print('!!! conf_u.n_atoms:', conf_u.n_atoms)
     ref_sele = mda.Universe(ref_path).select_atoms(f'resname {ref_resname}')
+    print('!!! ref_sele.n_atoms:', ref_sele.n_atoms, 'ref_sele:', ref_sele.atoms.names)
     _, _ = alignto(conf_u, ref_sele)
     conf_u.select_atoms('all').write(conf_path)
     
