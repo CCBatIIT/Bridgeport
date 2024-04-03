@@ -748,10 +748,6 @@ class Bridgeport():
         # Clean 
         if os.path.exists(temp_conf_pdb):
             os.remove(temp_conf_pdb)
-        if os.path.exists(self.analogue_dir):
-            os.remove(self.analogue_dir)
-
-
 
 def protonate_ligand(mol_path):
     
