@@ -737,7 +737,7 @@ class Bridgeport():
 
         # Choose minimum PE
         conf_pdb = self.analogue_pdbs[list(potential_energies).index(potential_energies.min())]
-        conf_path = os.path.join(analogue_dir, conf_pdb)
+        conf_path = os.path.join(self.analogue_dir, conf_pdb)
         temp_conf_pdb, final_PE = __minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)
 
         # Change to conformer with min. PE
@@ -746,7 +746,7 @@ class Bridgeport():
         # Clean 
         if os.path.exists(temp_conf_pdb):
             os.remove(temp_conf_pdb)
-        if os.ptah.exists(self.analogue_dir):
+        if os.path.exists(self.analogue_dir):
             os.remove(self.analogue_dir)
 
 
