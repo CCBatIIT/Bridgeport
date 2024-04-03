@@ -699,7 +699,7 @@ class Bridgeport():
             else:
                 row._minimize(temp_conf_pdb, lig_resname='UNK', mcs=self.analogue_mcs)
 
-            return row.PE
+            return temp_conf_pdb, row.PE
 
         # Remove CONECT records from self.final_pdb
         lines = [l for l in open(self.final_pdb, 'r').readlines() if not l.startswith('CONECT')]
@@ -712,18 +712,17 @@ class Bridgeport():
         assert len(lig_sele) > 0
 
         # Iterate through analogue conformers
-        temp_conf_pdb =  self.analogue_name + '_temp_complex.pdb'
         potential_energies = np.zeros(len(self.analogue_pdbs))
         for i, conf_pdb in enumerate(self.analogue_pdbs):
             conf_path = os.path.join(self.analogue_dir, conf_pdb)
             protonate_ligand(conf_path)
             align_ligand(self.final_pdb, 'UNK', conf_path)
-            potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
+            temp_conf_pdb, potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
 
         # Choose minimum PE
         conf_pdb = self.analogue_pdbs[list(potential_energies).index(potential_energies.min())]
         conf_path = os.path.join(analogue_dir, conf_pdb)
-        final_PE = __minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)
+        temp_conf_pdb, final_PE = __minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)
 
         # Change to conformer with min. PE
         print('Final w/ PE:', final_PE)        
