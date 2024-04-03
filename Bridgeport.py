@@ -731,7 +731,7 @@ class Bridgeport():
             conf_path = os.path.join(self.analogue_dir, conf_pdb)
             print('!!!conf_path', conf_path)
             protonate_ligand(conf_path)
-            print('!!!conf_path, conf_path)
+            print('!!!conf_path', conf_path)
             align_ligand(self.final_pdb, 'UNK', conf_path)
             temp_conf_pdb, potential_energies[i] = __minimize_new_lig_coords(traj, lig_sele, conf_path)
 
