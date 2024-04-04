@@ -319,6 +319,7 @@ class Bridgeport():
 
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//WARNING: Cannot find input structure:', input_pdb_path, "Skipping for now...", flush=True)  
+            raise FileNotFoundError("could not find input file", input_pdb_path)
 
     
     def _separate_lig_prot(self):
