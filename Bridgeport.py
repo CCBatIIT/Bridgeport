@@ -249,6 +249,7 @@ class Bridgeport():
                            rmsd_thres=rmsd_thres,
                            n_conformers=n_confs)
 
+        print('!!! ANALOGUE MAXIMUM COMMON SUBSTRUCTURE ATOMS', self.analogue_mcs)
         self.analogue_pdbs = os.listdir(self.analogue_dir)
         print(self.analogue_dir, self.analogue_pdbs)
         lig_path = os.path.join(self.analogue_dir, self.analogue_pdbs[0])
@@ -752,6 +753,10 @@ class Bridgeport():
         # Clean 
         if os.path.exists(temp_conf_pdb):
             os.remove(temp_conf_pdb)
+        
+        # Write out PE
+        np.save(os.path.join(min_sys_dir, 'PEs.npy'), potential_energies)
+
 
 def protonate_ligand(mol_path):
     
