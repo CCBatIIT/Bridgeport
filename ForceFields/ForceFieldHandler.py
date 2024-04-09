@@ -1,4 +1,4 @@
-import textwrap, sys, os, pathlib, json
+import textwrap, sys, os, pathlib, json, warnings
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Descriptors, Draw
@@ -147,7 +147,11 @@ class ForceFieldHandler():
                 display(rdkit_mol)
                 mol = openff.toolkit.Molecule.from_rdkit(rdkit_mol, hydrogens_are_explicit=True)
             else:
-                mol = openff.toolkit.Molecule.from_file(self.structure_file)
+                try:
+                    mol = openff.toolkit.Molecule.from_file(self.structure_file)
+                except:
+                    warnings.warn('WARNING: ATTEMPTING TO ALLOW UNDEFINED STEREOCHEMISTRY. CHECK OUTPUT SsTRUCTURE CAREFULLY')
+                    mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
             ff = openff.toolkit.ForceField(*self.xmls)
             cubic_box = openff.units.Quantity(30 * np.eye(3), openff.units.unit.angstrom)
             self.interchange = openff.interchange.Interchange.from_smirnoff(topology=[mol], force_field=ff, box=cubic_box)
