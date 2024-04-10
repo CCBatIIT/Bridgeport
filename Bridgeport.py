@@ -148,6 +148,11 @@ class Bridgeport():
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand file:', self.analogue_pdb, flush=True)
             else:
                 raise Exception('"known_structure" must be specified if "lig_resname" and "peptide_chain" are False.')
+            if 'known_smiles' in self.input_params['ligand'] and self.input_params['ligand']['known_smiles'] != False:
+                self.analogue_known_smiles = self.input_params['ligand']['known_smiles']
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand smiles:', self.analogue_known_smiles, flush=True)
+            else:
+                raise Exception('"known_smiles" must be specified if "lig_resname" and "peptide_chain" are False.')
             if 'known_resname' in self.input_params['ligand'] and self.input_params['ligand']['known_resname'] != False:
                 self.analogue_resname = self.input_params['ligand']['known_resname']
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand resname:', self.analogue_resname, flush=True)
@@ -242,6 +247,7 @@ class Bridgeport():
         lig_path = os.path.join(self.lig_only_dir, self.analogue_name+'.pdb')
         self.analogue_dir, self.analogue_mcs = analogue_alignment(smiles=self.analogue_smiles,
                            known_pdb=ref_lig_pdb,
+                           known_smiles = self.analogue_known_smiles,
                            analogue_out_path=lig_path,
                            analogue_atoms=self.analogue_atoms,
                            known_atoms=self.known_atoms,

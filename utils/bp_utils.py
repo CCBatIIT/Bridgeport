@@ -28,7 +28,7 @@ IPythonConsole.drawOptions.minFontSize=20
 from IPython.display import display
 from typing import List
 
-def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, analogue_atoms: List[str]=[], known_atoms: List[str]=[], known_resids: List[int]=[], rmsd_thres: float=None, n_conformers: int=100):
+def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_out_path: str, analogue_atoms: List[str]=[], known_atoms: List[str]=[], known_resids: List[int]=[], rmsd_thres: float=None, n_conformers: int=100):
     """
     Creates an aligned analogue of a known ligand structure. 
 
@@ -64,7 +64,9 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
     analogue_out_dir = os.path.join(analogue_out_path.split(f'{analogue_name}.pdb')[0], analogue_name + '_conformers')
  
     # Open known ligand in rdkit and MDAnalysis
+    template = Chem.MolFromSmiles(known_smiles)
     ref_mol = Chem.MolFromPDBFile(known_pdb)
+    ref_mol = AllChem.AssignBondOrdersFromTemplate(template, ref_mol)
     Chem.MolToPDBFile(ref_mol, known_pdb)
     ref_sele = mda.Universe(known_pdb).select_atoms('all')
     ref_sele.write(known_pdb)
@@ -102,28 +104,58 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
         # Get analogue atoms to align
         new_u = mda.Universe(analogue_out_path)
         new_sele = new_u.select_atoms('all')
+
+        #REMOVE
+        # new_sele.write('test1.pdb')
+
+        
         new_align_sele = new_sele.select_atoms('')
         new_align_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] 
         for new_atom in new_align_atoms:
             new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
 
+        #REMOVE
+        # new_align_sele.write('test2.pdb')
+
         # Get analogue matching atoms
         new_match_sele = new_sele.select_atoms('')
         new_match_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] + [atom for atom in analogue_atoms]
+
+
+        # REMOVE
+        # print(new_align_atoms, '\n', new_match_atoms)
+        
         for new_atom in new_match_atoms:
             new_match_sele = new_match_sele + new_sele.select_atoms('name ' + new_atom)
-            
+
+        #REMOVE
+        # new_match_sele.write('test3.pdb')
+
+        
         # Match internal coordinates   
         ref_bat_pdb = f'{analogue_name}_mcs.pdb'
         ref_match_sele.write(ref_bat_pdb)
         ref_match_sele = mda.Universe(ref_bat_pdb).select_atoms('all')
+
+        #REMOVE
+        # ref_match_sele.write('test_ref_match_sele.pdb')
+        
         new_sele = match_internal_coordinates(ref_match_sele, ref_match_atoms, ref_match_resids, new_sele, new_match_atoms)
+
+
+        #REMOVE
+        # new_sele.write('test4.pdb')
+
+        
         if os.path.exists(ref_bat_pdb):
             os.remove(ref_bat_pdb)  
             
         # Align analogue to reference
         alignto(mobile=new_align_sele,
                 reference=ref_align_sele)
+
+        #REMOVE
+        # new_sele.write('test5.pdb')
 
         # Evaluate RMSD
         RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
@@ -132,7 +164,7 @@ def analogue_alignment(smiles: str, known_pdb: str, analogue_out_path: str, anal
         if not os.path.exists(analogue_out_dir):
             os.mkdir(analogue_out_dir)
         conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(i) + '.pdb')
-        new_sele.write(conformer_out_path, bonds=None)
+        new_sele.write(conformer_out_path)
 
     return analogue_out_dir, new_match_atoms
 
@@ -140,7 +172,12 @@ def return_max_common_substructure(mol1, mol2):
     """
     Return indices of maximum common substructure between two rdkit molecules
     """
-    mcs = rdFMCS.FindMCS([mol1,mol2], matchValences=True, completeRingsOnly=True)
+    params = rdFMCS.MCSParameters()
+    params.AtomCompareParameters.CompleteRingsOnly = True
+    params.AtomCompareParameters.MatchValences = True
+    params.BondCompareParameters.MatchFusedRingsStrict = True
+    mcs = rdFMCS.FindMCS([mol1,mol2], params)
+    
     mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
     match1 = mol1.GetSubstructMatch(mcs_mol)
     target_atm1 = []
@@ -222,7 +259,7 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
                     new_tors[i] = ref_tors[j]
                 elif list(mobile_names) == list(np.flip(ref_names)):
                     new_tors[i] = ref_tors[j] - np.pi
-    
+
         return new_tors
 
 
@@ -234,9 +271,14 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
         mobile_tors_inds = np.array(mobile_R._torsion_XYZ_inds)
         
         ref_tors_names, ref_tors_resids = torsion_inds_to_names(fragment, ref_tors_inds)
+        print('ref_tors_names', ref_tors_names)
         mobile_tors_names, _ = torsion_inds_to_names(mobile, mobile_tors_inds)
         
         ref_converted = convert_ref_to_mobile_torsion_names(ref_tors_names, ref_tors_resids, ref_match_atoms, ref_match_resids, mobile_match_atoms)
+        print('ref_match_atoms   ', ref_match_atoms)
+        print('ref_match_resids   ', ref_match_resids)
+        print('mobile_match_atoms', mobile_match_atoms)
+        print('ref_converted', ref_converted)
         mobile_tors = change_torsions(mobile_tors, mobile_tors_names, ref_converted, ref_tors)
     
         mobile_bat[0, -len(mobile_tors):] = mobile_tors
