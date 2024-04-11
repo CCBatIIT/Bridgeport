@@ -162,8 +162,8 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         ref_match_sele = mda.Universe(ref_bat_pdb).select_atoms('all')
 
         #REMOVE
-        # print('ref_match_atoms', ref_match_atoms)
-        # print('new_match_atoms', new_match_atoms)
+        print('ref_match_atoms', ref_match_atoms)
+        print('new_match_atoms', new_match_atoms)
         # ref_match_sele.write('test_ref_match_sele.pdb')
         
         new_sele = match_internal_coordinates(ref_match_sele, ref_match_atoms, ref_match_resids, new_sele, new_match_atoms, new_aromatic_atoms)
