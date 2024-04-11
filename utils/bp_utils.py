@@ -89,42 +89,59 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
     
         #Get reference atoms to align
         ref_align_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] 
-        ref_align_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds] 
+        ref_align_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds]
+
+        # Get matching reference atoms 
+        for (atom, resid) in zip(known_atoms, known_resids):
+
+            # Check if atom already identified
+            if atom in ref_align_atoms:
+                atom_ind = ref_align_atoms.index(atom)
+                if resid == ref_align_resids[atom_ind]:
+                    # Remove atom
+                    ref_align_atoms.pop(atom_ind)
+                    ref_align_resids.pop(atom_ind)
+        
+        # Make selection for reference atoms to align
         ref_align_sele = ref_sele.select_atoms('')
         for ref_atom, ref_resid in zip(ref_align_atoms, ref_align_resids):
             ref_align_sele = ref_align_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
 
-        # Get matching reference atoms 
-        ref_match_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] + [atom for atom in known_atoms]
-        ref_match_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds] + [resid for resid in known_resids]
+        # Make selection for matching reference atoms
+        ref_match_atoms = ref_align_atoms + known_atoms
+        ref_match_resids = ref_align_resids + known_resids
         ref_match_sele = ref_sele.select_atoms('')
         for ref_atom, ref_resid in zip(ref_match_atoms, ref_match_resids):
             ref_match_sele = ref_match_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
 
-        # Get analogue atoms to align
-        new_u = mda.Universe(analogue_out_path)
-        new_sele = new_u.select_atoms('all')
-
-        #REMOVE
-        # new_sele.write('test1.pdb')
 
         
-        new_align_sele = new_sele.select_atoms('')
+        # Get analogue atoms to align
         new_align_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] 
+        
+        # Get analogue matching atoms
+        for atom in analogue_atoms:
+
+            # Check if atom already identified
+            if atom in new_align_atoms:
+                atom_ind = new_align_atoms.index(atom)
+                # Remove atom
+                new_align_atoms.pop(atom_ind)
+
+        # Make selection for analogue atoms to align
+        new_u = mda.Universe(analogue_out_path)
+        new_sele = new_u.select_atoms('all')
+        new_align_sele = new_sele.select_atoms('')
         for new_atom in new_align_atoms:
             new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
 
         #REMOVE
-        # new_align_sele.write('test2.pdb')
-
-        # Get analogue matching atoms
-        new_match_sele = new_sele.select_atoms('')
-        new_match_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] + [atom for atom in analogue_atoms]
-
-
-        # REMOVE
-        # print(new_align_atoms, '\n', new_match_atoms)
+        # new_sele.write('test1.pdb')
+        # new_align_sele.write('test2.pdb')   
         
+        # Make selection for matching analogue atoms
+        new_match_atoms = new_align_atoms + analogue_atoms
+        new_match_sele = new_sele.select_atoms('')
         for new_atom in new_match_atoms:
             new_match_sele = new_match_sele + new_sele.select_atoms('name ' + new_atom)
 
@@ -132,21 +149,29 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         # new_match_sele.write('test3.pdb')
 
         
+        # Get analogue aromatic atoms
+        new_aromatic_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in range(len(new_mol.GetAtoms())) if new_mol.GetAtoms()[i].GetIsAromatic() == True]
+
+        #REMOVE
+        # print('new_aromatic_atoms', new_aromatic_atoms)
+
+
         # Match internal coordinates   
         ref_bat_pdb = f'{analogue_name}_mcs.pdb'
         ref_match_sele.write(ref_bat_pdb)
         ref_match_sele = mda.Universe(ref_bat_pdb).select_atoms('all')
 
         #REMOVE
+        # print('ref_match_atoms', ref_match_atoms)
+        # print('new_match_atoms', new_match_atoms)
         # ref_match_sele.write('test_ref_match_sele.pdb')
         
-        new_sele = match_internal_coordinates(ref_match_sele, ref_match_atoms, ref_match_resids, new_sele, new_match_atoms)
+        new_sele = match_internal_coordinates(ref_match_sele, ref_match_atoms, ref_match_resids, new_sele, new_match_atoms, new_aromatic_atoms)
 
 
         #REMOVE
         # new_sele.write('test4.pdb')
 
-        
         if os.path.exists(ref_bat_pdb):
             os.remove(ref_bat_pdb)  
             
@@ -194,7 +219,7 @@ def return_max_common_substructure(mol1, mol2):
     
     return target_atm1, target_atm2
 
-def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, ref_match_resids: List, mobile: mda.AtomGroup, mobile_match_atoms: List):
+def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, ref_match_resids: List, mobile: mda.AtomGroup, mobile_match_atoms: List, mobile_aromatic_atoms: List):
     """
     Return an MDAnalysis.AtomGroup with internal coordinates that match a reference. 
 
@@ -254,31 +279,48 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
     def change_torsions(mobile_tors, mobile_tors_names, ref_converted, ref_tors):
         new_tors = mobile_tors.copy()
         for i, mobile_names in enumerate(mobile_tors_names):
+            n_aromatic_atoms = len([mobile_atom for mobile_atom in mobile_names if mobile_atom in mobile_aromatic_atoms])
             for j, ref_names in enumerate(ref_converted):
                 if list(mobile_names) == list(ref_names):
                     new_tors[i] = ref_tors[j]
+                    print(f'changing {mobile_names} ({mobile_tors[i]}) to match {ref_names} ({ref_tors[j]})') 
                 elif list(mobile_names) == list(np.flip(ref_names)):
-                    new_tors[i] = ref_tors[j] - np.pi
+                    if n_aromatic_atoms < 3:
+                        new_tors[i] = ref_tors[j] - np.pi
+                        print(f'changing {mobile_names} ({mobile_tors[i]}) to match {ref_names} ({ref_tors[j] - np.pi})')
+
+                    else:
+                        print(f'changing {mobile_names} ({mobile_tors[i]}) to match {ref_names} ({ref_tors[j]})')
+                        new_tors[i] = ref_tors[j]
+
 
         return new_tors
 
 
     mobile_R, mobile_bat, mobile_tors = return_BAT(mobile)
-    for fragment in ref_match.fragments:    
+    for fragment in ref_match.fragments:
+        
         ref_R, ref_bat, ref_tors = return_BAT(fragment)
         
         ref_tors_inds = np.array(ref_R._torsion_XYZ_inds)
         mobile_tors_inds = np.array(mobile_R._torsion_XYZ_inds)
         
         ref_tors_names, ref_tors_resids = torsion_inds_to_names(fragment, ref_tors_inds)
-        print('ref_tors_names', ref_tors_names)
         mobile_tors_names, _ = torsion_inds_to_names(mobile, mobile_tors_inds)
         
         ref_converted = convert_ref_to_mobile_torsion_names(ref_tors_names, ref_tors_resids, ref_match_atoms, ref_match_resids, mobile_match_atoms)
+
+        #REMOVE
         print('ref_match_atoms   ', ref_match_atoms)
-        print('ref_match_resids   ', ref_match_resids)
+        # print('ref_match_resids   ', ref_match_resids)
         print('mobile_match_atoms', mobile_match_atoms)
+        print('ref_tors_names', ref_tors_names)
         print('ref_converted', ref_converted)
+        print('ref_tors', ref_tors)
+
+        print('mobile_tors_names', mobile_tors_names)
+
+        
         mobile_tors = change_torsions(mobile_tors, mobile_tors_names, ref_converted, ref_tors)
     
         mobile_bat[0, -len(mobile_tors):] = mobile_tors
