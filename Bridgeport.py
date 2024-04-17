@@ -184,6 +184,7 @@ class Bridgeport():
                 self._build_analogue_complex()
       
         # Run 
+#        raise Exception()
         self._separate_lig_prot()     
         self._repair_crystal()
         self._add_environment()

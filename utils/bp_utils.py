@@ -86,7 +86,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         
         # Write out analogue to .pdb file
         Chem.MolToPDBFile(new_mol, analogue_out_path)
-    
+        Chem.MolToPDBFile(new_mol, f'test_conformer_{i}.pdb')    
         #Get reference atoms to align
         ref_align_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] 
         ref_align_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds]
@@ -100,12 +100,11 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
             # Check if atom already identified
             if atom in new_align_atoms:
                 atom_ind = new_align_atoms.index(atom)
-                # Remove atom
-                
+                # Remove atom                
                 ref_align_atoms.pop(atom_ind)
                 ref_align_resids.pop(atom_ind)
                 new_align_atoms.pop(atom_ind)
-        
+
         # Make selection for reference atoms to align
         ref_align_sele = ref_sele.select_atoms('')
         for ref_atom, ref_resid in zip(ref_align_atoms, ref_align_resids):
@@ -140,10 +139,14 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         new_sele = match_internal_coordinates(ref_match_sele, ref_match_atoms, ref_match_resids, new_sele, new_match_atoms)
             
         # Align analogue to reference
+        print('!!!new_align_sele_atoms_names', new_align_sele.atoms.names)
+        print('!!!ref_align_sele_atoms_names', ref_align_sele.atoms.names)
         alignto(mobile=new_align_sele,
                 reference=ref_align_sele)
 
         # Evaluate RMSD
+        print('!!!new_match_sele_atoms_names', new_match_sele.atoms.names)
+        print('!!!ref_match_sele_atoms_names', ref_match_sele.atoms.names)
         RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
 
         # Write out conformer            
@@ -267,6 +270,10 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
     mobile_tors_names, _ = torsion_inds_to_names(mobile, mobile_tors_inds)
 
     # Iterate through torsions
+    for i, names in enumerate(mobile_tors_names):
+        print(i, mobile_R._primary_torsion_indices[i], names)
+
+    changed = [False for i in range(len(mobile_tors_names))]
     for i, atom_names in enumerate(mobile_tors_names):
 
         prev_tors = mobile_tors[i]
@@ -279,6 +286,7 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
         atom_inds = []
         for a in atom_names:
             atom_inds.append(list(mobile.atoms.names).index(a))
+
         if 'X' not in ref_eq_atoms:
             
             # Select reference atoms
@@ -289,11 +297,22 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
             # Calculated dihedral angle and assign to analogue
             c1, c2, c3, c4 = ref_tors_sele.positions
             dihedral = calc_dihedrals(c1, c2, c3, c4)
+            print(f'Changing {atom_names} ({mobile_tors[i]}) to match {ref_eq_atoms} ({dihedral})') 
             mobile_tors[i] = dihedral
+            #changed[mobile_R._primary_torsion_indices[i]] = True
+            changed[i] = True
+        else:
+            print('cannot change', atom_names, 'no match', ref_eq_atoms)
         
     # Convert BAT to cartesian
     mobile_bat[0, -len(mobile_tors):] = mobile_tors
-    mobile_R._unique_primary_torsion_indices = range(len(mobile_R._primary_torsion_indices)) # Cancel handling of improper torsions from BAT class
+    print('!!!prim_tors_inds', mobile_R._primary_torsion_indices)
+    print('!!!unique_prim', mobile_R._unique_primary_torsion_indices)
+    changed_inds = [i for i in range(len(changed)) if changed[i] == True]
+    print('!!!changed_inds', changed_inds)
+    mobile_R._unique_primary_torsion_indices = list(np.unique(mobile_R._unique_primary_torsion_indices + changed_inds))
+    print('!!!Unique_prim', mobile_R._unique_primary_torsion_indices)
+    #mobile_R._unique_primary_torsion_indices = range(len(mobile_R._primary_torsion_indices)) # Cancel handling of improper torsions from BAT class
     mobile.positions = mobile_R.Cartesian(mobile_bat[0])
     
     return mobile
