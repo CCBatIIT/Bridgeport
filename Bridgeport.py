@@ -165,6 +165,10 @@ class Bridgeport():
                 self.analogue_atoms = self.input_params['ligand']['add_analogue_atoms']
             else:
                 self.analogue_atoms = []
+            if 'remove_analogue_atoms' in self.input_params['ligand'] and self.input_params['ligand']['remove_analogue_atoms'] != False:
+                self.remove_analogue_atoms = self.input_params['ligand']['remove_analogue_atoms']
+            else:
+                self.remove_analogue_atoms = []
             if 'add_known_atoms' in self.input_params['ligand'] and self.input_params['ligand']['add_known_atoms'] != False:
                 self.known_atoms = self.input_params['ligand']['add_known_atoms']
             else:
@@ -173,6 +177,10 @@ class Bridgeport():
                 self.known_resids = self.input_params['ligand']['add_known_resids']
             else:
                 self.known_resids = []
+            if 'align_all' in self.input_params['ligand'] and self.input_params['ligand']['align_all'] == True:
+                self.align_all = True
+            else:
+                self.align_all = False
                                 
         
         # Align first
@@ -224,6 +232,8 @@ class Bridgeport():
         elif hasattr(self, 'analogue_chainid'):
             ref_sele = ref_u.select_atoms('chainid '+ self.analogue_chainid)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand with chainid:', self.analogue_chainid, 'and', ref_sele.n_atoms, 'number of atoms', flush=True)
+        else:
+            raise ValueError("Must specify known_resname or known_chainid in input.json file")
         assert ref_sele.n_atoms > 0, f"Could not find any atoms with resname {self.analogue_resname}"
         prot_sele = ref_u.select_atoms(f'chainid {self.input_params["protein"]["chains"]}')
         assert prot_sele.n_atoms > 0, f"Could not find any protein atoms in {self.analogue_pdb}"
@@ -251,14 +261,15 @@ class Bridgeport():
                            known_smiles = self.analogue_known_smiles,
                            analogue_out_path=lig_path,
                            analogue_atoms=self.analogue_atoms,
+                           remove_analogue_atoms=self.remove_analogue_atoms,
                            known_atoms=self.known_atoms,
                            known_resids = self.known_resids,
                            rmsd_thres=rmsd_thres,
-                           n_conformers=n_confs)
+                           n_conformers=n_confs,
+                           align_all=self.align_all)
 
-        print('!!! ANALOGUE MAXIMUM COMMON SUBSTRUCTURE ATOMS', self.analogue_mcs)
+        # print('!!! ANALOGUE MAXIMUM COMMON SUBSTRUCTURE ATOMS', self.analogue_mcs)
         self.analogue_pdbs = os.listdir(self.analogue_dir)
-        print(self.analogue_dir, self.analogue_pdbs)
         lig_path = os.path.join(self.analogue_dir, self.analogue_pdbs[0])
         
         # Combine to create new initial complex
