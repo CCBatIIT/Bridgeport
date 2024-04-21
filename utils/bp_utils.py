@@ -300,10 +300,6 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
                                                     ref_match_names=ref_match_atoms,
                                                     ref_match_resids=ref_match_resids)
 
-        atom_inds = []
-        for a in atom_names:
-            atom_inds.append(list(mobile.atoms.names).index(a))
-
         if 'X' not in ref_eq_atoms:
             
             # Select reference atoms
@@ -317,13 +313,17 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
             mobile_tors[i] = dihedral
             #changed[mobile_R._primary_torsion_indices[i]] = True
             changed[i] = True
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Changed', atom_names, f'({prev_tors}) to match', ref_eq_atoms, f'({mobile_tors[i]})', flush=True)
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Could not change', atom_names, 'to match', ref_eq_atoms, flush=True)
+
+
 
         
     # Convert BAT to cartesian
     mobile_bat[0, -len(mobile_tors):] = mobile_tors
     changed_inds = [i for i in range(len(changed)) if changed[i] == True]
-    mobile_R._unique_primary_torsion_indices = list(np.unique(mobile_R._unique_primary_torsion_indices + changed_inds))
-    #mobile_R._unique_primary_torsion_indices = range(len(mobile_R._primary_torsion_indices)) # Cancel handling of improper torsions from BAT class
+    mobile_R._unique_primary_torsion_indices = list(np.unique(mobile_R._unique_primary_torsion_indices + changed_inds)) # Cancel handling of improper torsions from BAT class
     mobile.positions = mobile_R.Cartesian(mobile_bat[0])
     
     return mobile
