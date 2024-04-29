@@ -133,26 +133,31 @@ class Bridgeport():
         """
         # If analogue, create new intial structure
         if self.input_params['ligand']['lig_resname'] == False and self.input_params['ligand']['peptide_chain'] == False:
+            
             if 'analogue_smiles' in self.input_params['ligand'] and self.input_params['ligand']['analogue_smiles'] != False:
                 self.analogue_smiles=self.input_params['ligand']['analogue_smiles']
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with smiles:', self.analogue_smiles, flush=True)
             else:
                 raise Exception('"analogue_smiles" must be specified if "lig_resname" and "peptide_chain" are False.')
+            
             if 'analogue_name' in self.input_params['ligand'] and self.input_params['ligand']['analogue_name'] != False:
                 self.analogue_name=self.input_params['ligand']['analogue_name']
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found analogue with name:', self.analogue_name, flush=True)
             else:
                 raise Exception('"analogue_name" must be specified if "lig_resname" and "peptide_chain" are False.')
+            
             if 'known_structure' in self.input_params['ligand'] and self.input_params['ligand']['known_structure'] != False:
                 self.analogue_pdb = self.input_params['ligand']['known_structure']
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand file:', self.analogue_pdb, flush=True)
             else:
                 raise Exception('"known_structure" must be specified if "lig_resname" and "peptide_chain" are False.')
+            
             if 'known_smiles' in self.input_params['ligand'] and self.input_params['ligand']['known_smiles'] != False:
                 self.analogue_known_smiles = self.input_params['ligand']['known_smiles']
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand smiles:', self.analogue_known_smiles, flush=True)
             else:
                 raise Exception('"known_smiles" must be specified if "lig_resname" and "peptide_chain" are False.')
+            
             if 'known_resname' in self.input_params['ligand'] and self.input_params['ligand']['known_resname'] != False:
                 self.analogue_resname = self.input_params['ligand']['known_resname']
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand resname:', self.analogue_resname, flush=True)
@@ -161,22 +166,27 @@ class Bridgeport():
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found reference ligand chainid:', self.analogue_chainid, flush=True)
             else:
                 raise Exception('"known_resname" or "known_chainid" must be specified if "lig_resname" and "peptide_chain" are False.')
+            
             if 'add_analogue_atoms' in self.input_params['ligand'] and self.input_params['ligand']['add_analogue_atoms'] != False:
                 self.analogue_atoms = self.input_params['ligand']['add_analogue_atoms']
             else:
                 self.analogue_atoms = []
+            
             if 'remove_analogue_atoms' in self.input_params['ligand'] and self.input_params['ligand']['remove_analogue_atoms'] != False:
                 self.remove_analogue_atoms = self.input_params['ligand']['remove_analogue_atoms']
             else:
                 self.remove_analogue_atoms = []
+            
             if 'add_known_atoms' in self.input_params['ligand'] and self.input_params['ligand']['add_known_atoms'] != False:
                 self.known_atoms = self.input_params['ligand']['add_known_atoms']
             else:
                 self.known_atoms = []
+            
             if 'add_known_resids' in self.input_params['ligand'] and self.input_params['ligand']['add_known_resids'] != False:
                 self.known_resids = self.input_params['ligand']['add_known_resids']
             else:
                 self.known_resids = []
+            
             if 'align_all' in self.input_params['ligand'] and self.input_params['ligand']['align_all'] == True:
                 self.align_all = True
             else:
@@ -192,11 +202,18 @@ class Bridgeport():
                 self._build_analogue_complex()
       
         # Run 
-#        raise Exception()
+        #Ligand and Protein Seperate
         self._separate_lig_prot()     
-        self._repair_crystal()
+        #Make Repair Protein Optional be setting working dir to false if it shouldn't be done
+        if self.input_params['RepairProtein']['working_dir'] != False:
+            self._repair_crystal()
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Repair Working Dir set to False - Skipping Repairs with Modeller', flush=True)
+        #Add Water (and possibly membrane)
         self._add_environment()
+        #Prepare Ligand
         self._ligand_prep()
+        #Make OpenMM Systems
         self._generate_systems()
 
         # Choose analogue complex, if applicable
@@ -315,16 +332,32 @@ class Bridgeport():
 
             # Slim to correct chain
             u = mda.Universe(input_pdb_path)
-            chain_sele = u.select_atoms('chainid ' + self.input_params['protein']['chains'])
+            # Parse if one chain or multiple
+            if type(self.input_params["protein"]["chains"]) == list:
+                num_chains = len(self.input_params["protein"]["chains"])
+                chain_sele_string = '('
+                for i in range(num_chains - 1):
+                    chain_sele_string += f'chainid {self.input_params["protein"]["chains"][i]} or '
+                chain_sele_string += f'chainid {self.input_params["protein"]["chains"][-1]})'
+            elif type(self.input_params["protein"]["chains"]) == str:
+                chain_sele_string = f'chainid {self.input_params["protein"]["chains"]}'
+            else:
+                raise Exception('input_params["protein"]["chains"] must be either list or string')
+            #Make the selection
+            chain_sele = u.select_atoms(chain_sele_string)
 
             # Get resids
             resids = chain_sele.residues.resids
 
             # Find matching resids
             matching_resids, matching_res_inds, matching_ref_res_inds = np.intersect1d(resids, ref_resids, return_indices=True)
-            sele_str = 'chainid ' + self.input_params['protein']['chains'] + ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) + ' and backbone'
-            ref_sele_str = 'resid ' + ' '.join(str(ref_resids[res_ind]) for res_ind in matching_ref_res_inds) + ' and backbone'
-            
+                        
+            sele_str = chain_sele_string +\
+                       ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
+                       ' and backbone'
+            ref_sele_str = chain_sele_string +\
+                           ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
+                           ' and backbone'
             # Align
             _, _ = alignto(mobile=u, 
                     reference=ref,
@@ -364,9 +397,20 @@ class Bridgeport():
         u = mda.Universe(pdb_path)
 
         # Select protein by chain ID 
-        prot_sele = u.select_atoms(f'protein and chainid {self.input_params["protein"]["chains"]}')
+        if type(self.input_params["protein"]["chains"]) == list:
+            num_chains = len(self.input_params["protein"]["chains"])
+            chain_sele_string = '('
+            for i in range(num_chains - 1):
+                chain_sele_string += f'chainid {self.input_params["protein"]["chains"][i]} or '
+            chain_sele_string += f'chainid {self.input_params["protein"]["chains"][-1]})'
+        elif type(self.input_params["protein"]["chains"]) == str:
+            chain_sele_string = f'chainid {self.input_params["protein"]["chains"]}'
+        else:
+            raise Exception('input_params["protein"]["chains"] must be either list or string')
+
+        prot_sele = u.select_atoms(f'protein and {chain_sele_string}')
         prot_sele.write(os.path.join(self.prot_only_dir, pdb_fn))
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated chain', self.input_params["protein"]["chains"], 'from input structure', flush=True)  
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated chain(s)', self.input_params["protein"]["chains"], 'from input structure', flush=True)  
 
         # Select ligand by resname or peptide_chain
         lig_resname = self.input_params['ligand']['lig_resname']
