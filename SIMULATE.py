@@ -30,7 +30,6 @@ input_pdb = os.path.join(input_dir, name+'.pdb')
 # Outputs
 output_dir = os.path.join(sys.argv[3], name)
 rep = sys.argv[4]
-assert isinstance(rep, int)
 if not os.path.exists(output_dir):
     os.mkdir(output_dir)
 assert os.path.exists(output_dir)
