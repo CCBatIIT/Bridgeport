@@ -203,7 +203,7 @@ class MotorRow():
 
     def _run_step(self, state_in:str, stepnum:int, state_xml_out:str=None, pdb_out:str=None,
                   fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, nstdout=1000,
-                  fn_stdout=None, ndcd=5000, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
+                  fn_stdout=None, ndcd=5000, append_dcd: bool=False, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
         """
         Run different hard-coded Simulations based on the step number
         1 - NVT with Heavy Restraints on the Protein and Membrane (Z) coords
@@ -313,10 +313,11 @@ class MotorRow():
         
         SDR = app.StateDataReporter(fn_stdout, nstdout, step=True, time=True,
                                     potentialEnergy=True, temperature=True, progress=False,
-                                    remainingTime=True, speed=False, volume=True,
+                                    remainingTime=True, speed=True, volume=True,
                                     totalSteps=nsteps, separator=' : ')
+        
         simulation.reporters.append(SDR)
-        DCDR = app.DCDReporter(fn_dcd, ndcd)
+        DCDR = app.DCDReporter(file=fn_dcd, reportInterval=ndcd, append=append_dcd)
         simulation.reporters.append(DCDR)
         print(f'Starting Step {stepnum} with forces {simulation.system.getForces()}')
         print(f'Starting Step {stepnum} with box_vectors {simulation.system.getDefaultPeriodicBoxVectors()}')
