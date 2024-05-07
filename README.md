@@ -63,6 +63,7 @@ If you want to generate an analogue of a known structure: Make sure lig_resname 
 - **"pH"**: Specify the pH. Default is 7.0.
 - **"ion_strength"**: Specify the concentration of NaCl ions (in Molar). Default is 0.15 M.
 - **"alignment_structure"**: Path to structure to align the final system to.
+- **"alignment_chains"**: List of chains in the alignment structure to use for alignment. EX: ["A"]
 
 ## Examples
 ### 7vvk (membrane, peptide ligand)
