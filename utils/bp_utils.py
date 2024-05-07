@@ -111,10 +111,11 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
                 atom_ind = new_align_atoms.index(atom)
                 
                 # Remove atom                
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removing', atom, 'from atoms to align in analogue and', ref_align_atoms[atom_ind], ref_align_resids[atom_ind], 'from atoms to align in reference.', flush=True)
                 ref_align_atoms.pop(atom_ind)
                 ref_align_resids.pop(atom_ind)
                 new_align_atoms.pop(atom_ind)
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removed', atom, 'from atoms to align in analogue and', ref_align_atoms[atom_ind], ref_align_resids[atom_ind], 'from atoms to align in reference.', flush=True)
+
 
         # Make selection for reference atoms to align
         ref_align_sele = ref_sele.select_atoms('')
