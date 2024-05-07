@@ -326,15 +326,11 @@ class MotorRow():
         print(f'Step {stepnum} completed after {end}')
         print(f'Box Vectors after this step {simulation.system.getDefaultPeriodicBoxVectors()}')
         
-        if pdb_out is not None:
-            pass
-        else:
+        if pdb_out is None:
             pdb_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.pdb')
         self._write_structure(simulation, pdb_out)
 
-        if state_xml_out is not None:
-            pass
-        else:
+        if state_xml_out is None:
             state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
         self._write_state(simulation, state_xml_out)
         
