@@ -316,6 +316,7 @@ class Bridgeport():
 
         # Load reference structure
         ref_pdb_path = self.input_params['environment']['alignment_ref']
+        ref_chains = self.input_params['environment']['alignment_chains']
         if os.path.exists(ref_pdb_path):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found references structure', ref_pdb_path, flush=True)  
         else:
@@ -332,6 +333,7 @@ class Bridgeport():
 
             # Slim to correct chain
             u = mda.Universe(input_pdb_path)
+            
             # Parse if one chain or multiple
             if type(self.input_params["protein"]["chains"]) == list:
                 num_chains = len(self.input_params["protein"]["chains"])
@@ -343,6 +345,7 @@ class Bridgeport():
                 chain_sele_string = f'chainid {self.input_params["protein"]["chains"]}'
             else:
                 raise Exception('input_params["protein"]["chains"] must be either list or string')
+            
             #Make the selection
             chain_sele = u.select_atoms(chain_sele_string)
 
@@ -355,7 +358,7 @@ class Bridgeport():
             sele_str = chain_sele_string +\
                        ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
                        ' and backbone'
-            ref_sele_str = chain_sele_string +\
+            ref_sele_str = 'chainid ' + ' or '.join(chain for chain in ref_chains) +\
                            ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
                            ' and backbone'
             # Align

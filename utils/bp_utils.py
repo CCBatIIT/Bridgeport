@@ -73,9 +73,10 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
 
     # Create analogue with smiles
     new_mol = Chem.MolFromSmiles(smiles)
+    AllChem.EmbedMolecule(new_mol) # Embed immediately to retain stereochem specified in isomeric smiles
     new_mol_pdb_block = Chem.MolToPDBBlock(new_mol)
     new_mol = Chem.MolFromPDBBlock(new_mol_pdb_block)
-    AllChem.EmbedMolecule(new_mol)
+
     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created analogue', analogue_name, 'from smiles:', smiles , flush=True)
 
     # Get indices of max. common substructure 
@@ -85,7 +86,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
     for i in range(n_conformers):
         #Generate conformer
         AllChem.EmbedMolecule(new_mol, randomSeed=i)
-        
+
         # Write out analogue to .pdb file
         Chem.MolToPDBFile(new_mol, analogue_out_path)
         
