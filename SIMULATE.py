@@ -1,5 +1,6 @@
 """
 USAGE: python SIMULATE.py INPUT_DIR NAME OUTPUT_DIR REPLICATE NSTEPS
+--------------------------------------------------------------------
     INPUT_DIR: absolute path to the directory with input xml and pdb
     NAME: name of both xml and pdb file before the extension
     OUTPUT_DIR: absolute path to the directory where a subdirectory with output will be stored
@@ -7,11 +8,13 @@ USAGE: python SIMULATE.py INPUT_DIR NAME OUTPUT_DIR REPLICATE NSTEPS
     NSTEPS: Number of simulation steps to take. Default is 167000000 which equils 501 ns w/ a 3 fs timestep
 
 DEFAULT SIMULATION PARAMETERS:
-
-
-
-
-
+------------------------------
+    timestep -> 3 fs
+    stdout -> 10 ps
+    dcdout -> 100 ps
+    append_dcd -> True
+    temp -> 300 K
+    pressure -> 1 bar
 """
 
 import os, sys
