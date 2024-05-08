@@ -43,7 +43,7 @@ class MotorRow():
         if not os.path.isdir(self.abs_work_dir):
             os.mkdir(self.abs_work_dir)
         #Get the system xml file (we want to create a system fresh from this every time)
-        if os.path.isabs(system_xml):
+        if system_xml is None or os.path.isabs(system_xml):
             pass
         else:
             shutil.copy(system_xml, os.path.join(self.abs_work_dir, system_xml))
