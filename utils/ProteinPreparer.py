@@ -77,21 +77,26 @@ class ProteinPreparer():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Welcome to ProteinPreparer', flush=True)
 
     def main(self):
+        
         # Protonate (with pdb2pqr30 which also adds missing atoms, but not missing residues)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protonating protein with pdb2pqr30', flush=True)
-        protein_protonated = self._protonate_with_pdb2pqr(at_pH=self.pH)
-        if os.path.exists(protein_protonated):
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Output written to:', protein_protonated, flush=True)
+        self.H_pdb = self._protonate_with_pdb2pqr(at_pH=self.pH)
+
+        # Check completion
+        if os.path.exists(self.H_pdb):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Output written to:', self.H_pdb, flush=True)
         
         #Create Environment
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Creating environment with pdbfixer', flush=True)
-        protein_solvated = self._run_PDBFixer(mode=self.env,
-                                              padding=1.5,
-                                              ionicStrength=self.ion)
-        if os.path.exists(protein_solvated):
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Output written to:', protein_solvated, flush=True)
+        self._run_PDBFixer(mode=self.env, padding=1.5, ionicStrength=self.ion)
 
-        return protein_solvated
+        # Check completion
+        if os.path.exists(self.env_pdb):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Output written to:', self.env_pdb, flush=True)
+
+        #
+
+        return self.env_pdb
         
 
     def _protonate_with_pdb2pqr(self, at_pH=7):
@@ -106,32 +111,32 @@ class ProteinPreparer():
         --------
             2-tuple = (protein_H_fn, protein_pqr_fn); file paths (as strings) to the protonated pdb and pqr file
         """
-        self.protein_H_path = os.path.join(self.working_dir, self.prot_name + '_H.pdb')
+        self.H_pdb = os.path.join(self.working_dir, self.prot_name + '_H.pdb')
         protein_pqr_path = os.path.join(self.working_dir, self.prot_name + '.pqr')
-        # my_cmd = f'pdb2pqr30 --ff AMBER --log-level CRITICAL --nodebump --keep-chain --ffout AMBER --pdb-output {self.protein_H_path} --with-ph {at_pH} {self.receptor_path} {protein_pqr_path}'
-        my_cmd = f'pdb2pqr30 --ff AMBER --nodebump --keep-chain --ffout AMBER --pdb-output {self.protein_H_path} --with-ph {at_pH} {self.receptor_path} {protein_pqr_path}'
+        # my_cmd = f'pdb2pqr30 --ff AMBER --log-level CRITICAL --nodebump --keep-chain --ffout AMBER --pdb-output {self.H_pdb} --with-ph {at_pH} {self.receptor_path} {protein_pqr_path}'
+        my_cmd = f'pdb2pqr30 --ff AMBER --nodebump --keep-chain --ffout AMBER --pdb-output {self.H_pdb} --with-ph {at_pH} {self.receptor_path} {protein_pqr_path}'
         print('Protanting using command line')
         print(f'Running {my_cmd}')
         exit_status = os.system(my_cmd)
         # print(f'Done with exit status {exit_status}')
-        return self.protein_H_path
+        return self.H_pdb
 
     def _protonate_with_PDBFixer(self, at_pH=7):
         if not hasattr(self, "protein_H_path"):
             H_pdb_path = os.path.join(self.working_dir, self.prot_name + '_H.pdb')
             if os.path.exists(H_pdb_path):
-                self.protein_H_path = H_pdb_path
+                self.H_pdb = H_pdb_path
             else:
-                self.protein_H_path = self.receptor_path
-        fixer = PDBFixer(self.protein_H_path)
+                self.H_pdb = self.receptor_path
+        fixer = PDBFixer(self.H_pdb)
         # fixer.findMissingResidues()
         # fixer.findMissingAtoms()
         # print('!!!missingTerminals', fixer.missingAtoms)
         # fixer.addMissingAtoms()
         fixer.addMissingHydrogens(at_pH)
-        PDBFile.writeFile(fixer.topology, fixer.positions, open(self.protein_H_path, 'w'), keepIds=True)
+        PDBFile.writeFile(fixer.topology, fixer.positions, open(self.H_pdb, 'w'), keepIds=True)
 
-        return self.protein_H_path
+        return self.H_pdb
     
     def _run_PDBFixer(self,
                       mode: str = "MEM",
@@ -151,7 +156,7 @@ class ProteinPreparer():
             solvated_file_fn: the filename of the solvated output
         """
         assert mode in ['MEM', 'SOL']
-        fixer = PDBFixer(self.protein_H_path)
+        fixer = PDBFixer(self.H_pdb)
 
         if mode == 'MEM':
             fixer.addMembrane('POPC', minimumPadding=padding * nanometer, ionicStrength=ionicStrength * molar)
@@ -161,11 +166,10 @@ class ProteinPreparer():
         fixer.addMissingHydrogens()
         
         # ADD PDBFixer hydrogens and parsing crystal structures (Hydrogens with pdb2pqr30 at the moment)
-        if out_file_fn is None:
-            out_file_fn = os.path.join(self.working_dir, self.prot_name + f'_env.pdb')
+        if not hasattr(self, "env_pdb"):
+            self.env_pdb = os.path.join(self.working_dir, self.prot_name + f'_env.pdb')
         
-        with open(out_file_fn, "w") as f:
+        with open(self.env_pdb, "w") as f:
             PDBFile.writeFile(fixer.topology, fixer.positions, f, keepIds=True)
-        return out_file_fn
         
         
