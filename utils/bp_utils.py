@@ -5,6 +5,7 @@ from MDAnalysis.analysis.align import alignto
 from MDAnalysis.analysis.rms import rmsd
 from MDAnalysis.analysis.bat import BAT
 from MDAnalysis.lib.distances import calc_dihedrals
+from MDAnalysis.coordinates.PDB import PDBWriter
 import mdtraj as md
 from pdbfixer import PDBFixer
 from openbabel import openbabel

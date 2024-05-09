@@ -31,23 +31,32 @@ from datetime import datetime
 import argparse
 
 # Arguments
-parser - argparse.ArgumentParser()
-parser.add_argument(sys_pdb, help='Positional argument must be absolute path to system.pdb file to save!')
+parser = argparse.ArgumentParser()
+parser.add_argument('sys_pdb', help='Positional argument must be absolute path to system.pdb file to save!')
 parser.add_argument('--lig-resname', help='Resname of ligand to parse, typically "UNK"')
 args = parser.parse_args()
 
 
 # Organize
 sys_pdb = args.sys_pdb
-name = sys_pdb.split('.')[-1].split('/')[-1]
+name = sys_pdb.split('.')[0].split('/')[-1]
 
 sys_xml = sys_pdb.split('.')[0] + '.xml'
 assert os.path.exists(sys_xml), f"Could not find {sys_xml}"  
 
-working_dir = '/'.join(sys_pdb.split('/')[:-1])
+working_dir = '/'.join(sys_pdb.split('/')[:-2])
 
-lig_sdf = os.path.join(working_dir, 'ligands/' + name + '.sdf')
-assert os.path.exists(lig_sdf), f"Could not find {lig_sdf}"
+if args.lig_resname != None:
+    small_molecule = True
+else:
+    small_molecule = False
+
+if small_molecule:
+    lig_fn = os.path.join(working_dir, 'ligands/' + name + '.sdf')
+    assert os.path.exists(lig_fn), f"Could not find {lig_fn}"
+else:
+    lig_fn = os.path.join(working_dir, 'ligands/' + name + '.pdb')
+    assert os.path.exists(lig_fn), f"Could not find {lig_fn}"
 
 env_pdb = os.path.join(working_dir, 'proteins/' + name + '_env.pdb')
 assert os.path.exists(env_pdb), f"Could not find {env_pdb}"
@@ -60,7 +69,7 @@ trim_env(env_pdb)
 
 # Create OpenMM System
 prot_sys, prot_top, prot_pos = ForceFieldHandler(env_pdb).main()
-lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_sdf).main()
+lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_fn).main()
 sys, top, pos = Joiner((lig_sys, lig_top, lig_pos), (prot_sys, prot_top, prot_pos)).main()
 
 
@@ -81,7 +90,7 @@ print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Wrote:', trimmed_pd
 
 with open(sys_xml, 'w') as f:
     f.write(XmlSerializer.serialize(sim.system))
-print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Wrote:', trimmed_xml, flush=True)
+print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Wrote:', sys_xml, flush=True)
 
 
 # Adjust protein/ligand coordinates
@@ -102,11 +111,11 @@ prot.positions = old_prot.positions.copy()
 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Matched protein coordinates from original:', sys_pdb, flush=True)
 
 # Adjust ligand coordinates 
-if args.lig_resname != None:
+if small_molecule:
     old_lig = old_u.select_atoms(f'resname {args.lig_resname}')
     lig = u.select_atoms(f'resname {args.lig_resname}')
-lig.positions = old_lig.positions.copy()
-print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Matched ligand coordinates from original:', sys_pdb, flush=True)
+    lig.positions = old_lig.positions.copy()
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Matched ligand coordinates from original:', sys_pdb, flush=True)
 
 u.select_atoms('all').write(sys_pdb)
 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Overwrote final trimmed file to:', sys_pdb, flush=True)

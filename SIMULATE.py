@@ -24,8 +24,10 @@ from MotorRow import MotorRow
 # Inputs
 input_dir = sys.argv[1]
 name = sys.argv[2]
-input_xml = os.path.join(input_dir, name+'.xml')
+input_sys = os.path.join(input_dir, name+'_sys.xml')
+input_state = os.path.join(input_dir, name+'_state.xml')
 input_pdb = os.path.join(input_dir, name+'.pdb')
+print(input_pdb)
 
 # Outputs
 output_dir = os.path.join(sys.argv[3], name)
@@ -40,12 +42,17 @@ output_xml = os.path.join(output_dir, name+'_'+rep+'.xml')
 
 # Simulation parameters
 try:
-    n_steps = sys.argv[5]
+    n_steps = int(sys.argv[5])
 except:
     n_steps = 167000000
 
+# Append?
+if os.path.exists(output_dcd):
+    append_dcd = True
+else:
+    append_dcd = False
+
 # Simulate
-row = MotorRow(input_xml, input_pdb, output_dir)
-state, pdb = row._minimize(input_pdb)
-_, _ = row._run_step(state, stepnum=5, dt=3.0, n_steps=n_steps, nstdout=30000, fn_stdout=output_dat, ndcd=300000, append_dcd=True, fn_dcd=output_dcd, pdb_out=output_pdb, state_xml_out=output_xml)
+row = MotorRow(input_sys, input_pdb, output_dir)
+_, _ = row._run_step(input_state, stepnum=5, dt=2.0, nsteps=n_steps, nstdout=5, fn_stdout=output_dat, ndcd=50000, append_dcd=append_dcd, fn_dcd=output_dcd, pdb_out=output_pdb, state_xml_out=output_xml)
 
