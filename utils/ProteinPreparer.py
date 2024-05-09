@@ -7,6 +7,7 @@ from openmm.app import *
 from openmm import *
 from openmm.unit import *
 from datetime import datetime
+from bp_utils import trim_env
 
 
 
@@ -94,7 +95,9 @@ class ProteinPreparer():
         if os.path.exists(self.env_pdb):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Output written to:', self.env_pdb, flush=True)
 
-        #
+        # Trim 
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Trimming', self.env_pdb, 'with padding of 15 Angstroms.', flush=True)
+        trim_env(self.env_pdb, 15)
 
         return self.env_pdb
         

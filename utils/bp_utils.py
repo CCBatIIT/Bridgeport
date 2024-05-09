@@ -113,9 +113,9 @@ def trim_env(pdb, padding: float=15):
     trimmed_sele.write(pdb)
     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Trimmed environment saved to:', pdb , flush=True)
 
-
-
-
+    # # Remove MDAnalysis headers
+    # lines = [line for line in open(pdb, 'r').readlines() if line.startswith('ATOM') or line.startswith('HETATM') or line.startswith('CONECT') or line.startswith('CRYST1')]
+    # open(pdb, 'w').writelines(lines)
 
 
 def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_out_path: str, analogue_atoms: List[str]=[], remove_analogue_atoms: List[str]= [], known_atoms: List[str]=[], known_resids: List[int]=[], rmsd_thres: float=None, n_conformers: int=100, align_all: bool=False):

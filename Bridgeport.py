@@ -507,7 +507,7 @@ class Bridgeport():
             lig_fn = self.input_params['protein']['input_pdb']        
 
             # Get crystal information from protein
-            crys_line = open(os.path.join(self.prot_only_dir, lig_fn.split('.')[0]+'_env.pdb'), 'r').readlines()[1]
+            crys_line = [line for line in open(os.path.join(self.prot_only_dir, lig_fn.split('.')[0]+'_env.pdb'), 'r').readlines() if line.startswith('CRYS')][0]
             assert crys_line.startswith('CRYS'), f"No crystal line found at top of {lig_fn.split('.')[0]}_env.pdb, found: {crys_line}."
 
             # Get path to input ligand file
