@@ -42,9 +42,11 @@ If you want to generate an analogue of a known structure: Make sure lig_resname 
 - **"known_chainid"**: Chainid of ligand to parse in known_structure, if known ligand is a peptide.
 - **"add_known_atoms"**: List of atom names that are also in analogue, but not recognized in the MCS. These atoms are used to compare the RMSD during conformer generation.
 - **"add_known_resids"**: List of resids that match each atom in "add_known_atoms". This should always be specified, but is especially helpful in cases where the known ligand is a peptide and each residue may have the same atoms names (ex: CA, N, C, O, etc.)
+- **"remove_analogue_atoms"**: List of atom names that are found in the MCS, but are unwanted in the MCS due to user discretion. 
 - **"add_analogue_atoms"**: List of atoms names that match each atom in "add_known_atoms". For example if "add_known_atoms" is ['C21', 'C23', 'N5'] than add_analogue_atoms should be a list of the equivalent atoms in the analogue structure, such as ['C22', 'C24', 'N5']. It may be helpful to run Bridgeport without specifying any of the "add" arguments to generate the .pdb file of the ligand to better understand the atom names that will be generated from the provided "analogue_smiles". 
 - **"analogue_rmsd_thres"***: RMSD threshold that analogue conformer generation cannot exceed. RMSD is calculated of MCS and other specified atoms in "add_known_atoms", "add_known_resids", and "add_analogue_atoms"
-- **"small_molecule_params"**: If analogue is a peptide, setting this option to true will choose to parameterize it as a small molecule with Smirnoff from OpenFF. 
+- **"small_molecule_params"**: If analogue is a peptide, setting this option to true will choose to parameterize it as a small molecule with Smirnoff from OpenFF.
+- **"align_all"**: If true, use both atoms identified in MCS and atoms specified in "add_known_atoms", "add_analogue_atoms" for alignment. Default is false, which won't use additional atoms specified in "add_known_atoms", "add_analogue_atoms" for alignment, only using them for assigning matching torsions. 
 
 #### "protein"
 - **"input_pdb_dir"**: Path to directory where the input .pdb can be found.
