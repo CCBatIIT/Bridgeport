@@ -53,8 +53,6 @@ env_pdb = os.path.join(working_dir, 'proteins/' + name + '_env.pdb')
 assert os.path.exists(env_pdb), f"Could not find {env_pdb}"
 
 trimmed_pdb = os.path.join(os.getcwd(), name + '_trimmed.pdb')
-trimmed_xml = os.path.join(os.getcwd(), name + '_trimmed.xml')
-
 
 # Trim _env.pdb
 trim_env(env_pdb)
@@ -81,7 +79,7 @@ with open(trimmed_pdb, 'w') as f:
     PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Wrote:', trimmed_pdb, flush=True)
 
-with open(trimmed_xml, 'w') as f:
+with open(sys_xml, 'w') as f:
     f.write(XmlSerializer.serialize(sim.system))
 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Wrote:', trimmed_xml, flush=True)
 
@@ -112,6 +110,12 @@ print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Matched ligand coor
 
 u.select_atoms('all').write(sys_pdb)
 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Overwrote final trimmed file to:', sys_pdb, flush=True)
+
+# Minimize
+_, _ = MotorRow(sys_xml, sys_pdb, os.getcwd())._minimize(sys_pdb)
+
+# Remove temp files
+os.remove(trimmed_pdb)
 
 
 
