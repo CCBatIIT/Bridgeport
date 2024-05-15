@@ -9,7 +9,7 @@ USAGE: python SIMULATE.py INPUT_DIR NAME OUTPUT_DIR REPLICATE NSTEPS
 
 DEFAULT SIMULATION PARAMETERS:
 ------------------------------
-    timestep -> 3 fs
+    timestep -> 2 fs
     stdout -> 10 ps
     dcdout -> 100 ps
     append_dcd -> True
@@ -44,15 +44,17 @@ output_xml = os.path.join(output_dir, name+'_'+rep+'.xml')
 try:
     n_steps = int(sys.argv[5])
 except:
-    n_steps = 167000000
+    n_steps = 250000000
 
 # Append?
-if os.path.exists(output_dcd):
+if os.path.exists(output_dcd) and os.path.exists(output_xml):
     append_dcd = True
+    input_state = output_xml
+    print('Loading dcd', output_dcd, 'and loading state xml', output_xml)
 else:
     append_dcd = False
 
 # Simulate
 row = MotorRow(input_sys, input_pdb, output_dir)
-_, _ = row._run_step(input_state, stepnum=5, dt=2.0, nsteps=n_steps, nstdout=5, fn_stdout=output_dat, ndcd=50000, append_dcd=append_dcd, fn_dcd=output_dcd, pdb_out=output_pdb, state_xml_out=output_xml)
+_, _ = row._run_step(input_state, stepnum=5, dt=2.0, nsteps=n_steps, nstdout=5000, fn_stdout=output_dat, ndcd=50000, append_dcd=append_dcd, fn_dcd=output_dcd, pdb_out=output_pdb, state_xml_out=output_xml)
 
