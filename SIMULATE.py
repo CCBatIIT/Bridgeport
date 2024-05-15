@@ -48,6 +48,7 @@ except:
 
 # Append?
 if os.path.exists(output_dcd) and os.path.exists(output_xml):
+    print('APPENDING')
     append_dcd = True
     input_state = output_xml
     print('Loading dcd', output_dcd, 'and loading state xml', output_xml)
@@ -56,5 +57,5 @@ else:
 
 # Simulate
 row = MotorRow(input_sys, input_pdb, output_dir)
-_, _ = row._run_step(input_state, stepnum=5, dt=2.0, nsteps=n_steps, nstdout=5000, fn_stdout=output_dat, ndcd=50000, append_dcd=append_dcd, fn_dcd=output_dcd, pdb_out=output_pdb, state_xml_out=output_xml)
+_, _ = row._run_step(input_state, stepnum=5, dt=2.0, ncycles=50, nsteps=n_steps, nstdout=5000, fn_stdout=output_dat, ndcd=50000, append_dcd=append_dcd, fn_dcd=output_dcd, pdb_out=output_pdb, state_xml_out=output_xml)
 
