@@ -321,8 +321,20 @@ class MotorRow():
         simulation.reporters.append(DCDR)
         print(f'Starting Step {stepnum} with forces {simulation.system.getForces()}')
         print(f'Starting Step {stepnum} with box_vectors {simulation.system.getDefaultPeriodicBoxVectors()}')
-        simulation.step(nsteps)
-        self._describe_state(simulation, f'Step {stepnum}')
+
+        # Write out state.xml
+        if state_xml_out is None:
+            state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
+
+        # Take steps in cycles of 10 ns
+        steps_per_cycle = int(10e7 / dt) # How many steps are in 10 ns?
+        ncycles = int(nsteps / steps_per_cycle) # Run cycles in steps of 10 ns.   
+        for cycle in range(ncycles):
+            print('Cycle', cycle)
+            simulation.step(steps_per_cycle)
+            self._describe_state(simulation, f'Step {stepnum}')
+            self._write_state(simulation, state_xml_out)
+
         end = datetime.now() - start
         print(f'Step {stepnum} completed after {end}')
         print(f'Box Vectors after this step {simulation.system.getDefaultPeriodicBoxVectors()}')
@@ -330,10 +342,6 @@ class MotorRow():
         if pdb_out is None:
             pdb_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.pdb')
         self._write_structure(simulation, pdb_out)
-
-        if state_xml_out is None:
-            state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
-        self._write_state(simulation, state_xml_out)
         
         for i in range(3):
             print('########################################################################################')
