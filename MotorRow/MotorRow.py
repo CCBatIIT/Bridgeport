@@ -202,7 +202,7 @@ class MotorRow():
 
 
     def _run_step(self, state_in:str, stepnum:int, state_xml_out:str=None, pdb_out:str=None,
-                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, ncycle=5000000, nstdout=1000,
+                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, ncycles=50, nstdout=1000,
                   fn_stdout=None, ndcd=5000, append_dcd: bool=False, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
 
         """
@@ -222,7 +222,7 @@ class MotorRow():
             nsteps: int: Default 125000 - Number of Simulation steps to take
             temp: float: Default 300 - Temperature of the Simulation (for setting initial velocities) (unit Kelvin)
             dt: float: Default 2.0 - Timestep of the simulation (unit femtosecond)
-            ncycle: float: Default 5000000 - Number of steps per cycle. state.xml is written out every cycle for resuming
+            ncycles: float: Default 50 - Number of cycles. state.xml is written out every cycle for resuming
             nstdout: int: Default 1000 - Number of steps to take between writing information to the State Data Reporter
             fn_stdout: string: Default None - If provided, will write the State Data Reporter data to this file name
             ndcd: int: Default 5000 - Number of steps to take between recording frames in the DCD trajectory file
@@ -328,11 +328,9 @@ class MotorRow():
         if state_xml_out is None:
             state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
 
-        # Take steps in cycles of 10 ns
-        steps_per_cycle = int(ncycle / dt) # How many steps are in 10 ns?
-        ncycles = int(nsteps / steps_per_cycle) # Run cycles in steps of 10 ns.   
-        for cycle in range(ncycles):
-            print('Cycle', cycle)
+        # Take steps in cycles
+        for cycle in range(1, ncycles+1):
+            print('Cycle', cycle, 'to', ((cycle/ncycles) * ((nsteps * dt) / 10e6)), 'ns')
             simulation.step(steps_per_cycle)
             self._describe_state(simulation, f'Step {stepnum}')
             self._write_state(simulation, state_xml_out)
