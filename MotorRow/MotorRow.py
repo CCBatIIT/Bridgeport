@@ -335,7 +335,7 @@ class MotorRow():
         print('dt', dt)
         print('steps_per_cycle', steps_per_cycle)
         for cycle in range(1, ncycles+1):
-            print('Cycle', cycle, 'to', ((cycle/ncycles) * ((nsteps * dt) / 10e6)), 'ns')
+            print('Cycle', cycle, 'to', ((cycle/ncycles) * ((nsteps * dt) / 1e6)), 'ns')
             simulation.step(steps_per_cycle)
             self._describe_state(simulation, f'Step {stepnum}')
             self._write_state(simulation, state_xml_out)
