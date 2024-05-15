@@ -7,7 +7,7 @@ from openmm.unit import *
 from datetime import datetime
 from MotorRow_utils import *
 from typing import List
-from math
+import math
 
 class MotorRow():
     """
