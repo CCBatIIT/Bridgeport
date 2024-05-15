@@ -7,6 +7,7 @@ from openmm.unit import *
 from datetime import datetime
 from MotorRow_utils import *
 from typing import List
+from math import floor
 
 class MotorRow():
     """
@@ -328,13 +329,23 @@ class MotorRow():
         if state_xml_out is None:
             state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
 
-        # Take steps in cycles
+        # Determine no. of steps per cycle
         steps_per_cycle = int(nsteps / ncycles)
+                      
+        # Reconfigure steps needed to take if appending
+        if append_dcd:
+            steps_taken = sim.context.getTime() * 1e3 / dt 
+            cycles_completed = floor(steps_taken / steps_per_cycle)
+            print('steps_taken', steps_taken)
+            print('cycles_complete', cycles_completed)
+        else:
+            cycles_complete = 0
+
         print('ncycles', ncycles)
         print('nsteps', nsteps)
         print('dt', dt)
         print('steps_per_cycle', steps_per_cycle)
-        for cycle in range(1, ncycles+1):
+        for cycle in range(cycles_complete+1, ncycles+1):
             print('Cycle', cycle, 'to', ((cycle/ncycles) * ((nsteps * dt) / 1e6)), 'ns')
             simulation.step(steps_per_cycle)
             self._describe_state(simulation, f'Step {stepnum}')
