@@ -329,6 +329,7 @@ class MotorRow():
             state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
 
         # Take steps in cycles
+        steps_per_cycle = int(nsteps / ncycles)
         for cycle in range(1, ncycles+1):
             print('Cycle', cycle, 'to', ((cycle/ncycles) * ((nsteps * dt) / 10e6)), 'ns')
             simulation.step(steps_per_cycle)
