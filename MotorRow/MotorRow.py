@@ -330,6 +330,10 @@ class MotorRow():
 
         # Take steps in cycles
         steps_per_cycle = int(nsteps / ncycles)
+        print('ncycles', ncycles)
+        print('nsteps', nsteps)
+        print('dt', dt)
+        print('steps_per_cycle', steps_per_cycle)
         for cycle in range(1, ncycles+1):
             print('Cycle', cycle, 'to', ((cycle/ncycles) * ((nsteps * dt) / 10e6)), 'ns')
             simulation.step(steps_per_cycle)
