@@ -334,7 +334,8 @@ class MotorRow():
                       
         # Reconfigure steps needed to take if appending
         if append_dcd:
-            steps_taken = simulation.context.getTime() * 1e3 / dt 
+            print(simulation.context.getTime())
+            steps_taken = float(simulation.context.getTime() * 1e3 / dt)
             print('steps_taken', steps_taken)
 
             cycles_completed = math.floor(steps_taken / steps_per_cycle)
