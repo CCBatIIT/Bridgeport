@@ -202,8 +202,9 @@ class MotorRow():
 
 
     def _run_step(self, state_in:str, stepnum:int, state_xml_out:str=None, pdb_out:str=None,
-                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, nstdout=1000,
+                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, ncycle=5000000, nstdout=1000,
                   fn_stdout=None, ndcd=5000, append_dcd: bool=False, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
+
         """
         Run different hard-coded Simulations based on the step number
         1 - NVT with Heavy Restraints on the Protein and Membrane (Z) coords
@@ -221,6 +222,7 @@ class MotorRow():
             nsteps: int: Default 125000 - Number of Simulation steps to take
             temp: float: Default 300 - Temperature of the Simulation (for setting initial velocities) (unit Kelvin)
             dt: float: Default 2.0 - Timestep of the simulation (unit femtosecond)
+            ncycle: float: Default 5000000 - Number of steps per cycle. state.xml is written out every cycle for resuming
             nstdout: int: Default 1000 - Number of steps to take between writing information to the State Data Reporter
             fn_stdout: string: Default None - If provided, will write the State Data Reporter data to this file name
             ndcd: int: Default 5000 - Number of steps to take between recording frames in the DCD trajectory file
@@ -327,7 +329,7 @@ class MotorRow():
             state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
 
         # Take steps in cycles of 10 ns
-        steps_per_cycle = int(10e7 / dt) # How many steps are in 10 ns?
+        steps_per_cycle = int(ncycle / dt) # How many steps are in 10 ns?
         ncycles = int(nsteps / steps_per_cycle) # Run cycles in steps of 10 ns.   
         for cycle in range(ncycles):
             print('Cycle', cycle)
