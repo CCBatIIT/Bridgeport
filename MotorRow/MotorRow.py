@@ -340,6 +340,7 @@ class MotorRow():
             print('cycles_complete', cycles_completed)
         else:
             cycles_completed = 0
+            simulation.context.setTime(0)
 
         print('ncycles', ncycles)
         print('nsteps', nsteps)
