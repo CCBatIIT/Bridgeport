@@ -195,7 +195,7 @@ class RepairProtein():
 
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
 
-    def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=None):
+    def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=None, nstd_resids: List=None, verbose: bool=False):
         """
         Run the remodelling using a secondary structure to appropriately model secondary structure that is missing in input file. 
 
@@ -217,7 +217,10 @@ class RepairProtein():
                 If list is provided then loops will be optimized. Should be in format [[resid_1, resid_2], ...] to represent the loops.
 
             verbose (bool):
-                If true, show missing and mutated residues after each iteration of sequence alignment. Default is False. 
+                If true, show missing and mutated residues after each iteration of sequence alignment. Default is False.
+                
+            nstd_resids (List):
+                If list is provided then nonstandard residues at these indices (0-indexed) will be conserved from input model to output structure.
         """
         # Attributes
         self.pdb_out_fn = pdb_out_fn

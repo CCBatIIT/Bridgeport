@@ -441,14 +441,16 @@ class Bridgeport():
                 protein_reparer.run_with_secondary(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                                   secondary_template_pdb=secondary_temp,
                                                   tails=params['tails'],
-                                                  loops=params['loops'])
+                                                  loops=params['loops'],
+                                                  verbose=self.verbose)
             else:
                 protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
                                                                 fasta_fn=params['fasta_path'], 
                                                                 working_dir=params['working_dir'])
                 protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                     tails=params['tails'],
-                                    loops=params['loops'])
+                                    loops=params['loops'],
+                                    verbose=self.verbose)
         else:
             protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
                                                             fasta_fn=params['fasta_path'], 
