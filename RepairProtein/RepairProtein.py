@@ -142,7 +142,7 @@ class RepairProtein():
         self.env.io.atom_files_directory = ['.', self.working_dir]
         if nstd_resids != None:
             self.env.io.hetatm=True
-        self._build_homology_model(nstd_resids=nstd_resids)
+        self._build_homology_model(nstd_resids=self.nstd_resids)
 
         # Fix loops
         if loops != False and loops != None:
@@ -242,7 +242,7 @@ class RepairProtein():
         os.chdir(self.working_dir)
         self.env = Environ()
         self.env.io.atom_files_directory = ['.', self.working_dir]
-        self._build_homology_model()
+        self._build_homology_model(self.nstd_resids)
         
         # Fix loops
         if loops != None:
