@@ -5,7 +5,7 @@ USAGE: python SIMULATE.py INPUT_DIR NAME OUTPUT_DIR REPLICATE NSTEPS
     NAME: name of both xml and pdb file before the extension
     OUTPUT_DIR: absolute path to the directory where a subdirectory with output will be stored
     REPLICATE: Replicate number of simulation. THIS MUST BE SPECIFIED to avoid accidental overwritting
-    NSTEPS: Number of simulation steps to take. Default is 167000000 which equils 501 ns w/ a 3 fs timestep
+    NSTEPS: Number of simulation steps to take. Default is 250000000 which equils 501 ns w/ a 3 fs timestep
 
 DEFAULT SIMULATION PARAMETERS:
 ------------------------------
