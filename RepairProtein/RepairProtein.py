@@ -226,6 +226,7 @@ class RepairProtein():
         self.pdb_out_fn = pdb_out_fn
         self.secondary_template_pdb = secondary_template_pdb
         self.secondary_name = self.secondary_template_pdb.split('/')[-1].split('.')[0]
+        self.nstd_resids = nstd_resids
 
         # Parse template sequence from .fasta
         self._get_temp_seq()
