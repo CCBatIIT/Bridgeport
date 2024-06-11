@@ -137,15 +137,19 @@ def _find_missing_residues(temp_seq: str, tar_seq: str, verbose: bool=False):
         term_residues = [0,0]
 
         # Find missing residues at start of target sequence
+        if verbose:
+            print('targ:', tar_seq)
+            print('temp:', temp_seq, '\n')
         tar_start_ind = temp_seq.index(tar_seq[:3])
         missing_start = temp_seq[:tar_start_ind]
         for ind, res in enumerate(missing_start):
             missing_residues.append([ind, res])
         tar_seq = missing_start + tar_seq
         term_residues[0] = len(missing_start)
-        # print('targ:', tar_seq)
-        # print('temp:', temp_seq, '\n')
-
+        if verbose:    
+            print('targ:', tar_seq)
+            print('temp:', temp_seq, '\n')
+            print('strt:', missing_start) 
         # Iterate through remaining residues
         counter = 0
         while temp_seq[:len(tar_seq)] != tar_seq:
@@ -154,29 +158,32 @@ def _find_missing_residues(temp_seq: str, tar_seq: str, verbose: bool=False):
                 temp_res = temp_seq[i]
                 tar_res = tar_seq[i]
                 if tar_res != temp_res:
-                    # print(i)
-                    # print(len(temp_seq), len(tar_seq))
-                    # print('targ:', tar_seq)
-                    # print('temp:', temp_seq)
-                    # print(temp_res, tar_res)
+                    if verbose:          
+                        print(i)
+                        print(len(temp_seq), len(tar_seq))
+                        print('targ:', tar_seq)
+                        print('temp:', temp_seq)
+                        print(temp_res, tar_res)
 
                     # Check for point mutation
                     if tar_seq[i+1:i+5] == temp_seq[i+1:i+5]:
-                        print(temp_seq[i-10:i], temp_seq[i:i+10], '\n')
-                        print(tar_seq[i-10:i], tar_seq[i:i+10])
-                        print('Point' , i, i-tar_start_ind, '\n\n\n')
+                        if verbose:
+                            print(temp_seq[i-10:i], temp_seq[i:i+10], '\n')
+                            print(tar_seq[i-10:i], tar_seq[i:i+10])
+                            print('Point' , i, i-tar_start_ind, '\n\n\n')
                         tar_seq = tar_seq[:i] + temp_res + tar_seq[i+1:]
                         mutated_residues.append([i - tar_start_ind, temp_res])
 
                     # Check for deletion
                     else:
-                        # print(tar_seq[i-10:i], tar_seq[i:i+10])
-                        # print('Del', '\n')
+                        if verbose:
+                            print(tar_seq[i-10:i], tar_seq[i:i+10])
+                            print('Del', '\n')
                         tar_seq = tar_seq[:i] + temp_res + tar_seq[i:]
                         missing_residues.append([i, temp_res])
 
                     break
-                    
+             
             # Raise error if too many iterations
             if counter == 10000:
                 raise RuntimeError("Unable to match template and target sequences")
@@ -185,7 +192,6 @@ def _find_missing_residues(temp_seq: str, tar_seq: str, verbose: bool=False):
             #     break
             else:
                 counter+=1
-
         # Add remaining missing residues
         # print('!!!tar_seq ', tar_seq)
         # print('!!!temp_seq', temp_seq, '\n')   
