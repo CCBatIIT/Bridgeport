@@ -227,6 +227,8 @@ class RepairProtein():
         self.secondary_template_pdb = secondary_template_pdb
         self.secondary_name = self.secondary_template_pdb.split('/')[-1].split('.')[0]
         self.nstd_resids = nstd_resids
+        self.verbose = verbose
+
 
         # Parse template sequence from .fasta
         self._get_temp_seq()
@@ -335,7 +337,7 @@ class RepairProtein():
         else:
             sw = SeqWrap(self.temp_seq, self.tar_seq)
 
-        sw.find_missing_residues(verbose=False)
+        sw.find_missing_residues(verbose=self.verbose)
         traj = md.load_pdb(self.pdb_fn)
         self.mutated_residues = sw.mutated_residues
         counter = 0
@@ -355,6 +357,7 @@ class RepairProtein():
             # Find missing
             if hasattr(self, "secondary_seq"):
                 sw = SeqWrap(self.temp_seq, self.tar_seq, self.secondary_seq)
+                sw.find_missing_residues(verbose=self.verbose)
             else:
                 sw = SeqWrap(self.temp_seq, self.tar_seq)  
                 sw.find_missing_residues(verbose=self.verbose)
