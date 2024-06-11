@@ -145,7 +145,7 @@ class RepairProtein():
         self._build_homology_model(nstd_resids=self.nstd_resids)
 
         # Fix loops
-        if loops != False and loops != None:
+        if loops != False:
             self._optimize_loops(loops)
 
         os.chdir(cwd)
@@ -195,7 +195,7 @@ class RepairProtein():
 
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
 
-    def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=None, nstd_resids: List=None, verbose: bool=False):
+    def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=False, nstd_resids: List=None, verbose: bool=False):
         """
         Run the remodelling using a secondary structure to appropriately model secondary structure that is missing in input file. 
 
@@ -245,7 +245,7 @@ class RepairProtein():
         self._build_homology_model(self.nstd_resids)
         
         # Fix loops
-        if loops != None:
+        if loops != False:
             self._optimize_loops(loops)
 
         os.chdir(cwd)
