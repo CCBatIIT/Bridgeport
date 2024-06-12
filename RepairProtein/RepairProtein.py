@@ -392,7 +392,7 @@ class RepairProtein():
 
         # Remove residues and save over self.pdb_fn
         traj = md.load_pdb(self.pdb_fn)
-        mutated_atoms = traj.topology.select('resid '+ str(" ".join(mutated_resids)))
+        mutated_atoms = traj.topology.select('resid '+ " ".join([str(resid) for resid in mutated_resids]))
         sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
         traj = traj.atom_slice(sele)
         traj.save_pdb(self.pdb_fn)
