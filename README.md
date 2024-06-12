@@ -57,7 +57,8 @@ If you want to generate an analogue of a known structure: Make sure lig_resname 
     - **"working_dir"**: Path to directory to put all the modeller intermediates.
     - **"fasta_path"**: Path to .fasta file to repair the input protein structure.
     - **"tails"**: List of indices to parse the extra tails. EX: [30, 479]
-    - **"loops"**: 2-D List of indices that specify lower and upper bounds of loops to optimize during refinement. Loop optimization can take a while, but if skipped, unbonded output structures will result. 
+    - **"loops"**: 2-D List of indices that specify lower and upper bounds of loops to optimize during refinement. Loop optimization can take a while, but if skipped, unbonded output structures will result.
+    - **"engineered_resids"**: List of resids that are known engineered mutations in the crystal pdb. Adding this argument may prevent sequence errors in the RepairProtein section of Bridgeport.
     - **"secondary_template"**: Path to secondary .pdb to use as a reference to accurately model large portions that are missing in the input .pdb structure. 
 
 #### "environment" 

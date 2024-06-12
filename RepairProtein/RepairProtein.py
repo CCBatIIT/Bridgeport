@@ -67,7 +67,7 @@ class RepairProtein():
         Optimizes specified loop regions within the protein model.
     """
 
-    def __init__(self, pdb_fn: str, fasta_fn: str, working_dir: str='./'):
+    def __init__(self, pdb_fn: str, fasta_fn: str, mutated_resids: List[int]=None, working_dir: str='./'):
         """
         Initialize RepairProtein object.
 
@@ -78,6 +78,9 @@ class RepairProtein():
             
             fasta_fn (str):
                 String path to .fasta file that contains sequence to use as a template to repair the protein .pdb.     
+
+            mutated_resids (List[int]):
+                List of resids that are engineered mutations in the input .pdb. RepairProtein will automatically discard those residues and rewrite .pdb file to ease the identification of missing residues. Default is None. 
 
             working_dir (str):
                 String path to working directory where all intermediate files made by UCSF modeller will be stored. Default is current working directory. 
@@ -98,6 +101,13 @@ class RepairProtein():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein to repair:', self.pdb_fn, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Template sequence:', self.fasta_fn, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Modeller intermediates will be written to:', self.working_dir, flush=True)
+
+        
+        if mutated_resids != None:
+            self._remove_residues(mutated_resids)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removed mutated residues with resids:', mutated_resids, 'from' self.pdb_fn, flush=True)
+
+    
 
     def run(self, pdb_out_fn: str, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False):
         """
@@ -343,11 +353,7 @@ class RepairProtein():
         counter = 0
         while len(self.mutated_residues) > 0:
             # Remove mutation from input.pdb
-            traj = md.load_pdb(self.pdb_fn)
-            mutated_atoms = traj.topology.select('resid '+ str(" ".join(self.mutated_residues[:,0])))
-            sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
-            traj = traj.atom_slice(sele)
-            traj.save_pdb(self.pdb_fn)
+
 
             # Reparse target sequence from new .pdb
             shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
@@ -373,6 +379,23 @@ class RepairProtein():
         self.ali_fn = self.working_dir + '/' + self.name + '.ali'
         sw.write_alignment_file(self.ali_fn, self.temp_pir_fn, self.secondary_pir_fn)
 
+    def _remove_residues(mutated_resids: List[int]):
+        """
+        Remove residues with specified resids from self.pdb_fn with mdtraj
+
+        Parameters:
+        -----------
+            mutated_resids (List[int]):
+                List of resids to discard from self.pdb_fn
+
+        """
+
+        # Remove residues and save over self.pdb_fn
+        traj = md.load_pdb(self.pdb_fn)
+        mutated_atoms = traj.topology.select('resid '+ str(" ".join(mutated_resids)))
+        sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
+        traj = traj.atom_slice(sele)
+        traj.save_pdb(self.pdb_fn)
 
     def _build_homology_model(self, nstd_resids):
         """

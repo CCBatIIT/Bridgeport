@@ -432,11 +432,17 @@ class Bridgeport():
         """
         params = self.input_params['RepairProtein']
         file = self.input_params['protein']['input_pdb']
+        if 'engineered_resids' in params:
+            engineered_resids = params['engineered_resids']
+        else:
+            engineered_resids = None
+            
         if 'secondary_template' in self.input_params['RepairProtein']:
             secondary_temp = self.input_params['RepairProtein']['secondary_template']
             if secondary_temp!= False and os.path.exists(secondary_temp):
                 protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
                                                                 fasta_fn=params['fasta_path'], 
+                                                                mutated_resids=engineered_resids,
                                                                 working_dir=params['working_dir'])
                 protein_reparer.run_with_secondary(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                                   secondary_template_pdb=secondary_temp,
@@ -445,7 +451,8 @@ class Bridgeport():
                                                   verbose=self.verbose)
             else:
                 protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
-                                                                fasta_fn=params['fasta_path'], 
+                                                                fasta_fn=params['fasta_path'],
+                                                                mutated_resids=engineered_resids,
                                                                 working_dir=params['working_dir'])
                 protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                     tails=params['tails'],
@@ -454,6 +461,7 @@ class Bridgeport():
         else:
             protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
                                                             fasta_fn=params['fasta_path'], 
+                                                            mutated_resids=engineered_resids,
                                                             working_dir=params['working_dir'])
             protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                 tails=params['tails'],
