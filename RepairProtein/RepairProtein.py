@@ -106,7 +106,7 @@ class RepairProtein():
         if mutated_resids != None:
             top = md.load_pdb(self.pdb_fn).topology
             mdtraj_resids = [top.residue(i).resSeq for i in range(top.n_residues)]
-            mutated_resids = mdtraj_resids.index(mutated_resids)
+            mutated_resids = [mdtraj_resids.index(resid) for resid in mutated_resids]
             self._remove_residues(mutated_resids)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removed mutated residues with resids:', mutated_resids, 'from', self.pdb_fn, flush=True)
 
