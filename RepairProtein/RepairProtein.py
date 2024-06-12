@@ -353,7 +353,7 @@ class RepairProtein():
         counter = 0
         while len(self.mutated_residues) > 0:
             # Remove mutation from input.pdb
-
+            self._remove_residues(self.mutated_residues[:,0])
 
             # Reparse target sequence from new .pdb
             shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
@@ -379,7 +379,7 @@ class RepairProtein():
         self.ali_fn = self.working_dir + '/' + self.name + '.ali'
         sw.write_alignment_file(self.ali_fn, self.temp_pir_fn, self.secondary_pir_fn)
 
-    def _remove_residues(mutated_resids: List[int]):
+    def _remove_residues(self, mutated_resids: List[int]):
         """
         Remove residues with specified resids from self.pdb_fn with mdtraj
 
