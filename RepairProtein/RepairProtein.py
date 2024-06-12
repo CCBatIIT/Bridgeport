@@ -105,7 +105,7 @@ class RepairProtein():
         
         if mutated_resids != None:
             self._remove_residues(mutated_resids)
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removed mutated residues with resids:', mutated_resids, 'from' self.pdb_fn, flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removed mutated residues with resids:', mutated_resids, 'from', self.pdb_fn, flush=True)
 
     
 
