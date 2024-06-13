@@ -173,6 +173,8 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Generating', n_conformers, 'conformers of analogue.', flush=True)
+    # Create counter
+    n = 0 
     while n <= n_conformers:
         #Generate conformer
         AllChem.EmbedMolecule(new_mol, randomSeed=i)
