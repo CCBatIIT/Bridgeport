@@ -173,7 +173,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Generating', n_conformers, 'conformers of analogue.', flush=True)
-    for i in range(n_conformers):
+    while n <= n_conformers:
         #Generate conformer
         AllChem.EmbedMolecule(new_mol, randomSeed=i)
 
@@ -260,14 +260,18 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
 
         # Evaluate RMSD
         RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Final RMSD between MCS of analogue and reference:', RMSD, flush=True)
+        if RMSD <= rmsd_thres:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Final RMSD between MCS of analogue and reference:', RMSD, flush=True)
+    
+            # Write out conformer            
+            if not os.path.exists(analogue_out_dir):
+                os.mkdir(analogue_out_dir)
+            conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(i) + '.pdb')
+            new_sele.write(conformer_out_path)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved conformer to', conformer_out_path, flush=True)
 
-        # Write out conformer            
-        if not os.path.exists(analogue_out_dir):
-            os.mkdir(analogue_out_dir)
-        conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(i) + '.pdb')
-        new_sele.write(conformer_out_path)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved conformer to', conformer_out_path, flush=True)
+            # Increase counter
+            n += 1
 
     return analogue_out_dir, new_match_atoms
 
