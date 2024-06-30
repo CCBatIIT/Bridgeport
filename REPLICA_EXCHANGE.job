@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH --job-name="REPEXCHANGE"
+#SBATCH --output="/expanse/lustre/projects/iit119/dcooper/MOR/logs/REPEXCHANGE.%j.%N.out"
+#SBATCH --partition=gpu-shared
+#SBATCH --gpus=4
+#SBATCH --nodes=1
+#SBATCH --ntasks=4
+#SBATCH --mem=32G
+#SBATCH --account=iit119
+#SBATCH -t 48:00:00
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=dcooper6@hawk.iit.edu
+
+source ~/.bashrc
+
+conda activate replica
+
+cd $SLURM_SUBMIT_DIR
+
+echo REPLICA EXCHANGE BATCH JOB FOR $2 $4
+python REPLICA_EXCHANGE.py $1 $2 $3 $4 $5 $6
