@@ -25,7 +25,7 @@ input_pdb = os.path.join(input_dir, name+'.pdb')
 print(input_pdb)
 
 # Outputs
-output_dir = os.path.join(sys.argv[3], name)
+output_dir = os.path.join(sys.argv[3], name + '_' + str(rep))
 rep = sys.argv[4]
 if not os.path.exists(output_dir):
     os.mkdir(output_dir)
