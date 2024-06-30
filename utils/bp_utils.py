@@ -272,8 +272,11 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
             new_sele.write(conformer_out_path)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved conformer to', conformer_out_path, flush=True)
 
-            # Increase counter
+            # Increase accepted conformation counter
             n += 1
+
+        # Increase conformation generator counter
+        i += 1
 
     return analogue_out_dir, new_match_atoms
 
