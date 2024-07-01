@@ -268,7 +268,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
             # Write out conformer            
             if not os.path.exists(analogue_out_dir):
                 os.mkdir(analogue_out_dir)
-            conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(i) + '.pdb')
+            conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(n) + '.pdb')
             new_sele.write(conformer_out_path)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved conformer to', conformer_out_path, flush=True)
 
