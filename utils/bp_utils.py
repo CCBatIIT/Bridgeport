@@ -177,7 +177,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
     n = 0 
     while n <= n_conformers:
         #Generate conformer
-        AllChem.EmbedMolecule(new_mol, randomSeed=i)
+        AllChem.EmbedMolecule(new_mol)
 
         # Write out analogue to .pdb file
         Chem.MolToPDBFile(new_mol, analogue_out_path)
@@ -274,10 +274,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
 
             # Increase accepted conformation counter
             n += 1
-
-        # Increase conformation generator counter
-        i += 1
-
+            
     return analogue_out_dir, new_match_atoms
 
 def return_max_common_substructure(mol1, mol2):
