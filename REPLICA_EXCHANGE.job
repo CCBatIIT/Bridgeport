@@ -2,7 +2,7 @@
 #SBATCH --job-name="REPEXCHANGE"
 #SBATCH --output="/expanse/lustre/projects/iit119/dcooper/MOR/logs/REPEXCHANGE.%j.%N.out"
 #SBATCH --partition=gpu-shared
-#SBATCH --gpus=4
+#SBATCH --gpus=1
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
 #SBATCH --mem=32G

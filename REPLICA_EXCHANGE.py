@@ -12,8 +12,9 @@ PARAMETERS:
 """
 
 
-from FultonMarket import FultonMarket
 import os, sys
+sys.path.append('FultonMarket')
+from FultonMarket import FultonMarket
 
 
 # Inputs
@@ -25,8 +26,8 @@ input_pdb = os.path.join(input_dir, name+'.pdb')
 print(input_pdb)
 
 # Outputs
+rep = int(sys.argv[4])
 output_dir = os.path.join(sys.argv[3], name + '_' + str(rep))
-rep = sys.argv[4]
 if not os.path.exists(output_dir):
     os.mkdir(output_dir)
 assert os.path.exists(output_dir)
