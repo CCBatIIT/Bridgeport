@@ -209,6 +209,9 @@ class FultonMarket():
         if os.path.exists(self.output_ncdf):
             self.simulation = self.simulation.from_storage(self.output_ncdf)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loading simulation from', self.output_ncdf, flush=True) 
+            ncfile = nc.Dataset(self.output_ncdf)
+            n_iters_completed = ncfile.dimensions['iterations'].size - 1
+            self.current_cycle = int(np.floor(n_iters_completed / n_iters_per_cycle))
             self.restart = True
             
         else:                                        
@@ -231,7 +234,8 @@ class FultonMarket():
         """
 
         # Continue until self.n_cycles reached
-        self.current_cycle = 0
+        if not self.restart:
+            self.current_cycle = 0
         while self.current_cycle <= self.n_cycles:
 
             # Minimize
