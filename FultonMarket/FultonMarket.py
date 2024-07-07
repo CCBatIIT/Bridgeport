@@ -210,8 +210,8 @@ class FultonMarket():
             self.simulation = self.simulation.from_storage(self.output_ncdf)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loading simulation from', self.output_ncdf, flush=True) 
             ncfile = nc.Dataset(self.output_ncdf)
-            n_iters_completed = ncfile.dimensions['iterations'].size - 1
-            self.current_cycle = int(np.floor(n_iters_completed / n_iters_per_cycle))
+            n_iters_completed = ncfile.dimensions['iteration'].size - 1
+            self.current_cycle = int(np.floor(n_iters_completed / self.n_iters_per_cycle))
             self.restart = True
             
         else:                                        
