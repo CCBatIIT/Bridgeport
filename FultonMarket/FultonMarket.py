@@ -209,9 +209,6 @@ class FultonMarket():
         if os.path.exists(self.output_ncdf):
             self.simulation = self.simulation.from_storage(self.output_ncdf)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loading simulation from', self.output_ncdf, flush=True) 
-            print('!!!', self.reporter.is_open())
-            print('!!!', self.reporter.open())
-            print('!!!', self.reporter.is_open())
             self.restart = True
             
         else:                                        
@@ -274,8 +271,6 @@ class FultonMarket():
             self._build_simulation()
             self._configure_simulation_parameters
         else:
-            if self.current_cycle == 2 and not self.restart: # REMOVE THIS IS FOR TESTING ONLY
-                raise Exception()
             self.current_cycle += 1
     
 
