@@ -141,8 +141,8 @@ class FultonMarket():
     def _configure_simulation_parameters(self):
         """
         Configure simulation times to meet aggregate simulation time. 
-        """
-
+        """            
+        
         # Configure times/steps
         sim_time_per_rep = self.total_sim_time / self.n_replicates
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated simulation per replicate to be', np.round(sim_time_per_rep, 6), 'nanoseconds', flush=True)
@@ -200,26 +200,32 @@ class FultonMarket():
         # Set up simulation
         self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
         self.simulation._global_citation_silence = True
-    
+
         # Setup reporter
-        if hasattr(self, 'reporter'):
-            self.reporter.close()
-        if os.path.exists(self.output_ncdf):
-            os.remove(self.output_ncdf)
         atom_inds = tuple([i for i in range(self.system.getNumParticles())])
         self.reporter = MultiStateReporter(self.output_ncdf, checkpoint_interval=10, analysis_particle_indices=atom_inds)
-    
-    
-        # Create simulation
-        if hasattr(self, 'context'):
-            sampler = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
-        else:
-            sampler = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
-        self.simulation.create(self.ref_state,
-                              sampler,
-                              self.reporter, 
-                              temperatures=self.temperatures,
-                              n_temperatures=len(self.temperatures))
+        
+        # Load from checkpoint, if available
+        if os.path.exists(self.output_ncdf):
+            self.simulation = self.simulation.from_storage(self.output_ncdf)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loading simulation from', self.output_ncdf, flush=True) 
+            print('!!!', self.reporter.is_open())
+            print('!!!', self.reporter.open())
+            print('!!!', self.reporter.is_open())
+            self.restart = True
+            
+        else:                                        
+            # Create simulation
+            if hasattr(self, 'context'):
+                sampler = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
+            else:
+                sampler = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
+            self.simulation.create(self.ref_state,
+                                  sampler,
+                                  self.reporter, 
+                                  temperatures=self.temperatures,
+                                  n_temperatures=len(self.temperatures))
+            self.restart = False
 
 
     def _simulate(self):
@@ -232,7 +238,7 @@ class FultonMarket():
         while self.current_cycle <= self.n_cycles:
 
             # Minimize
-            if self.current_cycle == 0:
+            if self.current_cycle == 0 and not self.restart:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing...', flush=True)
                 self.simulation.minimize()
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing finished.', flush=True)
@@ -268,6 +274,8 @@ class FultonMarket():
             self._build_simulation()
             self._configure_simulation_parameters
         else:
+            if self.current_cycle == 2 and not self.restart: # REMOVE THIS IS FOR TESTING ONLY
+                raise Exception()
             self.current_cycle += 1
     
 
