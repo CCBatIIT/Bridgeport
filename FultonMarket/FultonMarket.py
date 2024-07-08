@@ -276,7 +276,7 @@ class FultonMarket():
             self._interpolate_states(insert_inds)
             self.current_cycle = 0
             self._build_simulation(interpolate=True)
-            self._configure_simulation_parameters
+            self._configure_simulation_parameters()
         else:
             self.current_cycle += 1
     
