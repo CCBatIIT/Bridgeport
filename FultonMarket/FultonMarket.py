@@ -207,6 +207,7 @@ class FultonMarket():
         
         # Load from checkpoint, if available
         if os.path.exists(self.output_ncdf) and interpolate == False:
+            self.reporter.open()
             self.simulation = self.simulation.from_storage(self.output_ncdf)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loading simulation from', self.output_ncdf, flush=True) 
             ncfile = nc.Dataset(self.output_ncdf)
