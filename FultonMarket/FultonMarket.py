@@ -192,7 +192,7 @@ class FultonMarket():
         
 
     
-    def _build_simulation(self):
+    def _build_simulation(self, interpolate=False):
 
         # Set up integrator
         move = mcmc.LangevinDynamicsMove(timestep=self.dt * unit.femtosecond, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
@@ -206,7 +206,7 @@ class FultonMarket():
         self.reporter = MultiStateReporter(self.output_ncdf, checkpoint_interval=10, analysis_particle_indices=atom_inds)
         
         # Load from checkpoint, if available
-        if os.path.exists(self.output_ncdf):
+        if os.path.exists(self.output_ncdf) and interpolate == False:
             self.simulation = self.simulation.from_storage(self.output_ncdf)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loading simulation from', self.output_ncdf, flush=True) 
             ncfile = nc.Dataset(self.output_ncdf)
@@ -272,7 +272,7 @@ class FultonMarket():
         if len(insert_inds) > 0:
             self._interpolate_states(insert_inds)
             self.current_cycle = 0
-            self._build_simulation()
+            self._build_simulation(interpolate=True)
             self._configure_simulation_parameters
         else:
             self.current_cycle += 1
