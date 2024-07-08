@@ -217,6 +217,8 @@ class FultonMarket():
             
         else:                                        
             # Create simulation
+            if os.path.exists(self.output_ncdf):
+                os.remove(self.output_ncdf)
             if hasattr(self, 'context'):
                 sampler = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
             else:
