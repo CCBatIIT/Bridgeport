@@ -41,7 +41,7 @@ except:
 try:
     n_replica = int(sys.argv[6])
 except:
-    n_replica = 36
+    n_replica = 90
 
 # Run rep exchange
 market = FultonMarket(input_pdb=input_pdb, input_system=input_sys, input_state=input_state)
