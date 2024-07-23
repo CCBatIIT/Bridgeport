@@ -31,9 +31,10 @@ Bridgeprot is also capable of generating ligand analogues based on a known ligan
 
 If you want to generate an analogue of a known structure: Make sure lig_resname and peptide_chain are set to false. Provide the SMILES string for you analogue with the "analogue_smiles" key. Provide the name of your analogue with "analogue_name". Provide a path to the known structure with "known_structure" that contains the experimental ligand to align analogue to with a "known_resname" or "known_chainid". 
 
-- **"lig_resname"**: specifies the ligand resname in the input .pdb file. If the ligand is a peptide choose "false". Ligand resnames that start with and number are not easily recognized by MDAnalysis (which is used for parsing), so we recommend changing the ligand resname in that case.
+- **"lig_resname"**: specifies the ligand resname in the input.pdb file (Use if small molecule). If the ligand is a peptide choose "false". Ligand resnames that start with and number are not easily recognized by MDAnalysis (which is used for parsing), so we recommend changing the ligand resname in that case.
 - **"peptide_chain"**: If ligand is a peptide, specify the letter code that denotes the ligand, if not choose "false".
 - **"peptide_fasta"**: If ligand is a peptide, specify the path to the .fasta file to repair the peptide if desired. If no repair is desired, choose "false", or remove argument.
+- **"known_smiles"**: Mandatory entry of smiles string of the ligand (either small molecule or peptide) in the input.pdb file
 - **"peptide_nonstandard_resids"**: If non-standard residues are present in the peptide, present the indicies of the non-standard residues in ascending order, 0-indexed. This step is only necessary if a .fasta file is provided as well. 
 - **"analogue_smiles"**: String of smiles that represent the analogue to generate. Optional argument.
 - **"analogue_name"**: Name to generate new files with. 
