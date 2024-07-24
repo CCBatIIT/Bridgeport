@@ -406,7 +406,10 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
                 ref_tors_sele = ref_tors_sele + ref_match.select_atoms(f"(resid {r} and name {a})")
 
             # Calculated dihedral angle and assign to analogue
-            c1, c2, c3, c4 = ref_tors_sele.positions
+            try:
+                c1, c2, c3, c4 = ref_tors_sele.positions
+            except:
+                print(ref_tors_sele.atoms.names, ref_tors_sele.atoms.resids)
             dihedral = calc_dihedrals(c1, c2, c3, c4)
             mobile_tors[i] = dihedral
             #changed[mobile_R._primary_torsion_indices[i]] = True
