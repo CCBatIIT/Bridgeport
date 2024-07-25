@@ -520,10 +520,12 @@ class Bridgeport():
             small_molecule_params = False
             if lig_resname != False:
                 small_molecule_params = True
-                if 'known_smiles' in self.input_params['ligand']:
-                    known_smiles = self.input_params['ligand']['known_smiles']
+                if 'analogue_smiles in self.input_params['ligand']:
+                    template_smiles = self.input_params['ligand']['analogue_smiles']
+                elif 'known_smiles' in self.input_params['ligand']:
+                    template_smiles = self.input_params['ligand']['known_smiles']
                 else:
-                    raise Exception('Must add "known_smiles" argument to assign proper bond order to ligand')
+                    raise Exception('Must add "known_smiles" and/or "analogue_smiles" argument to assign proper bond order to ligand')
             elif 'small_molecule_params' in self.input_params['ligand']:
                 if self.input_params['ligand']['small_molecule_params'] == True:
                     small_molecule_params = True
@@ -532,7 +534,7 @@ class Bridgeport():
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found small molecule ligand with resname:', lig_resname, flush=True)
 
                 # Load input 
-                template = Chem.MolFromSmiles(known_smiles)
+                template = Chem.MolFromSmiles(template_smiles)
                 mol = Chem.MolFromPDBFile(mol_path)
 
                 # Assign bond order
@@ -618,7 +620,7 @@ class Bridgeport():
 
                 if addHs == True:
                     # Load input 
-                    template = Chem.MolFromSmiles(known_smiles)
+                    template = Chem.MolFromSmiles(template_smiles)
                     mol = Chem.MolFromPDBFile(mol_path)
     
                     # Assign bond order
