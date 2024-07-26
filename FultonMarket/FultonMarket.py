@@ -262,7 +262,10 @@ class FultonMarket():
 
         # Take steps
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'CYCLE', self.current_cycle, 'advancing', self.n_iters_per_cycle, 'iterations', flush=True) 
-        self.simulation.run(self.n_iters_per_cycle)
+        if self.simulation.is_completed:
+            self.simulation.extend(self.n_iters_per_cycle)
+        else:
+            self.simulation.run(self.n_iters_per_cycle)
 
         # Eval acceptance rates
         perc_through = self.current_cycle / self.n_cycles
