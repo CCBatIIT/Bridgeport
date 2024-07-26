@@ -520,7 +520,7 @@ class Bridgeport():
             small_molecule_params = False
             if lig_resname != False:
                 small_molecule_params = True
-                if 'analogue_smiles in self.input_params['ligand']:
+                if 'analogue_smiles' in self.input_params['ligand']:
                     template_smiles = self.input_params['ligand']['analogue_smiles']
                 elif 'known_smiles' in self.input_params['ligand']:
                     template_smiles = self.input_params['ligand']['known_smiles']
