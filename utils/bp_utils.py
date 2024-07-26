@@ -409,7 +409,7 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
             try:
                 c1, c2, c3, c4 = ref_tors_sele.positions
             except:
-                print('reference atoms names attempted to match': ref_tors_sele.atoms.names, 'reference resids attempted to match', ref_tors_sele.atoms.resids, flush=True)
+                print('reference atoms names attempted to match:', ref_tors_sele.atoms.names, 'reference resids attempted to match', ref_tors_sele.atoms.resids, flush=True)
                 raise Exception("Could not match torsion")
             dihedral = calc_dihedrals(c1, c2, c3, c4)
             mobile_tors[i] = dihedral
