@@ -403,7 +403,7 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
             # Select reference atoms
             ref_tors_sele = ref_match.select_atoms('')
             for (r, a) in zip (ref_eq_resids, ref_eq_atoms):
-                print(r, a)
+                print(ref_tors_sele.atoms, a, ref_tors_sele.resids, r)
                 ref_tors_sele = ref_tors_sele + ref_match.select_atoms(f"(resid {r} and name {a})")
 
             # Calculated dihedral angle and assign to analogue
