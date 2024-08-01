@@ -12,13 +12,12 @@ import netCDF4 as nc
 from typing import List
 from datetime import datetime
 import mdtraj as md
+from shorten_replica_exchange import truncate_ncdf
 
 class FultonMarket():
     """
     Replica exchange
     """
-
-
 
     def __init__(self, input_pdb: str, input_system: str, input_state: str=None):
         """
@@ -110,6 +109,10 @@ class FultonMarket():
         self.term_overlap_thresh = term_overlap_thresh
         self.output_dir = output_dir
         self.output_ncdf = os.path.join(self.output_dir, 'output.ncdf')
+        self.checkpoint_ncdf = os.path.join(self.output_dir, 'output_checkpoint.ncdf')
+        self.save_dir = os.path.join(self.output_dir, 'saved_variables')
+        if not os.path.exists(self.save_dir):
+            os.mkdir(self.save_dir)
 
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found total simulation time of', self.total_sim_time, 'nanoseconds', flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found iteration length of', self.iter_length, 'nanoseconds', flush=True)
@@ -122,20 +125,64 @@ class FultonMarket():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found terminal acceptance rate threshold', self.term_overlap_thresh, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found output_dir', self.output_dir, flush=True)
 
-        # Configure simulation times
-        self._configure_simulation_parameters()
+        
+        # Configure experiment parameters
+        self.n_sims_completed = len(os.listdir(self.save_dir))
+        self.sim_time = self.total_sim_time / 10 # ns
+        print('sim_time', self.sim_time)
+        self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
 
-        # Set reference state
-        self.ref_state = states.ThermodynamicState(system=self.system, temperature=self.temperatures[0], pressure=1.0*unit.bar)
+        # Loop through short 50 ns simulations to allow for .ncdf truncation
+        while self.n_sims_remaining > 0:
 
-        # Set up simulation
-        self._build_simulation()
+            # Configure simulation times
+            self._configure_simulation_parameters()
+            
+            # Set reference state
+            self.ref_state = states.ThermodynamicState(system=self.system, temperature=self.temperatures[0], pressure=1.0*unit.bar)
+    
+            # Set up simulation
+            self._build_simulation()
+    
+            # Run simulation
+            self._simulate() 
 
-        # Run Simulations
-        self._simulate()        
+            # Save simulation
+            self._save_simulation()
+    
 
-        # Save data
-        self._write_trajectory()
+    def _save_simulation(self):
+        """
+        Save the important information from a simulation and then truncate the output.ncdf file to preserve disk space.
+        """
+        print('HERE\n\n\n\n\n')
+        # Determine save no. 
+        prev_saves = [int(dir) for dir in os.listdir(self.save_dir)]
+        if len(prev_saves) > 0:
+            new_save_no = max(prev_saves) + 1
+        else:
+            new_save_no = 0
+        save_no_dir = os.path.join(self.save_dir, str(new_save_no))
+        if not os.path.exists(save_no_dir):
+            os.mkdir(save_no_dir)
+
+
+        # Truncate output.ncdf
+        ncdf_copy = os.path.join(self.output_dir, 'output_copy.ncdf')
+        pos, box_vectors, states, energies = truncate_ncdf(self.output_ncdf, ncdf_copy, False)
+        np.save(os.path.join(save_no_dir, 'positions.npy'), pos.data)
+        np.save(os.path.join(save_no_dir, 'box_vectors.npy'), box_vectors.data)
+        np.save(os.path.join(save_no_dir, 'states.npy'), states.data)
+        np.save(os.path.join(save_no_dir, 'energies.npy'), energies.data)
+
+        # Truncate output_checkpoint.ncdf
+        checkpoint_copy = os.path.join(self.output_dir, 'output_checkpoint_copy.ncdf')
+        truncate_ncdf(self.checkpoint_ncdf, checkpoint_copy, True)
+
+        # Write over previous .ncdf files
+        os.system(f'mv {ncdf_copy} {self.output_ncdf}')
+        os.system(f'mv {checkpoint_copy} {self.checkpoint_ncdf}')
+
         
 
     def _configure_simulation_parameters(self):
@@ -144,7 +191,7 @@ class FultonMarket():
         """            
         
         # Configure times/steps
-        sim_time_per_rep = self.total_sim_time / self.n_replicates
+        sim_time_per_rep = self.sim_time / self.n_replicates
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated simulation per replicate to be', np.round(sim_time_per_rep, 6), 'nanoseconds', flush=True)
         
         steps_per_rep = np.ceil(sim_time_per_rep * 1e6 / self.dt)
@@ -212,6 +259,7 @@ class FultonMarket():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loading simulation from', self.output_ncdf, flush=True) 
             ncfile = nc.Dataset(self.output_ncdf)
             n_iters_completed = ncfile.dimensions['iteration'].size - 1
+            ncfile.close()
             self.current_cycle = int(np.floor(n_iters_completed / self.n_iters_per_cycle))
             self.restart = True
             
@@ -251,10 +299,6 @@ class FultonMarket():
             self._run_cycle()
 
 
-
-
-
-
     def _run_cycle(self):
         """
         Run one cycle
@@ -268,7 +312,7 @@ class FultonMarket():
             self.simulation.run(self.n_iters_per_cycle)
 
         # Eval acceptance rates
-        perc_through = self.current_cycle / self.n_cycles
+        perc_through = self.n_sims_completed / self.n_sims_remaining
         if perc_through <= self.init_overlap_perc:
             insert_inds = self._eval_acc_rates(self.init_overlap_thresh)
         else:
@@ -277,6 +321,7 @@ class FultonMarket():
         # Interpolate, if necessary
         if len(insert_inds) > 0:
             self._interpolate_states(insert_inds)
+            self.reporter.close()
             self.current_cycle = 0
             self._build_simulation(interpolate=True)
             self._configure_simulation_parameters()
@@ -323,29 +368,6 @@ class FultonMarket():
     
         self.temperatures = [temp*unit.kelvin for temp in new_temps]
         self.n_replicates = len(self.temperatures)
-
-
-    def _write_trajectory(self):
-        """
-        Write .dcd from .ncdf file
-        """
-        self.output_pdb = os.path.join(self.output_dir, 'output.pdb')
-        self.output_dcd = os.path.join(self.output_dir, 'output.dcd')
-
-        # Get positions from ncdf
-        ncfile = nc.Dataset(self.output_ncdf)
-        self.ref_positions = ncfile.variables['positions'][:,0].data
-        self.ref_vectors = ncfile.variables['box_vectors'][:,0].data
-
-        # Store w/ mdtraj
-        traj = md.load_pdb(self.input_pdb)
-        traj.xyz = self.ref_positions.copy()
-        traj.unitcell_vectors = self.ref_vectors.copy()
-        traj[0].save_pdb(self.output_pdb)
-        traj.save_dcd(self.output_dcd)
-
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved output.pdb to ', self.output_pdb, flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved output.dcd to ', self.output_dcd, flush=True)
 
 
 
