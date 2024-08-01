@@ -533,10 +533,13 @@ class Bridgeport():
             if small_molecule_params:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found small molecule ligand with resname:', lig_resname, flush=True)
 
-                # Load input 
-                template = Chem.MolFromSmiles(template_smiles)
-                mol = Chem.MolFromPDBFile(mol_path)
+                from rdkit.Chem import Draw
 
+                # Load input 
+                template = Chem.MolFromSmiles(template_smiles, sanitize=True)
+                mol = Chem.MolFromPDBFile(mol_path, sanitize=True, removeHs=False, proximityBonding=False)
+                image = Draw.MolToImage(mol)
+                image.save('image.png')
                 # Assign bond order
                 mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
 
