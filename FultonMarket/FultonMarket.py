@@ -128,7 +128,7 @@ class FultonMarket():
         
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
-        self.sim_time = self.total_sim_time / 10 # ns
+        self.sim_time = 50 # ns
         print('sim_time', self.sim_time)
         self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
 
