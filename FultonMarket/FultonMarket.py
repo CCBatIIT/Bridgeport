@@ -37,8 +37,8 @@ class FultonMarket():
         _simulate - perform the simulation, running cycles
         _run_cycle - run one cycle, performing an interpolation of parameters should acceptance rates be too low
         _eval_acc_rates - Evaluate acceptance rates
-        
-    
+        _interpolate_states - add new states between two which have poor acceptance rates (below the threshold)
+        _restrain_atoms_by_dsl - In the case of a restrained simulation - puts restraints on selected atoms in each thermodynamic state of the PTwRE simulation
     """
 
     def __init__(self, input_pdb: str, input_system: str, input_state: str=None):
@@ -88,7 +88,8 @@ class FultonMarket():
             init_overlap_perc: float=0.2, output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/'),
             restrained_atoms_dsl=None, K_max:Quantity=Quantity(83.68, spring_constant_unit)):
         """
-        Run parallel temporing replica exchange. 
+        PT - Default - Run parallel temporing replica exchange.
+        PTwRE - By assigning a string to the restrained_atoms_dsl argument, those atoms will be restrained (default is not to do this)
 
         Parameters:
         -----------
@@ -255,6 +256,9 @@ class FultonMarket():
             self.spring_constants = list(reversed(geometric_distribution(Quantity(0, spring_constant_unit), self.K_max, self.n_replicates)))
 
     def plot_energies(self, figsize=(10,2)):
+        """
+        Make a plot of the energy of each state
+        """
         # Get information
         ncfile = nc.Dataset(self.output_ncdf)
         temperatures = self.temperatures
@@ -278,7 +282,10 @@ class FultonMarket():
 
     
     def _build_simulation(self, interpolate=False):
-
+        """
+        construct the simulation by assigning mcmc move, RE sampler, 
+        
+        """
         # Set up integrator
         move = mcmc.LangevinDynamicsMove(timestep=self.dt * unit.femtosecond, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
         
@@ -399,6 +406,9 @@ class FultonMarket():
         return np.array(insert_inds)
 
     def _interpolate_states(self, insert_inds: np.array):
+        """
+        Add new temperatures (and spring constants) to a new state - if acceptance rates are too low between two states
+        """
     
         # Add new states
         prev_temps = [s.temperature._value for s in self.reporter.read_thermodynamic_states()[0]]
