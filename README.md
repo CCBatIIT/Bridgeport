@@ -31,9 +31,10 @@ Bridgeprot is also capable of generating ligand analogues based on a known ligan
 
 If you want to generate an analogue of a known structure: Make sure lig_resname and peptide_chain are set to false. Provide the SMILES string for you analogue with the "analogue_smiles" key. Provide the name of your analogue with "analogue_name". Provide a path to the known structure with "known_structure" that contains the experimental ligand to align analogue to with a "known_resname" or "known_chainid". 
 
-- **"lig_resname"**: specifies the ligand resname in the input .pdb file. If the ligand is a peptide choose "false". Ligand resnames that start with and number are not easily recognized by MDAnalysis (which is used for parsing), so we recommend changing the ligand resname in that case.
+- **"lig_resname"**: specifies the ligand resname in the input.pdb file (Use if small molecule). If the ligand is a peptide choose "false". Ligand resnames that start with and number are not easily recognized by MDAnalysis (which is used for parsing), so we recommend changing the ligand resname in that case.
 - **"peptide_chain"**: If ligand is a peptide, specify the letter code that denotes the ligand, if not choose "false".
 - **"peptide_fasta"**: If ligand is a peptide, specify the path to the .fasta file to repair the peptide if desired. If no repair is desired, choose "false", or remove argument.
+- **"known_smiles"**: Mandatory entry of smiles string of the ligand (either small molecule or peptide) in the input.pdb file
 - **"peptide_nonstandard_resids"**: If non-standard residues are present in the peptide, present the indicies of the non-standard residues in ascending order, 0-indexed. This step is only necessary if a .fasta file is provided as well. 
 - **"analogue_smiles"**: String of smiles that represent the analogue to generate. Optional argument.
 - **"analogue_name"**: Name to generate new files with. 
@@ -42,9 +43,11 @@ If you want to generate an analogue of a known structure: Make sure lig_resname 
 - **"known_chainid"**: Chainid of ligand to parse in known_structure, if known ligand is a peptide.
 - **"add_known_atoms"**: List of atom names that are also in analogue, but not recognized in the MCS. These atoms are used to compare the RMSD during conformer generation.
 - **"add_known_resids"**: List of resids that match each atom in "add_known_atoms". This should always be specified, but is especially helpful in cases where the known ligand is a peptide and each residue may have the same atoms names (ex: CA, N, C, O, etc.)
+- **"remove_analogue_atoms"**: List of atom names that are found in the MCS, but are unwanted in the MCS due to user discretion. 
 - **"add_analogue_atoms"**: List of atoms names that match each atom in "add_known_atoms". For example if "add_known_atoms" is ['C21', 'C23', 'N5'] than add_analogue_atoms should be a list of the equivalent atoms in the analogue structure, such as ['C22', 'C24', 'N5']. It may be helpful to run Bridgeport without specifying any of the "add" arguments to generate the .pdb file of the ligand to better understand the atom names that will be generated from the provided "analogue_smiles". 
 - **"analogue_rmsd_thres"***: RMSD threshold that analogue conformer generation cannot exceed. RMSD is calculated of MCS and other specified atoms in "add_known_atoms", "add_known_resids", and "add_analogue_atoms"
-- **"small_molecule_params"**: If analogue is a peptide, setting this option to true will choose to parameterize it as a small molecule with Smirnoff from OpenFF. 
+- **"small_molecule_params"**: If analogue is a peptide, setting this option to true will choose to parameterize it as a small molecule with Smirnoff from OpenFF.
+- **"align_all"**: If true, use both atoms identified in MCS and atoms specified in "add_known_atoms", "add_analogue_atoms" for alignment. Default is false, which won't use additional atoms specified in "add_known_atoms", "add_analogue_atoms" for alignment, only using them for assigning matching torsions. 
 
 #### "protein"
 - **"input_pdb_dir"**: Path to directory where the input .pdb can be found.
@@ -55,7 +58,8 @@ If you want to generate an analogue of a known structure: Make sure lig_resname 
     - **"working_dir"**: Path to directory to put all the modeller intermediates.
     - **"fasta_path"**: Path to .fasta file to repair the input protein structure.
     - **"tails"**: List of indices to parse the extra tails. EX: [30, 479]
-    - **"loops"**: 2-D List of indices that specify lower and upper bounds of loops to optimize during refinement. Loop optimization can take a while, but if skipped, unbonded output structures will result. 
+    - **"loops"**: 2-D List of indices that specify lower and upper bounds of loops to optimize during refinement. Loop optimization can take a while, but if skipped, unbonded output structures will result.
+    - **"engineered_resids"**: List of resids that are known engineered mutations in the crystal pdb. Adding this argument may prevent sequence errors in the RepairProtein section of Bridgeport.
     - **"secondary_template"**: Path to secondary .pdb to use as a reference to accurately model large portions that are missing in the input .pdb structure. 
 
 #### "environment" 
@@ -63,6 +67,7 @@ If you want to generate an analogue of a known structure: Make sure lig_resname 
 - **"pH"**: Specify the pH. Default is 7.0.
 - **"ion_strength"**: Specify the concentration of NaCl ions (in Molar). Default is 0.15 M.
 - **"alignment_structure"**: Path to structure to align the final system to.
+- **"alignment_chains"**: List of chains in the alignment structure to use for alignment. EX: ["A"]
 
 ## Examples
 ### 7vvk (membrane, peptide ligand)

@@ -5,6 +5,7 @@ from MDAnalysis.analysis.align import alignto
 from MDAnalysis.analysis.rms import rmsd
 from MDAnalysis.analysis.bat import BAT
 from MDAnalysis.lib.distances import calc_dihedrals
+from MDAnalysis.coordinates.PDB import PDBWriter
 import mdtraj as md
 from pdbfixer import PDBFixer
 from openbabel import openbabel
@@ -28,6 +29,95 @@ rdDepictor.SetPreferCoordGen(True)
 IPythonConsole.drawOptions.minFontSize=20
 from IPython.display import display
 from typing import List
+
+def trim_env(pdb, padding: float=15):
+    """
+    Remove the excess membrane and solvent added by calling PDBFixer.addMembrane()
+
+    Protocol:
+    ---------
+        1. Get dimensions of protein and new periodic box
+        2. Write corresponding CRYST1 line
+        3. Identify atoms outside of box
+        4. Identify corresponding resnames and resids outside of box
+        5. Remove residues outside of box 
+        6. Overwrite original file ('pdb' parameter)
+
+    Parameters:
+    -----------
+        pdb (str):
+            String path to pdb file to trim.
+
+        padding (float):
+            Amount of padding (Angstrom) to trim to. Default is 15 Angstrom to accomodate the default 10 Angstrom NonBondededForce cutoff.     
+    """
+
+    # Get protein dimensions
+    u = mda.Universe(pdb)
+    prot_sele = u.select_atoms('protein')
+    max_coords = np.array([prot_sele.positions[:,i].max() for i in range(3)]) + padding
+    min_coords = np.array([prot_sele.positions[:,i].min() for i in range(3)]) - padding
+    deltas = np.subtract(max_coords, min_coords)
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified new box size:', deltas, flush=True)
+
+    
+    # Write CRYST1 line
+    temp_crys_pdb = 'temp_crys.pdb'
+    writer = PDBWriter(temp_crys_pdb)
+    writer.CRYST1(list(deltas) + [90, 90, 90])
+    writer.close()
+    
+    cryst1_line = open(temp_crys_pdb, 'r').readlines()[0]
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Writing new CRYST1 line:', cryst1_line[:-2], flush=True)
+    os.remove(temp_crys_pdb)
+
+    lines = open(pdb, 'r').readlines()
+    for i, line in enumerate(lines):
+        if line.startswith('CRYST1'):
+            cryst_line_ind = i
+            break
+
+    lines = lines[:cryst_line_ind] + [cryst1_line] + lines[cryst_line_ind+1:]
+    open(pdb, 'w').writelines(lines)
+
+
+    # Identify atoms outside of box
+    u = mda.Universe(pdb)
+    all_atoms = u.select_atoms('all')
+    remove_inds = []
+    for i, atom_xyz in enumerate(all_atoms.positions):
+        if (atom_xyz[0] > max_coords[0]) or (atom_xyz[1] > max_coords[1]) or (atom_xyz[2] > max_coords[2]):
+            remove_inds.append(i)
+        elif (atom_xyz[0] < min_coords[0]) or (atom_xyz[1] < min_coords[1]) or (atom_xyz[2] < min_coords[2]):
+            remove_inds.append(i)
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified ', len(remove_inds), 'atoms to remove.' , flush=True)
+
+
+
+    # Identify resnames and resids outside of box
+    remove_resnames = all_atoms.resnames[remove_inds]
+    remove_resids = all_atoms.resids[remove_inds]
+    
+    remove = np.unique([[remove_resnames[i], remove_resids[i]] for i in range(len(remove_inds))], axis=0)
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified ', len(remove), 'resids to remove.' , flush=True)
+
+    # Remove residues outside of box
+    trimmed_sele = u.select_atoms('all')
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Untrimmed no. of atoms:', trimmed_sele.n_atoms , flush=True)
+    
+    for rem in remove:
+        trimmed_sele = trimmed_sele - u.select_atoms(f'resname {rem[0]} and resid {rem[1]}')
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Trimmed no. of atoms:', trimmed_sele.n_atoms , flush=True)
+
+    # Write over original file
+    trimmed_sele.write(pdb)
+    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Trimmed environment saved to:', pdb , flush=True)
+
+    # # Remove MDAnalysis headers
+    # lines = [line for line in open(pdb, 'r').readlines() if line.startswith('ATOM') or line.startswith('HETATM') or line.startswith('CONECT') or line.startswith('CRYST1')]
+    # open(pdb, 'w').writelines(lines)
+
+
 def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_out_path: str, analogue_atoms: List[str]=[], remove_analogue_atoms: List[str]= [], known_atoms: List[str]=[], known_resids: List[int]=[], rmsd_thres: float=None, n_conformers: int=100, align_all: bool=False):
     """
     Creates an aligned analogue of a known ligand structure. 
@@ -73,19 +163,22 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
 
     # Create analogue with smiles
     new_mol = Chem.MolFromSmiles(smiles)
+    AllChem.EmbedMolecule(new_mol) # Embed immediately to retain stereochem specified in isomeric smiles
     new_mol_pdb_block = Chem.MolToPDBBlock(new_mol)
     new_mol = Chem.MolFromPDBBlock(new_mol_pdb_block)
-    AllChem.EmbedMolecule(new_mol)
+
     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created analogue', analogue_name, 'from smiles:', smiles , flush=True)
 
     # Get indices of max. common substructure 
     ref_match_inds, new_match_inds = return_max_common_substructure(ref_mol, new_mol)
 
     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Generating', n_conformers, 'conformers of analogue.', flush=True)
-    for i in range(n_conformers):
+    # Create counter
+    n = 0 
+    while n <= n_conformers:
         #Generate conformer
-        AllChem.EmbedMolecule(new_mol, randomSeed=i)
-        
+        AllChem.EmbedMolecule(new_mol)
+
         # Write out analogue to .pdb file
         Chem.MolToPDBFile(new_mol, analogue_out_path)
         
@@ -110,10 +203,11 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
                 atom_ind = new_align_atoms.index(atom)
                 
                 # Remove atom                
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removing', atom, 'from atoms to align in analogue and', ref_align_atoms[atom_ind], ref_align_resids[atom_ind], 'from atoms to align in reference.', flush=True)
                 ref_align_atoms.pop(atom_ind)
                 ref_align_resids.pop(atom_ind)
                 new_align_atoms.pop(atom_ind)
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removed', atom, 'from atoms to align in analogue and', ref_align_atoms[atom_ind], ref_align_resids[atom_ind], 'from atoms to align in reference.', flush=True)
+
 
         # Make selection for reference atoms to align
         ref_align_sele = ref_sele.select_atoms('')
@@ -168,15 +262,19 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
 
         # Evaluate RMSD
         RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Final RMSD between MCS of analogue and reference:', RMSD, flush=True)
+        if RMSD <= rmsd_thres:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Final RMSD between MCS of analogue and reference:', RMSD, flush=True)
+    
+            # Write out conformer            
+            if not os.path.exists(analogue_out_dir):
+                os.mkdir(analogue_out_dir)
+            conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(n) + '.pdb')
+            new_sele.write(conformer_out_path)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved conformer to', conformer_out_path, flush=True)
 
-        # Write out conformer            
-        if not os.path.exists(analogue_out_dir):
-            os.mkdir(analogue_out_dir)
-        conformer_out_path = os.path.join(analogue_out_dir, analogue_name + '_' + str(i) + '.pdb')
-        new_sele.write(conformer_out_path)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved conformer to', conformer_out_path, flush=True)
-
+            # Increase accepted conformation counter
+            n += 1
+            
     return analogue_out_dir, new_match_atoms
 
 def return_max_common_substructure(mol1, mol2):
@@ -304,11 +402,18 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
             
             # Select reference atoms
             ref_tors_sele = ref_match.select_atoms('')
+            print(ref_match.select_atoms('all').atoms.names, ref_match.select_atoms('all').atoms.resids)
             for (r, a) in zip (ref_eq_resids, ref_eq_atoms):
+                print(ref_tors_sele.atoms.names, a, ref_tors_sele.atoms.resids, r, ref_match.select_atoms(f"resid {r} and name {a}").n_atoms)
                 ref_tors_sele = ref_tors_sele + ref_match.select_atoms(f"(resid {r} and name {a})")
 
             # Calculated dihedral angle and assign to analogue
-            c1, c2, c3, c4 = ref_tors_sele.positions
+            try:
+                c1, c2, c3, c4 = ref_tors_sele.positions
+            except:
+                print(ref_eq_resids, ref_eq_atoms)
+                print('reference atoms names attempted to match:', ref_tors_sele.atoms.names, 'reference resids attempted to match', ref_tors_sele.atoms.resids, flush=True)
+                raise Exception("Could not match torsion")
             dihedral = calc_dihedrals(c1, c2, c3, c4)
             mobile_tors[i] = dihedral
             #changed[mobile_R._primary_torsion_indices[i]] = True

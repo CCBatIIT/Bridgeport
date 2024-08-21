@@ -1,3 +1,4 @@
+#MotorRow
 import os, shutil, sys
 import mdtraj as md
 import numpy as np
@@ -7,6 +8,7 @@ from openmm.unit import *
 from datetime import datetime
 from MotorRow_utils import *
 from typing import List
+import math
 
 class MotorRow():
     """
@@ -43,7 +45,7 @@ class MotorRow():
         if not os.path.isdir(self.abs_work_dir):
             os.mkdir(self.abs_work_dir)
         #Get the system xml file (we want to create a system fresh from this every time)
-        if os.path.isabs(system_xml):
+        if system_xml is None or os.path.isabs(system_xml):
             pass
         else:
             shutil.copy(system_xml, os.path.join(self.abs_work_dir, system_xml))
@@ -202,8 +204,9 @@ class MotorRow():
 
 
     def _run_step(self, state_in:str, stepnum:int, state_xml_out:str=None, pdb_out:str=None,
-                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, nstdout=1000,
-                  fn_stdout=None, ndcd=5000, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
+                  fc_pos:float=300.0, nsteps=125000, temp=300.0, dt=2.0, ncycles=50, nstdout=1000,
+                  fn_stdout=None, ndcd=5000, append_dcd: bool=False, fn_dcd=None, press=1.0, positions_from_pdb:str=None):
+
         """
         Run different hard-coded Simulations based on the step number
         1 - NVT with Heavy Restraints on the Protein and Membrane (Z) coords
@@ -221,6 +224,7 @@ class MotorRow():
             nsteps: int: Default 125000 - Number of Simulation steps to take
             temp: float: Default 300 - Temperature of the Simulation (for setting initial velocities) (unit Kelvin)
             dt: float: Default 2.0 - Timestep of the simulation (unit femtosecond)
+            ncycles: float: Default 50 - Number of cycles. state.xml is written out every cycle for resuming
             nstdout: int: Default 1000 - Number of steps to take between writing information to the State Data Reporter
             fn_stdout: string: Default None - If provided, will write the State Data Reporter data to this file name
             ndcd: int: Default 5000 - Number of steps to take between recording frames in the DCD trajectory file
@@ -313,15 +317,42 @@ class MotorRow():
         
         SDR = app.StateDataReporter(fn_stdout, nstdout, step=True, time=True,
                                     potentialEnergy=True, temperature=True, progress=False,
-                                    remainingTime=True, speed=False, volume=True,
+                                    remainingTime=True, speed=True, volume=True,
                                     totalSteps=nsteps, separator=' : ')
+        
         simulation.reporters.append(SDR)
-        DCDR = app.DCDReporter(fn_dcd, ndcd)
+        DCDR = app.DCDReporter(file=fn_dcd, reportInterval=ndcd, append=append_dcd)
         simulation.reporters.append(DCDR)
         print(f'Starting Step {stepnum} with forces {simulation.system.getForces()}')
         print(f'Starting Step {stepnum} with box_vectors {simulation.system.getDefaultPeriodicBoxVectors()}')
-        simulation.step(nsteps)
-        self._describe_state(simulation, f'Step {stepnum}')
+
+        # Write out state.xml
+        if state_xml_out is None:
+            state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
+
+        # Determine no. of steps per cycle
+        steps_per_cycle = int(nsteps / ncycles)
+                      
+        # Reconfigure steps needed to take if appending
+        if append_dcd:
+            steps_taken = float(simulation.context.getTime().value_in_unit(femtosecond) / dt)
+            cycles_completed = math.floor(steps_taken / steps_per_cycle)
+            print('steps_taken', steps_taken)
+            print('cycles_complete', cycles_completed)
+        else:
+            cycles_completed = 0
+            simulation.context.setTime(0)
+
+        print('ncycles', ncycles)
+        print('nsteps', nsteps)
+        print('dt', dt)
+        print('steps_per_cycle', steps_per_cycle)
+        for cycle in range(cycles_completed+1, ncycles+1):
+            print('Cycle', cycle, 'to', ((cycle/ncycles) * ((nsteps * dt) / 1e6)), 'ns')
+            simulation.step(steps_per_cycle)
+            self._describe_state(simulation, f'Step {stepnum}')
+            self._write_state(simulation, state_xml_out)
+
         end = datetime.now() - start
         print(f'Step {stepnum} completed after {end}')
         print(f'Box Vectors after this step {simulation.system.getDefaultPeriodicBoxVectors()}')
@@ -329,10 +360,6 @@ class MotorRow():
         if pdb_out is None:
             pdb_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.pdb')
         self._write_structure(simulation, pdb_out)
-
-        if state_xml_out is None:
-            state_xml_out = os.path.join(self.abs_work_dir, f'Step_{stepnum}.xml')
-        self._write_state(simulation, state_xml_out)
         
         for i in range(3):
             print('########################################################################################')

@@ -67,7 +67,7 @@ class RepairProtein():
         Optimizes specified loop regions within the protein model.
     """
 
-    def __init__(self, pdb_fn: str, fasta_fn: str, working_dir: str='./'):
+    def __init__(self, pdb_fn: str, fasta_fn: str, mutated_resids: List[int]=None, working_dir: str='./'):
         """
         Initialize RepairProtein object.
 
@@ -78,6 +78,9 @@ class RepairProtein():
             
             fasta_fn (str):
                 String path to .fasta file that contains sequence to use as a template to repair the protein .pdb.     
+
+            mutated_resids (List[int]):
+                List of resids that are engineered mutations in the input .pdb. RepairProtein will automatically discard those residues and rewrite .pdb file to ease the identification of missing residues. Default is None. 
 
             working_dir (str):
                 String path to working directory where all intermediate files made by UCSF modeller will be stored. Default is current working directory. 
@@ -98,6 +101,16 @@ class RepairProtein():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein to repair:', self.pdb_fn, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Template sequence:', self.fasta_fn, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Modeller intermediates will be written to:', self.working_dir, flush=True)
+
+        
+        if mutated_resids != None:
+            top = md.load_pdb(self.pdb_fn).topology
+            mdtraj_resids = [top.residue(i).resSeq for i in range(top.n_residues)]
+            mutated_resids = [mdtraj_resids.index(resid) for resid in mutated_resids]
+            self._remove_residues(mutated_resids)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Removed mutated residues with resids:', mutated_resids, 'from', self.pdb_fn, flush=True)
+
+    
 
     def run(self, pdb_out_fn: str, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False):
         """
@@ -142,10 +155,10 @@ class RepairProtein():
         self.env.io.atom_files_directory = ['.', self.working_dir]
         if nstd_resids != None:
             self.env.io.hetatm=True
-        self._build_homology_model(nstd_resids=nstd_resids)
+        self._build_homology_model(nstd_resids=self.nstd_resids)
 
         # Fix loops
-        if loops != False and loops != None:
+        if loops != False:
             self._optimize_loops(loops)
 
         os.chdir(cwd)
@@ -195,7 +208,7 @@ class RepairProtein():
 
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
 
-    def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=None):
+    def run_with_secondary(self, secondary_template_pdb: str, pdb_out_fn: str, tails: bool=False, loops: List=False, nstd_resids: List=None, verbose: bool=False):
         """
         Run the remodelling using a secondary structure to appropriately model secondary structure that is missing in input file. 
 
@@ -217,12 +230,18 @@ class RepairProtein():
                 If list is provided then loops will be optimized. Should be in format [[resid_1, resid_2], ...] to represent the loops.
 
             verbose (bool):
-                If true, show missing and mutated residues after each iteration of sequence alignment. Default is False. 
+                If true, show missing and mutated residues after each iteration of sequence alignment. Default is False.
+                
+            nstd_resids (List):
+                If list is provided then nonstandard residues at these indices (0-indexed) will be conserved from input model to output structure.
         """
         # Attributes
         self.pdb_out_fn = pdb_out_fn
         self.secondary_template_pdb = secondary_template_pdb
         self.secondary_name = self.secondary_template_pdb.split('/')[-1].split('.')[0]
+        self.nstd_resids = nstd_resids
+        self.verbose = verbose
+
 
         # Parse template sequence from .fasta
         self._get_temp_seq()
@@ -238,10 +257,10 @@ class RepairProtein():
         os.chdir(self.working_dir)
         self.env = Environ()
         self.env.io.atom_files_directory = ['.', self.working_dir]
-        self._build_homology_model()
+        self._build_homology_model(self.nstd_resids)
         
         # Fix loops
-        if loops != None:
+        if loops != False:
             self._optimize_loops(loops)
 
         os.chdir(cwd)
@@ -331,17 +350,13 @@ class RepairProtein():
         else:
             sw = SeqWrap(self.temp_seq, self.tar_seq)
 
-        sw.find_missing_residues(verbose=False)
+        sw.find_missing_residues(verbose=self.verbose)
         traj = md.load_pdb(self.pdb_fn)
         self.mutated_residues = sw.mutated_residues
         counter = 0
         while len(self.mutated_residues) > 0:
             # Remove mutation from input.pdb
-            traj = md.load_pdb(self.pdb_fn)
-            mutated_atoms = traj.topology.select('resid '+ str(" ".join(self.mutated_residues[:,0])))
-            sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
-            traj = traj.atom_slice(sele)
-            traj.save_pdb(self.pdb_fn)
+            self._remove_residues(self.mutated_residues[:,0])
 
             # Reparse target sequence from new .pdb
             shutil.copy(self.pdb_fn, self.working_dir + '/' + self.pdb_fn.split('/')[-1])
@@ -351,6 +366,7 @@ class RepairProtein():
             # Find missing
             if hasattr(self, "secondary_seq"):
                 sw = SeqWrap(self.temp_seq, self.tar_seq, self.secondary_seq)
+                sw.find_missing_residues(verbose=self.verbose)
             else:
                 sw = SeqWrap(self.temp_seq, self.tar_seq)  
                 sw.find_missing_residues(verbose=self.verbose)
@@ -366,6 +382,23 @@ class RepairProtein():
         self.ali_fn = self.working_dir + '/' + self.name + '.ali'
         sw.write_alignment_file(self.ali_fn, self.temp_pir_fn, self.secondary_pir_fn)
 
+    def _remove_residues(self, mutated_resids: List[int]):
+        """
+        Remove residues with specified resids from self.pdb_fn with mdtraj
+
+        Parameters:
+        -----------
+            mutated_resids (List[int]):
+                List of resids to discard from self.pdb_fn
+
+        """
+
+        # Remove residues and save over self.pdb_fn
+        traj = md.load_pdb(self.pdb_fn)
+        mutated_atoms = traj.topology.select('resid '+ " ".join([str(resid) for resid in mutated_resids]))
+        sele = [i for i in range(traj.topology.n_atoms) if i not in mutated_atoms]
+        traj = traj.atom_slice(sele)
+        traj.save_pdb(self.pdb_fn)
 
     def _build_homology_model(self, nstd_resids):
         """

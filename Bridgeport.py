@@ -22,6 +22,7 @@ from openmm.unit import *
 from openbabel import openbabel
 from pdbfixer import PDBFixer
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 class Bridgeport():
     """
@@ -224,14 +225,6 @@ class Bridgeport():
         """
         Build a new input complex by replacing a ligand with an analogue.
         """
-
-        #REMOVE 
-        # self.analogue_smiles = "CSCC[C@@H](C(=O)O)NC(=O)[C@H](CC1=CC=CC=C1)NC(=O)CNC(=O)CNC(=O)[C@H](CC2=CC=C(C=C2)O)N"
-        # self.analogue_name = "MetEnk"
-        # self.analogue_chainid = 'P'
-        # self.known_atoms = ["N", "C", "O", "CA", "N", "CB", "CG", "CD1", "CE1", "CZ", "CE2", "CD2", "OH"]
-        # self.known_resids = [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        # self.analogue_atoms = ["N4", "C19", "O6", "C20", "N5", "C21", "C22", "C23", "C24", "C25", "C26",  "C27", "O7"]
         
         # Build necessary directories
         if not os.path.exists(self.lig_only_dir):
@@ -285,7 +278,6 @@ class Bridgeport():
                            n_conformers=n_confs,
                            align_all=self.align_all)
 
-        # print('!!! ANALOGUE MAXIMUM COMMON SUBSTRUCTURE ATOMS', self.analogue_mcs)
         self.analogue_pdbs = os.listdir(self.analogue_dir)
         lig_path = os.path.join(self.analogue_dir, self.analogue_pdbs[0])
         
@@ -316,6 +308,7 @@ class Bridgeport():
 
         # Load reference structure
         ref_pdb_path = self.input_params['environment']['alignment_ref']
+        ref_chains = self.input_params['environment']['alignment_chains']
         if os.path.exists(ref_pdb_path):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found references structure', ref_pdb_path, flush=True)  
         else:
@@ -332,6 +325,7 @@ class Bridgeport():
 
             # Slim to correct chain
             u = mda.Universe(input_pdb_path)
+            
             # Parse if one chain or multiple
             if type(self.input_params["protein"]["chains"]) == list:
                 num_chains = len(self.input_params["protein"]["chains"])
@@ -343,6 +337,7 @@ class Bridgeport():
                 chain_sele_string = f'chainid {self.input_params["protein"]["chains"]}'
             else:
                 raise Exception('input_params["protein"]["chains"] must be either list or string')
+            
             #Make the selection
             chain_sele = u.select_atoms(chain_sele_string)
 
@@ -355,7 +350,7 @@ class Bridgeport():
             sele_str = chain_sele_string +\
                        ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
                        ' and backbone'
-            ref_sele_str = chain_sele_string +\
+            ref_sele_str = 'chainid ' + ' or '.join(chain for chain in ref_chains) +\
                            ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
                            ' and backbone'
             # Align
@@ -429,26 +424,36 @@ class Bridgeport():
         """
         params = self.input_params['RepairProtein']
         file = self.input_params['protein']['input_pdb']
+        if 'engineered_resids' in params:
+            engineered_resids = params['engineered_resids']
+        else:
+            engineered_resids = None
+            
         if 'secondary_template' in self.input_params['RepairProtein']:
             secondary_temp = self.input_params['RepairProtein']['secondary_template']
             if secondary_temp!= False and os.path.exists(secondary_temp):
                 protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
                                                                 fasta_fn=params['fasta_path'], 
+                                                                mutated_resids=engineered_resids,
                                                                 working_dir=params['working_dir'])
                 protein_reparer.run_with_secondary(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                                   secondary_template_pdb=secondary_temp,
                                                   tails=params['tails'],
-                                                  loops=params['loops'])
+                                                  loops=params['loops'],
+                                                  verbose=self.verbose)
             else:
                 protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
-                                                                fasta_fn=params['fasta_path'], 
+                                                                fasta_fn=params['fasta_path'],
+                                                                mutated_resids=engineered_resids,
                                                                 working_dir=params['working_dir'])
                 protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                     tails=params['tails'],
-                                    loops=params['loops'])
+                                    loops=params['loops'],
+                                    verbose=self.verbose)
         else:
             protein_reparer = RepairProtein(pdb_fn=os.path.join(self.prot_only_dir, file),
                                                             fasta_fn=params['fasta_path'], 
+                                                            mutated_resids=engineered_resids,
                                                             working_dir=params['working_dir'])
             protein_reparer.run(pdb_out_fn=os.path.join(self.prot_only_dir, file),
                                 tails=params['tails'],
@@ -504,7 +509,7 @@ class Bridgeport():
             lig_fn = self.input_params['protein']['input_pdb']        
 
             # Get crystal information from protein
-            crys_line = open(os.path.join(self.prot_only_dir, lig_fn.split('.')[0]+'_env.pdb'), 'r').readlines()[1]
+            crys_line = [line for line in open(os.path.join(self.prot_only_dir, lig_fn.split('.')[0]+'_env.pdb'), 'r').readlines() if line.startswith('CRYS')][0]
             assert crys_line.startswith('CRYS'), f"No crystal line found at top of {lig_fn.split('.')[0]}_env.pdb, found: {crys_line}."
 
             # Get path to input ligand file
@@ -515,6 +520,12 @@ class Bridgeport():
             small_molecule_params = False
             if lig_resname != False:
                 small_molecule_params = True
+                if 'analogue_smiles' in self.input_params['ligand']:
+                    template_smiles = self.input_params['ligand']['analogue_smiles']
+                elif 'known_smiles' in self.input_params['ligand']:
+                    template_smiles = self.input_params['ligand']['known_smiles']
+                else:
+                    raise Exception('Must add "known_smiles" and/or "analogue_smiles" argument to assign proper bond order to ligand')
             elif 'small_molecule_params' in self.input_params['ligand']:
                 if self.input_params['ligand']['small_molecule_params'] == True:
                     small_molecule_params = True
@@ -522,30 +533,23 @@ class Bridgeport():
             if small_molecule_params:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found small molecule ligand with resname:', lig_resname, flush=True)
 
-                #Obabel conversion block
-                obConversion = openbabel.OBConversion()
-                formats = [mol_path.split('.')[-1], out_fm]
-                obConversion.SetInAndOutFormats(*formats)
-                mol = openbabel.OBMol()
-        
-                #Find Input
-                if os.path.isfile(mol_path):
-                    obConversion.ReadFile(mol, mol_path)
-                elif os.path.isfile(os.path.join(self.lig_only_dir, mol_path)):
-                    obConversion.ReadFile(mol, os.path.join(self.lig_only_dir, mol_path))
-                else:
-                    raise FileNotFoundError('mol_fn was not found')
-                    
-                #Add Hydrogens
-                mol.AddHydrogens()
-                            
-                #Writeout the protonated file in the second format
-                out_fn = mol_path.split('.')[0] + '.' + out_fm
-                obConversion.WriteFile(mol, out_fn)
+                from rdkit.Chem import Draw
 
-                # Recursively written over original file type
-                if not os.path.exists(mol_path.split('.')[0] + '.pdb'):
-                    self._ligand_prep(out_fm=mol_path.split('.')[-1])
+                # Load input 
+                template = Chem.MolFromSmiles(template_smiles, sanitize=True)
+                mol = Chem.MolFromPDBFile(mol_path, sanitize=True, removeHs=False, proximityBonding=False)
+                image = Draw.MolToImage(mol)
+                image.save('image.png')
+                # Assign bond order
+                mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+
+                # Add Hs
+                mol = AllChem.AddHs(mol, addCoords=True)
+
+                # Save 
+                Chem.MolToPDBFile(mol, mol_path)
+                writer = Chem.SDWriter(mol_path.split('.')[0] + '.sdf')
+                writer.write(mol)
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', mol_path.split('.')[0] + '.pdb', mol_path.split('.')[0] + '.sdf', flush=True)
 
             # Prepare peptide ligand
@@ -618,25 +622,18 @@ class Bridgeport():
                         addHs = True
 
                 if addHs == True:
-                    # WRITE PDB
-                    obConversion = openbabel.OBConversion()
-                    formats = [mol_path.split('.')[-1], 'pdb']
-                    obConversion.SetInAndOutFormats(*formats)
-                    mol = openbabel.OBMol()
-            
-                    #Find Input
-                    if os.path.isfile(mol_path):
-                        obConversion.ReadFile(mol, mol_path)
-                    elif os.path.isfile(os.path.join(self.lig_only_dir, mol_path)):
-                        obConversion.ReadFile(mol, os.path.join(self.lig_only_dir, mol_path))
-                    else:
-                        raise FileNotFoundError('mol_fn was not found')
-                        
-                    #Add Hydrogens
-                    mol.AddHydrogens()
-                                
-                    #Writeout the protonated file
-                    obConversion.WriteFile(mol, mol_path)
+                    # Load input 
+                    template = Chem.MolFromSmiles(template_smiles)
+                    mol = Chem.MolFromPDBFile(mol_path)
+    
+                    # Assign bond order
+                    mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+    
+                    # Add Hs
+                    mol = AllChem.AddHs(mol, addCoords=True)
+    
+                    # Save 
+                    Chem.MolToPDBFile(mol, mol_path)
 
                     # Clean up extra Hs
                     lines = open(mol_path, 'r').readlines()
