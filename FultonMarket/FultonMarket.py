@@ -1,8 +1,8 @@
 from openmm import *
 from openmm.app import *
 from openmmtools import states, mcmc, multistate
-from openmmtools.states import SamplerState
-from openmmtools.multistate import ParallelTemperingSampler, MultiStateReporter
+from openmmtools.states import SamplerState, ThermodynamicState
+from openmmtools.multistate import ParallelTemperingSampler, ReplicaExchangeSampler, MultiStateReporter
 import tempfile
 import os, sys
 sys.path.append('../MotorRow')
@@ -14,9 +14,31 @@ from datetime import datetime
 import mdtraj as md
 from shorten_replica_exchange import truncate_ncdf
 
+
+geometric_distribution = lambda min_val, max_val, n_vals: [min_val + (max_val - min_val) * (math.exp(float(i) / float(n_vals-1)) - 1.0) / (math.e - 1.0) for i in range(n_vals)]
+spring_constant_unit = (unit.joule)/(unit.angstrom*unit.angstrom*unit.mole)
+
+
 class FultonMarket():
     """
     Replica exchange
+
+    Default is Parallel Tempering (PT), additionally can perform PT with restraints (PTwRE)
+    PT uses a ParallelTemperingSampler
+    PTwRE uses the more general ReplicaExchangeSampler
+
+    Methods:
+        init - Initialize a Fulton Market Object with pdb, xml (system), and xml (state) files
+        run - Run parallel tempering replica exchange.
+        _save_simulation - Save the important information from a simulation and then truncate the output.ncdf file to preserve disk space.
+        _configure_simulation_parameters - Configure simulation times to meet aggregate simulation time.
+        plot_energies - plot the energy of each state in the simulation
+        _build_simulation - assign Integrator and Report, create a new simulation or continue a previous one as necessary
+        _simulate - perform the simulation, running cycles
+        _run_cycle - run one cycle, performing an interpolation of parameters should acceptance rates be too low
+        _eval_acc_rates - Evaluate acceptance rates
+        
+    
     """
 
     def __init__(self, input_pdb: str, input_system: str, input_state: str=None):
@@ -49,7 +71,7 @@ class FultonMarket():
 
 
         # Unpack .xml
-        self.system =XmlSerializer.deserialize(open(input_system, 'r').read())
+        self.system = XmlSerializer.deserialize(open(input_system, 'r').read())
         self.init_box_vectors = self.system.getDefaultPeriodicBoxVectors()
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found input_system:', input_system, flush=True)
 
@@ -60,7 +82,11 @@ class FultonMarket():
         sim.loadState(input_state)
         self.context = sim.context
 
-    def run(self, total_sim_time: float, iteration_length: float, dt: float=2.0, T_min: float=300, T_max: float=360, n_replicates: int=12, init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35, init_overlap_perc: float=0.2, output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/')):
+    def run(self, total_sim_time: float, iteration_length: float,
+            dt: float=2.0, T_min: float=300, T_max: float=360, n_replicates: int=12,
+            init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35,
+            init_overlap_perc: float=0.2, output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/'),
+            restrained_atoms_dsl=None, K_max:Quantity=Quantity(83.68, spring_constant_unit)):
         """
         Run parallel temporing replica exchange. 
 
@@ -88,21 +114,28 @@ class FultonMarket():
                 Acceptance rate threshold during "init_overlap_perc" of the simulation time to cause restart. Default is 0.50.
 
             term_overlap_thresh (float):
-                Terminal acceptance rate. If the minimum acceptance rate every falls below this threshold simulation with restart. Default is 0.35.
+                Terminal acceptance rate. If the minimum acceptance rate ever falls below this threshold simulation will restart. Default is 0.35.
 
             init_overlap_perc: (float):
                 Percentage of simulation time to evaluate acceptance rates with init_overlap_thresh. For example 0.2 (default) represents first 20% of simulation. 
 
             output_dir (str):
                 String path to output directory to store files. Default is 'FultonMarket_output' in the current working directory.
+
+            restrained_atoms_dsl:
+                If restraints are to be used, supply an MDTraj selection string for the atoms which are to be restrained (default is not to do this)
+            
+            K_max (Quantity):
+                If restrained_atoms_dsl is not None, then establish restraints (geometrically distributed from 0 to K_max)
+                Highest temp is unrestrained, lowest temp is fully restrained (K_max)
         """
 
-        # Store variables
-        self.total_sim_time = total_sim_time
-        self.iter_length = iteration_length
-        self.dt = dt 
-        self.T_min = T_min
-        self.T_max = T_max
+        # Store variables and assign units
+        self.total_sim_time = total_sim_time * unit.nanosecond
+        self.iter_length = iteration_length * unit.nanosecond
+        self.dt = dt * unit.femtosecond
+        self.T_min = T_min * unit.kelvin
+        self.T_max = T_max *unit.kelvin
         self.n_replicates = n_replicates
         self.init_overlap_thresh = init_overlap_thresh
         self.init_overlap_perc = init_overlap_perc
@@ -110,15 +143,19 @@ class FultonMarket():
         self.output_dir = output_dir
         self.output_ncdf = os.path.join(self.output_dir, 'output.ncdf')
         self.checkpoint_ncdf = os.path.join(self.output_dir, 'output_checkpoint.ncdf')
+        self.restrained_atoms_dsl = restrained_atoms_dsl
+        if self.restrained_atoms_dsl is not None:
+            self.K_max = K_max
+                        
         self.save_dir = os.path.join(self.output_dir, 'saved_variables')
         if not os.path.exists(self.save_dir):
             os.mkdir(self.save_dir)
 
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found total simulation time of', self.total_sim_time, 'nanoseconds', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found iteration length of', self.iter_length, 'nanoseconds', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found timestep of', self.dt, 'femtoseconds', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found minimum temperature', self.T_min, 'Kelvin', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found maximum temperature', self.T_max, 'Kelvin', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found total simulation time of', self.total_sim_time, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found iteration length of', self.iter_length, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found timestep of', self.dt, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found minimum temperature', self.T_min, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found maximum temperature', self.T_max, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found number of replicates', self.n_replicates, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found initial acceptance rate threshold', self.init_overlap_thresh, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found initial acceptance rate threshold holding percentage', self.init_overlap_perc, flush=True)
@@ -128,7 +165,7 @@ class FultonMarket():
         
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
-        self.sim_time = 50 # ns
+        self.sim_time = 50 * unit.nanosecond
         print('sim_time', self.sim_time)
         self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
 
@@ -194,10 +231,10 @@ class FultonMarket():
         sim_time_per_rep = self.sim_time / self.n_replicates
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated simulation per replicate to be', np.round(sim_time_per_rep, 6), 'nanoseconds', flush=True)
         
-        steps_per_rep = np.ceil(sim_time_per_rep * 1e6 / self.dt)
+        steps_per_rep = np.ceil(sim_time_per_rep / self.dt)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per replicate to be', np.round(steps_per_rep,0), 'steps', flush=True)        
         
-        self.n_steps_per_iter = self.iter_length * 1e6 / self.dt
+        self.n_steps_per_iter = np.ceil(self.iter_length / self.dt)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per iteration to be', np.round(self.n_steps_per_iter, 0), 'steps', flush=True) 
         
         self.n_iters = np.ceil(steps_per_rep / self.n_steps_per_iter)
@@ -210,10 +247,12 @@ class FultonMarket():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iters per cycle to be', self.n_iters_per_cycle, 'iterations', flush=True) 
 
         # Configure replicates
-        self.temperatures = [temp*unit.kelvin for temp in np.logspace(np.log10(self.T_min),np.log10(self.T_max), self.n_replicates)]
+        self.temperatures = geometric_distribution(self.T_min, self.T_max, self.n_replicates)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True) 
 
-
+        # Configure Restraints if necessary
+        if self.restrained_atoms_dsl is not None:
+            self.spring_constants = list(reversed(geometric_distribution(Quantity(0, spring_constant_unit), self.K_max, self.n_replicates)))
 
     def plot_energies(self, figsize=(10,2)):
         # Get information
@@ -236,7 +275,6 @@ class FultonMarket():
         ax.set_xlabel('Energy (kT)')
         ax.legend(bbox_to_anchor=(1,1), ncol=np.ceil(len(temperatures)/15), fontsize=5)
         plt.show()
-        
 
     
     def _build_simulation(self, interpolate=False):
@@ -245,7 +283,10 @@ class FultonMarket():
         move = mcmc.LangevinDynamicsMove(timestep=self.dt * unit.femtosecond, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
         
         # Set up simulation
-        self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
+        if self.restrained_atoms_dsl is None:
+            self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
+        else:
+            self.simulation = ReplicaExchangeSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
         self.simulation._global_citation_silence = True
 
         # Setup reporter
@@ -267,15 +308,19 @@ class FultonMarket():
             # Create simulation
             if os.path.exists(self.output_ncdf):
                 os.remove(self.output_ncdf)
+            
             if hasattr(self, 'context'):
                 sampler = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
             else:
                 sampler = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
-            self.simulation.create(self.ref_state,
-                                  sampler,
-                                  self.reporter, 
-                                  temperatures=self.temperatures,
-                                  n_temperatures=len(self.temperatures))
+            
+            if self.restrained_atoms_dsl is None:
+                self.simulation.create(self.ref_state, sampler, self.reporter, temperatures=self.temperatures, n_temperatures=len(self.temperatures))
+            else:
+                thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
+                for thermo_state, spring_cons in zip(self.thermodynamic_states, self.spring_constants):
+                    self._restrain_atoms_by_dsl(thermo_state, self.sampler_state, pdb.topology, restrained_atoms_dsl, spring_cons)
+                self.simulation.create(thermodynamic_states=thermodynamic_states, sampler_states=sampler, storage=self.reporter)
             self.restart = False
 
 
@@ -353,8 +398,6 @@ class FultonMarket():
     
         return np.array(insert_inds)
 
-
-
     def _interpolate_states(self, insert_inds: np.array):
     
         # Add new states
@@ -365,9 +408,111 @@ class FultonMarket():
             temp_above = prev_temps[ind]
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Inserting state at', np.mean((temp_below, temp_above)), flush=True) 
             new_temps.insert(ind + displacement, np.mean((temp_below, temp_above)))
-    
+
+        # Add new restraints
+        if self.restrained_atoms_dsl is not None:
+            prev_spring_cons = [s._value for s in self.spring_constants]
+            new_spring_cons = [cons for cons in prev_spring_cons]
+            for displacement, ind in enumerate(insert_inds):
+                cons_below = prev_spring_cons[ind-1]
+                cons_above = prev_spring_cons[ind]
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Inserting state with Spring Constant', np.mean((cons_below, cons_above)), flush=True) 
+                new_spring_cons.insert(ind + displacement, np.mean((cons_below, cons_above)))
+            self.spring_constants = [cons * spring_constant_unit for cons in new_spring_cons]
+            
         self.temperatures = [temp*unit.kelvin for temp in new_temps]
         self.n_replicates = len(self.temperatures)
+
+    def _restrain_atoms_by_dsl(self, thermodynamic_state, sampler_state, topology, atoms_dsl, spring_constant):
+        """
+        Unceremoniously Ripped from the OpenMMTools github, simply to change sigma to K
+        Apply a soft harmonic restraint to the given atoms.
+
+        This modifies the ``ThermodynamicState`` object.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+            The thermodynamic state with the system. This will be modified.
+        sampler_state : openmmtools.states.SamplerState
+            The sampler state with the positions.
+        topology : mdtraj.Topology or openmm.Topology
+            The topology of the system.
+        atoms_dsl : str
+            The MDTraj DSL string for selecting the atoms to restrain.
+        spring_constant : openmm.unit.Quantity, optional
+            Controls the strength of the restrain. The smaller, the tighter
+            (units of distance, default is 3.0*angstrom).
+
+        """
+        # Make sure the topology is an MDTraj topology.
+        if isinstance(topology, mdtraj.Topology):
+            mdtraj_topology = topology
+        else:
+            mdtraj_topology = mdtraj.Topology.from_openmm(topology)
+
+        # Determine indices of the atoms to restrain.
+        restrained_atoms = mdtraj_topology.select(atoms_dsl).tolist()
+
+        K = spring_constant  # Spring constant.
+        if type(K) != Quantity:
+            K = K * (joule)/(mole*angstrom*angstrom)
+        elif K.unit != (joule)/(mole*angstrom*angstrom):
+            raise Exception('Improper Spring Constant Unit')
+
+        system = thermodynamic_state.system  # This is a copy.
+
+        # Check that there are atoms to restrain.
+        if len(restrained_atoms) == 0:
+            raise ValueError('No atoms to restrain.')
+
+        # We need to translate the restrained molecule to the origin
+        # to avoid MonteCarloBarostat rejections (see openmm#1854).
+        if thermodynamic_state.pressure is not None:
+            # First, determine all the molecule atoms. Reference platform is the cheapest to allocate?
+            reference_platform = openmm.Platform.getPlatformByName('Reference')
+            integrator = openmm.VerletIntegrator(1.0*femtosecond)
+            context = openmm.Context(system, integrator, reference_platform)
+            molecules_atoms = context.getMolecules()
+            del context, integrator
+
+            # Make sure the atoms to restrain belong only to a single molecule.
+            molecules_atoms = [set(molecule_atoms) for molecule_atoms in molecules_atoms]
+            restrained_atoms_set = set(restrained_atoms)
+            restrained_molecule_atoms = None
+            for molecule_atoms in molecules_atoms:
+                if restrained_atoms_set.issubset(molecule_atoms):
+                    # Convert set to list to use it as numpy array indices.
+                    restrained_molecule_atoms = list(molecule_atoms)
+                    break
+            if restrained_molecule_atoms is None:
+                raise ValueError('Cannot match the restrained atoms to any molecule. Restraining '
+                                 'two molecules is not supported when using a MonteCarloBarostat.')
+
+            # Translate system so that the center of geometry is in
+            # the origin to reduce the barostat rejections.
+            distance_unit = sampler_state.positions.unit
+            centroid = np.mean(sampler_state.positions[restrained_molecule_atoms,:] / distance_unit, axis=0)
+            sampler_state.positions -= centroid * distance_unit
+
+        # Create a CustomExternalForce to restrain all atoms.
+        if thermodynamic_state.is_periodic:
+            energy_expression = '(K/2)*periodicdistance(x, y, z, x0, y0, z0)^2' # periodic distance
+        else:
+            energy_expression = '(K/2)*((x-x0)^2 + (y-y0)^2 + (z-z0)^2)' # non-periodic distance
+        restraint_force = openmm.CustomExternalForce(energy_expression)
+        # Adding the spring constant as a global parameter allows us to turn it off if desired
+        restraint_force.addGlobalParameter('K', K)
+        restraint_force.addPerParticleParameter('x0')
+        restraint_force.addPerParticleParameter('y0')
+        restraint_force.addPerParticleParameter('z0')
+        for index in restrained_atoms:
+            parameters = sampler_state.positions[index,:].value_in_unit_system(md_unit_system)
+            restraint_force.addParticle(index, parameters)
+
+        # Update thermodynamic state.
+        system.addForce(restraint_force)
+        thermodynamic_state.system = system
 
 
 
