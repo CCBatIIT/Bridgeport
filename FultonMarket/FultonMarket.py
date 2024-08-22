@@ -149,6 +149,9 @@ class FultonMarket():
 
             # Save simulation
             self._save_simulation()
+
+            # Update counter
+            self.n_sims_remaining -= 1
     
 
     def _save_simulation(self):
@@ -297,6 +300,7 @@ class FultonMarket():
 
             # Advance 1 cycle
             self._run_cycle()
+            
 
 
     def _run_cycle(self):
