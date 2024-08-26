@@ -86,7 +86,7 @@ class FultonMarket():
             dt: float=2.0, T_min: float=300, T_max: float=360, n_replicates: int=12,
             init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35,
             init_overlap_perc: float=0.2, output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/'),
-            restrained_atoms_dsl=None, K_max:Quantity=Quantity(83.68, spring_constant_unit)):
+            restrained_atoms_dsl=None, K_max:unit.Quantity=unit.Quantity(83.68, spring_constant_unit)):
         """
         PT - Default - Run parallel temporing replica exchange.
         PTwRE - By assigning a string to the restrained_atoms_dsl argument, those atoms will be restrained (default is not to do this)
@@ -126,7 +126,7 @@ class FultonMarket():
             restrained_atoms_dsl:
                 If restraints are to be used, supply an MDTraj selection string for the atoms which are to be restrained (default is not to do this)
             
-            K_max (Quantity):
+            K_max (unit.Quantity):
                 If restrained_atoms_dsl is not None, then establish restraints (geometrically distributed from 0 to K_max)
                 Highest temp is unrestrained, lowest temp is fully restrained (K_max)
         """
@@ -167,7 +167,7 @@ class FultonMarket():
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
         self.sim_time = 50 * unit.nanosecond
-        print('sim_time', self.sim_time)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Sim_Time', self.sim_time, flush=True)
         self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
 
         # Loop through short 50 ns simulations to allow for .ncdf truncation
@@ -230,30 +230,31 @@ class FultonMarket():
         
         # Configure times/steps
         sim_time_per_rep = self.sim_time / self.n_replicates
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated simulation per replicate to be', np.round(sim_time_per_rep, 6), 'nanoseconds', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated simulation per replicate to be', sim_time_per_rep, flush=True)
         
-        steps_per_rep = np.ceil(sim_time_per_rep / self.dt)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per replicate to be', np.round(steps_per_rep,0), 'steps', flush=True)        
+        steps_per_rep = int(np.ceil(sim_time_per_rep / self.dt))
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per replicate to be', steps_per_rep, 'steps', flush=True)        
         
-        self.n_steps_per_iter = np.ceil(self.iter_length / self.dt)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per iteration to be', np.round(self.n_steps_per_iter, 0), 'steps', flush=True) 
+        self.n_steps_per_iter = int(np.ceil(self.iter_length / self.dt))
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per iteration to be', self.n_steps_per_iter, 'steps', flush=True) 
         
-        self.n_iters = np.ceil(steps_per_rep / self.n_steps_per_iter)
+        self.n_iters = int(np.ceil(steps_per_rep / self.n_steps_per_iter))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iterations to be', self.n_iters, 'iterations', flush=True) 
         
-        self.n_cycles = np.ceil(self.n_iters / 5)
+        self.n_cycles = int(np.ceil(self.n_iters / 5))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of cycles to be', self.n_cycles, 'cycles', flush=True) 
         
-        self.n_iters_per_cycle = np.ceil(self.n_iters / self.n_cycles)
+        self.n_iters_per_cycle = int(np.ceil(self.n_iters / self.n_cycles))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iters per cycle to be', self.n_iters_per_cycle, 'iterations', flush=True) 
 
         # Configure replicates
         self.temperatures = geometric_distribution(self.T_min, self.T_max, self.n_replicates)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True) 
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of replicates to be', [np.round(t._value,1) for t in self.temperatures], 'Kelvin', flush=True) 
 
         # Configure Restraints if necessary
         if self.restrained_atoms_dsl is not None:
-            self.spring_constants = list(reversed(geometric_distribution(Quantity(0, spring_constant_unit), self.K_max, self.n_replicates)))
+            self.spring_constants = list(reversed(geometric_distribution(unit.Quantity(0, spring_constant_unit), self.K_max, self.n_replicates)))
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated spring constants of replicates to be', [np.round(t._value,1) for t in self.spring_constants], spring_constant_unit, flush=True)
 
     def plot_energies(self, figsize=(10,2)):
         """
@@ -287,7 +288,7 @@ class FultonMarket():
         
         """
         # Set up integrator
-        move = mcmc.LangevinDynamicsMove(timestep=self.dt * unit.femtosecond, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
+        move = mcmc.LangevinDynamicsMove(timestep=self.dt, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
         
         # Set up simulation
         if self.restrained_atoms_dsl is None:
@@ -325,8 +326,8 @@ class FultonMarket():
                 self.simulation.create(self.ref_state, sampler, self.reporter, temperatures=self.temperatures, n_temperatures=len(self.temperatures))
             else:
                 thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
-                for thermo_state, spring_cons in zip(self.thermodynamic_states, self.spring_constants):
-                    self._restrain_atoms_by_dsl(thermo_state, self.sampler_state, pdb.topology, restrained_atoms_dsl, spring_cons)
+                for thermo_state, spring_cons in zip(thermodynamic_states, self.spring_constants):
+                    self._restrain_atoms_by_dsl(thermo_state, sampler, self.pdb.topology, self.restrained_atoms_dsl, spring_cons)
                 self.simulation.create(thermodynamic_states=thermodynamic_states, sampler_states=sampler, storage=self.reporter)
             self.restart = False
 
@@ -456,18 +457,18 @@ class FultonMarket():
 
         """
         # Make sure the topology is an MDTraj topology.
-        if isinstance(topology, mdtraj.Topology):
+        if isinstance(topology, md.Topology):
             mdtraj_topology = topology
         else:
-            mdtraj_topology = mdtraj.Topology.from_openmm(topology)
+            mdtraj_topology = md.Topology.from_openmm(topology)
 
         # Determine indices of the atoms to restrain.
         restrained_atoms = mdtraj_topology.select(atoms_dsl).tolist()
 
         K = spring_constant  # Spring constant.
-        if type(K) != Quantity:
-            K = K * (joule)/(mole*angstrom*angstrom)
-        elif K.unit != (joule)/(mole*angstrom*angstrom):
+        if type(K) != unit.Quantity:
+            K = K * spring_constant_unit
+        elif K.unit != spring_constant_unit:
             raise Exception('Improper Spring Constant Unit')
 
         system = thermodynamic_state.system  # This is a copy.
@@ -517,16 +518,10 @@ class FultonMarket():
         restraint_force.addPerParticleParameter('y0')
         restraint_force.addPerParticleParameter('z0')
         for index in restrained_atoms:
-            parameters = sampler_state.positions[index,:].value_in_unit_system(md_unit_system)
+            parameters = sampler_state.positions[index,:].value_in_unit_system(unit.md_unit_system)
             restraint_force.addParticle(index, parameters)
 
         # Update thermodynamic state.
         system.addForce(restraint_force)
         thermodynamic_state.system = system
 
-
-
-        
-            
-                
-            
