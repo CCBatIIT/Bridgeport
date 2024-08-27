@@ -126,11 +126,7 @@ class FultonMarket():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found output_dir', self.output_dir, flush=True)
 
         
-        # Configure experiment parameters
-        self.n_sims_completed = len(os.listdir(self.save_dir))
-        self.sim_time = 50 # ns
-        print('sim_time', self.sim_time)
-        self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
+
 
         # Loop through short 50 ns simulations to allow for .ncdf truncation
         while self.n_sims_remaining > 0:
@@ -186,7 +182,12 @@ class FultonMarket():
         os.system(f'mv {ncdf_copy} {self.output_ncdf}')
         os.system(f'mv {checkpoint_copy} {self.checkpoint_ncdf}')
 
-        
+    def _configure_experiment_parameters(self):
+        # Configure experiment parameters
+        self.n_sims_completed = len(os.listdir(self.save_dir))
+        self.sim_time = 50 # ns
+        print('sim_time', self.sim_time)
+        self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
 
     def _configure_simulation_parameters(self):
         """
@@ -283,7 +284,10 @@ class FultonMarket():
                                   self.reporter, 
                                   temperatures=self.temperatures,
                                   n_temperatures=len(self.temperatures))
-            self.restart = False
+            if interpolate:
+                os.system(f'rm -r {self.save_dir}/*')
+                self._configure_experiment_parameters()
+                self.restart = False
 
 
     def _simulate(self):
