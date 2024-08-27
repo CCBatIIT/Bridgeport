@@ -197,7 +197,7 @@ class FultonMarket():
 
         # Read number replicates if different than argument
         if os.path.exists(self.output_ncdf):
-            self.n_replicates = nc.Dataset(output_ncdf).variables['states'].shape[1] 
+            self.n_replicates = nc.Dataset(self.output_ncdf).variables['states'].shape[1] 
         
         # Configure times/steps
         sim_time_per_rep = self.sim_time / self.n_replicates
