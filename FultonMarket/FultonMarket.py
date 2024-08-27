@@ -129,6 +129,7 @@ class FultonMarket():
 
 
         # Loop through short 50 ns simulations to allow for .ncdf truncation
+        self._configure_experiment_parameters()
         while self.n_sims_remaining > 0:
 
             # Configure simulation times
