@@ -289,7 +289,7 @@ class FultonMarket():
             if interpolate:
                 os.system(f'rm -r {self.save_dir}/*')
                 self._configure_experiment_parameters()
-                self.restart = False
+            self.restart = False
 
 
     def _simulate(self):
