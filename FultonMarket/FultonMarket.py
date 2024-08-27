@@ -186,9 +186,10 @@ class FultonMarket():
     def _configure_experiment_parameters(self):
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.n_sims_completed, flush=True)
         self.sim_time = 50 # ns
-        print('sim_time', self.sim_time)
         self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated n_sims_remaining to be', self.n_sims_remaining, flush=True)
 
     def _configure_simulation_parameters(self):
         """
