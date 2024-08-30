@@ -50,5 +50,6 @@ market.run(total_sim_time=total_sim_time,
            n_replicates=n_replica,
            T_min=310,
            T_max=367.44,
-           output_dir=output_dir)
+           output_dir=output_dir,
+           init_overlap_perc=0.10)
            
