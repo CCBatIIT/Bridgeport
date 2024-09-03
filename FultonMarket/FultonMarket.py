@@ -286,9 +286,6 @@ class FultonMarket():
                                   self.reporter, 
                                   temperatures=self.temperatures,
                                   n_temperatures=len(self.temperatures))
-            if interpolate:
-                os.system(f'rm -r {self.save_dir}/*')
-                self._configure_experiment_parameters()
             self.restart = False
 
 
