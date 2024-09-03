@@ -7,7 +7,7 @@
 #SBATCH --ntasks=10
 #SBATCH --mem=90G
 #SBATCH --account=iit122
-#SBATCH -t 48:00:00
+#SBATCH -t 40:00:00
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jdepaoloboisvert@hawk.iit.edu
 

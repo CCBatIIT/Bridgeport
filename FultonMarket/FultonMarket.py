@@ -325,9 +325,14 @@ class FultonMarket():
             if self.restrained_atoms_dsl is None:
                 self.simulation.create(self.ref_state, sampler, self.reporter, temperatures=self.temperatures, n_temperatures=len(self.temperatures))
             else:
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Creating Thermodynamic States', flush=True)
                 thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
+                i = 1
                 for thermo_state, spring_cons in zip(thermodynamic_states, self.spring_constants):
                     self._restrain_atoms_by_dsl(thermo_state, sampler, self.pdb.topology, self.restrained_atoms_dsl, spring_cons)
+                    if i % (self.n_replicates // 4) == 0:
+                        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning Restraints is {round(100*i/self.n_replicates, 2)}% Complete', flush=True)
+                    i += 1
                 self.simulation.create(thermodynamic_states=thermodynamic_states, sampler_states=sampler, storage=self.reporter)
             self.restart = False
 
