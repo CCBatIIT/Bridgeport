@@ -162,15 +162,9 @@ class FultonMarket():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found initial acceptance rate threshold holding percentage', self.init_overlap_perc, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found terminal acceptance rate threshold', self.term_overlap_thresh, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found output_dir', self.output_dir, flush=True)
-
         
-        # Configure experiment parameters
-        self.n_sims_completed = len(os.listdir(self.save_dir))
-        self.sim_time = 50 * unit.nanosecond
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Sim_Time', self.sim_time, flush=True)
-        self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
-
         # Loop through short 50 ns simulations to allow for .ncdf truncation
+        self._configure_experiment_parameters()
         while self.n_sims_remaining > 0:
 
             # Configure simulation times
@@ -187,6 +181,9 @@ class FultonMarket():
 
             # Save simulation
             self._save_simulation()
+
+            # Update counter
+            self.n_sims_remaining -= 1
     
 
     def _save_simulation(self):
@@ -221,12 +218,22 @@ class FultonMarket():
         os.system(f'mv {ncdf_copy} {self.output_ncdf}')
         os.system(f'mv {checkpoint_copy} {self.checkpoint_ncdf}')
 
-        
+    def _configure_experiment_parameters(self):
+        # Configure experiment parameters
+        self.n_sims_completed = len(os.listdir(self.save_dir))
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.n_sims_completed, flush=True)
+        self.sim_time = 50 # ns
+        self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated n_sims_remaining to be', self.n_sims_remaining, flush=True)
 
     def _configure_simulation_parameters(self):
         """
         Configure simulation times to meet aggregate simulation time. 
         """            
+
+        # Read number replicates if different than argument
+        if os.path.exists(self.output_ncdf):
+            self.n_replicates = nc.Dataset(self.output_ncdf).variables['states'].shape[1] 
         
         # Configure times/steps
         sim_time_per_rep = self.sim_time / self.n_replicates
@@ -355,6 +362,7 @@ class FultonMarket():
 
             # Advance 1 cycle
             self._run_cycle()
+            
 
 
     def _run_cycle(self):

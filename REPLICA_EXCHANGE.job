@@ -4,8 +4,8 @@
 #SBATCH --partition=gpu-shared
 #SBATCH --gpus=1
 #SBATCH --nodes=1
-#SBATCH --ntasks=10
-#SBATCH --mem=90G
+#SBATCH --ntasks=5
+#SBATCH --mem=80G
 #SBATCH --account=iit122
 #SBATCH -t 40:00:00
 #SBATCH --mail-type=END,FAIL

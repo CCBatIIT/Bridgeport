@@ -60,4 +60,4 @@ market.run(total_sim_time=total_sim_time,
            T_max=367.44,
            output_dir=output_dir,
            restrained_atoms_dsl=selection_string)
-           
+
