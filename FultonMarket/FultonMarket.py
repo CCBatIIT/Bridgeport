@@ -184,6 +184,9 @@ class FultonMarket():
         os.system(f'mv {checkpoint_copy} {self.checkpoint_ncdf}')
 
     def _configure_experiment_parameters(self):
+        # Assert that no empty save directories have been made
+        assert [len(os.listdir(os.path.join(self.save_dir, dir)) == 4 for dir in os.listdir(save_dir)].all(), "You may have an empty save directory, please remove empty or incomplete save directories before continuing :)"
+        
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.n_sims_completed, flush=True)
