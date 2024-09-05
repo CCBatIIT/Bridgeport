@@ -185,7 +185,7 @@ class FultonMarket():
 
     def _configure_experiment_parameters(self):
         # Assert that no empty save directories have been made
-        assert [len(os.listdir(os.path.join(self.save_dir, dir)) == 4 for dir in os.listdir(save_dir)].all(), "You may have an empty save directory, please remove empty or incomplete save directories before continuing :)"
+        assert [len(os.listdir(os.path.join(self.save_dir, dir))) == 4 for dir in os.listdir(save_dir)].all(), "You may have an empty save directory, please remove empty or incomplete save directories before continuing :)"
         
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
