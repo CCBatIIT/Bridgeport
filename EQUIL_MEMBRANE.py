@@ -1,7 +1,7 @@
 """
 Equilibrate usage
 
-python equilibrate_membrane.py input_directory name output_directory
+python EQUIL_MEMBRANE.py input_directory name output_directory
 
 	input_directory: absolute path to directory where input OpenMM files are
 	name: identifier for OpenMM.files without the extension 
