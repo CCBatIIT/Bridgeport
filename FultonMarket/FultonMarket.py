@@ -77,10 +77,11 @@ class FultonMarket():
 
 
         # Build state
-        integrator = LangevinIntegrator(300, 0.01, 2)
-        sim = Simulation(self.pdb.topology, self.system, integrator)
-        sim.loadState(input_state)
-        self.context = sim.context
+        if input_state != None:
+            integrator = LangevinIntegrator(300, 0.01, 2)
+            sim = Simulation(self.pdb.topology, self.system, integrator)
+            sim.loadState(input_state)
+            self.context = sim.context
 
     def run(self, total_sim_time: float, iteration_length: float,
             dt: float=2.0, T_min: float=300, T_max: float=360, n_replicates: int=12,
@@ -219,6 +220,9 @@ class FultonMarket():
         os.system(f'mv {checkpoint_copy} {self.checkpoint_ncdf}')
 
     def _configure_experiment_parameters(self):
+        # Assert that no empty save directories have been made
+        assert all([len(os.listdir(os.path.join(self.save_dir, dir))) == 4 for dir in os.listdir(self.save_dir)]), "You may have an empty save directory, please remove empty or incomplete save directories before continuing :)"
+        
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.n_sims_completed, flush=True)

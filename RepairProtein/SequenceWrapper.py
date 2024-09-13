@@ -289,9 +289,9 @@ def _write_alignment_file_secondary(temp_seq: str,
     for i, temp_res in enumerate(temp_seq):
 
         # Append structure list
-        if str(i) in missing_residues[:,0]:
+       if str(i) in missing_residues[:,0]:
             struc_seq += '-'
-        else:
+       else:
             struc_seq += temp_res
 
     # Make sequence lists for secondary
@@ -299,7 +299,7 @@ def _write_alignment_file_secondary(temp_seq: str,
     for i, temp_res in enumerate(temp_seq):
 
         # Append structure list
-        if str(i) in missing_residues_secondary[:,0]:
+        if len(missing_residues_secondary) > 0 and str(i) in missing_residues_secondary[:,0]:
             secondary_seq += '-'
         else:
             secondary_seq += temp_res
