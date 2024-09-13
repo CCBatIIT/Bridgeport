@@ -55,10 +55,11 @@ class FultonMarket():
 
 
         # Build state
-        integrator = LangevinIntegrator(300, 0.01, 2)
-        sim = Simulation(self.pdb.topology, self.system, integrator)
-        sim.loadState(input_state)
-        self.context = sim.context
+        if input_state != None:
+            integrator = LangevinIntegrator(300, 0.01, 2)
+            sim = Simulation(self.pdb.topology, self.system, integrator)
+            sim.loadState(input_state)
+            self.context = sim.context
 
     def run(self, total_sim_time: float, iteration_length: float, dt: float=2.0, T_min: float=300, T_max: float=360, n_replicates: int=12, init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35, init_overlap_perc: float=0.2, output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/')):
         """
