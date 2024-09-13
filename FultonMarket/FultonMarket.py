@@ -222,7 +222,7 @@ class FultonMarket():
         # Configure experiment parameters
         self.n_sims_completed = len(os.listdir(self.save_dir))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.n_sims_completed, flush=True)
-        self.sim_time = 50 # ns
+        self.sim_time = 50 * unit.nanosecond
         self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated n_sims_remaining to be', self.n_sims_remaining, flush=True)
 
@@ -296,7 +296,6 @@ class FultonMarket():
         """
         # Set up integrator
         move = mcmc.LangevinDynamicsMove(timestep=self.dt, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
-        
         # Set up simulation
         if self.restrained_atoms_dsl is None:
             self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
@@ -334,12 +333,12 @@ class FultonMarket():
             else:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Creating Thermodynamic States', flush=True)
                 thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
-                i = 1
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done Creating Thermodynamic States', flush=True)
+                topo = md.Topology.from_openmm(self.pdb.topology)
                 for thermo_state, spring_cons in zip(thermodynamic_states, self.spring_constants):
-                    self._restrain_atoms_by_dsl(thermo_state, sampler, self.pdb.topology, self.restrained_atoms_dsl, spring_cons)
-                    if i % (self.n_replicates // 4) == 0:
-                        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning Restraints is {round(100*i/self.n_replicates, 2)}% Complete', flush=True)
-                    i += 1
+                    self._J_restrain_atoms_by_dsl(thermo_state, sampler, topo, self.restrained_atoms_dsl, spring_cons)
+                    if (1 + thermodynamic_states.index(thermo_state)) % (self.n_replicates // 4) == 0:
+                        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning Restraints is {round(100*(1 + thermodynamic_states.index(thermo_state))/self.n_replicates, 2)}% Complete', flush=True)
                 self.simulation.create(thermodynamic_states=thermodynamic_states, sampler_states=sampler, storage=self.reporter)
             self.restart = False
 
@@ -446,6 +445,44 @@ class FultonMarket():
             
         self.temperatures = [temp*unit.kelvin for temp in new_temps]
         self.n_replicates = len(self.temperatures)
+
+
+
+    def _J_restrain_atoms_by_dsl(self, thermodynamic_state, sampler_state, topology, atoms_dsl, spring_constant):
+        
+        # Make sure the topology is an MDTraj topology.
+        if isinstance(topology, md.Topology):
+            mdtraj_topology = topology
+        else:
+            mdtraj_topology = md.Topology.from_openmm(topology)
+        
+        #Determine indices of the atoms to restrain
+        restrained_atom_indices = mdtraj_topology.select(atoms_dsl)
+        if len(restrained_atom_indices) == 0:
+            raise Exception('No Atoms To Restrain!')
+        
+        #Assign Spring Constant, ensuring it is the appropriate unit
+        K = spring_constant  # Spring constant.
+        if type(K) != unit.Quantity:
+            K = K * spring_constant_unit
+        elif K.unit != spring_constant_unit:
+            raise Exception('Improper Spring Constant Unit')
+        
+        #Energy and Force for Restraint
+        energy_expression = '(K/2)*periodicdistance(x, y, z, x0, y0, z0)^2'
+        restraint_force = openmm.CustomExternalForce(energy_expression)
+        restraint_force.addGlobalParameter('K', K)
+        restraint_force.addPerParticleParameter('x0')
+        restraint_force.addPerParticleParameter('y0')
+        restraint_force.addPerParticleParameter('z0')
+        for index in restrained_atom_indices:
+            parameters = self.init_positions[index,:]
+            restraint_force.addParticle(index, parameters)
+        thermodynamic_state.system.addForce(restraint_force)
+        
+
+
+
 
     def _restrain_atoms_by_dsl(self, thermodynamic_state, sampler_state, topology, atoms_dsl, spring_constant):
         """
