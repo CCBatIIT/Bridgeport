@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name="REPEXCHANGE"
-#SBATCH --output="REPEXCHANGE.%j.%N.out"
+#SBATCH --job-name="US-PTwRE"
+#SBATCH --output="US-PTwRE.%j.%N.out"
 #SBATCH --partition=gpu-shared
 #SBATCH --gpus=1
 #SBATCH --nodes=1
 #SBATCH --ntasks=5
 #SBATCH --mem=80G
 #SBATCH --account=iit122
-#SBATCH -t 40:00:00
+#SBATCH -t 48:00:00
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jdepaoloboisvert@hawk.iit.edu
 

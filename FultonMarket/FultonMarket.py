@@ -14,6 +14,9 @@ from datetime import datetime
 import mdtraj as md
 from shorten_replica_exchange import truncate_ncdf
 
+import faulthandler
+faulthandler.enable()
+
 
 geometric_distribution = lambda min_val, max_val, n_vals: [min_val + (max_val - min_val) * (math.exp(float(i) / float(n_vals-1)) - 1.0) / (math.e - 1.0) for i in range(n_vals)]
 spring_constant_unit = (unit.joule)/(unit.angstrom*unit.angstrom*unit.mole)
@@ -169,19 +172,29 @@ class FultonMarket():
         while self.n_sims_remaining > 0:
 
             # Configure simulation times
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Configuring Simulation Parameters', flush=True)
             self._configure_simulation_parameters()
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done', flush=True)
             
             # Set reference state
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Assigning Reference State', flush=True)
             self.ref_state = states.ThermodynamicState(system=self.system, temperature=self.temperatures[0], pressure=1.0*unit.bar)
-    
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done', flush=True)
+
             # Set up simulation
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Building Simulation', flush=True)
             self._build_simulation()
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done', flush=True)
     
             # Run simulation
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Running Simulation', flush=True)
             self._simulate() 
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done', flush=True)
 
             # Save simulation
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saving SimulationDone', flush=True)
             self._save_simulation()
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done', flush=True)
 
             # Update counter
             self.n_sims_remaining -= 1
@@ -191,7 +204,6 @@ class FultonMarket():
         """
         Save the important information from a simulation and then truncate the output.ncdf file to preserve disk space.
         """
-        print('HERE\n\n\n\n\n')
         # Determine save no. 
         prev_saves = [int(dir) for dir in os.listdir(self.save_dir)]
         if len(prev_saves) > 0:
@@ -207,9 +219,13 @@ class FultonMarket():
         ncdf_copy = os.path.join(self.output_dir, 'output_copy.ncdf')
         pos, box_vectors, states, energies = truncate_ncdf(self.output_ncdf, ncdf_copy, False)
         np.save(os.path.join(save_no_dir, 'positions.npy'), pos.data)
+        del pos
         np.save(os.path.join(save_no_dir, 'box_vectors.npy'), box_vectors.data)
+        del box_vectors
         np.save(os.path.join(save_no_dir, 'states.npy'), states.data)
+        del states
         np.save(os.path.join(save_no_dir, 'energies.npy'), energies.data)
+        del energies
 
         # Truncate output_checkpoint.ncdf
         checkpoint_copy = os.path.join(self.output_dir, 'output_checkpoint_copy.ncdf')
@@ -266,6 +282,11 @@ class FultonMarket():
         if self.restrained_atoms_dsl is not None:
             self.spring_constants = list(reversed(geometric_distribution(unit.Quantity(0, spring_constant_unit), self.K_max, self.n_replicates)))
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated spring constants of replicates to be', [np.round(t._value,1) for t in self.spring_constants], spring_constant_unit, flush=True)
+        
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Current Global Variables and Sizes', flush=True)
+        for var in globals().keys():
+            if not var.startswith('__'):
+                print(var, f'{sys.getsizeof(var)/1000000} MB')
 
     def plot_energies(self, figsize=(10,2)):
         """
@@ -298,6 +319,7 @@ class FultonMarket():
         construct the simulation by assigning mcmc move, RE sampler, 
         
         """
+        print('STARTING BUILD SIMULATION')
         # Set up integrator
         move = mcmc.LangevinDynamicsMove(timestep=self.dt, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
         # Set up simulation
