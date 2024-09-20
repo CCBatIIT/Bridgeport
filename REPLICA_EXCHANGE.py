@@ -46,10 +46,9 @@ except:
 # Run rep exchange
 market = FultonMarket(input_pdb=input_pdb, input_system=input_sys, input_state=input_state)
 market.run(total_sim_time=total_sim_time,
-           iteration_length=0.001,
-           n_replicates=n_replica,
-           T_min=310,
-           T_max=367.44,
-           output_dir=output_dir,
-           init_overlap_perc=0.10)
+       iteration_length=0.001,
+       n_replicates=n_replica,
+       T_min=310,
+       T_max=367.44,
+       output_dir=output_dir) 
            
