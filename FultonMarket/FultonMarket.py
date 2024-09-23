@@ -331,6 +331,8 @@ class FultonMarket():
 
         # Setup reporter
         atom_inds = tuple([i for i in range(self.system.getNumParticles())])
+        if hasattr(self, 'reporter'):
+            del self.reporter
         self.reporter = MultiStateReporter(self.output_ncdf, checkpoint_interval=10, analysis_particle_indices=atom_inds)
         
         # Load from checkpoint, if available
