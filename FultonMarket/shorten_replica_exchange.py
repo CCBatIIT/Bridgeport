@@ -1,7 +1,8 @@
 import numpy as np
 import netCDF4 as nc
+from openmmtools.multistate import MultiStateReporter
 
-def truncate_ncdf(ncdf_in, ncdf_out, is_checkpoint: bool=False):
+def truncate_ncdf(ncdf_in, ncdf_out, reporter, is_checkpoint: bool=False):
     print(f'Truncating {ncdf_in} to {ncdf_out}')
 
     src = nc.Dataset(ncdf_in, 'r')
@@ -54,11 +55,16 @@ def truncate_ncdf(ncdf_in, ncdf_out, is_checkpoint: bool=False):
         else:
             var_out[:] = var[:]
 
-    dest.close()
+    dest.close()    
     src.close()
-    
+
+    # Read temperatures
     if not is_checkpoint:
-        return pos, box_vecs, states, energies
+
+        thermo_states = np.array([state.temperature._value for state in reporter.read_thermodynamic_states()[0]])
+        reporter.close()
+
+        return pos, box_vecs, states, energies, thermo_states
         
 
 

@@ -211,7 +211,7 @@ class Bridgeport():
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Repair Working Dir set to False - Skipping Repairs with Modeller', flush=True)
         #Add Water (and possibly membrane)
-        self._add_environment()
+#        self._add_environment()
         #Prepare Ligand
         self._ligand_prep()
         #Make OpenMM Systems
@@ -537,9 +537,11 @@ class Bridgeport():
 
                 # Load input 
                 template = Chem.MolFromSmiles(template_smiles, sanitize=True)
-                mol = Chem.MolFromPDBFile(mol_path, sanitize=True, removeHs=False, proximityBonding=False)
+                mol = Chem.MolFromPDBFile(mol_path, sanitize=True, removeHs=False, proximityBonding=True)
                 image = Draw.MolToImage(mol)
                 image.save('image.png')
+                image = Draw.MolToImage(template)
+                image.save('ref_image.png')
                 # Assign bond order
                 mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
 
