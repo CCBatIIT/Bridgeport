@@ -211,7 +211,7 @@ class Bridgeport():
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Repair Working Dir set to False - Skipping Repairs with Modeller', flush=True)
         #Add Water (and possibly membrane)
-#        self._add_environment()
+        self._add_environment()
         #Prepare Ligand
         self._ligand_prep()
         #Make OpenMM Systems
@@ -219,7 +219,10 @@ class Bridgeport():
 
         # Choose analogue complex, if applicable
         if hasattr(self, "analogue_pdbs"):
-            self._choose_analogue_conformer()
+            if "minimize" in self.input_params["ligand"] and self.input_params["ligand"]["minimize"] == False:
+                pass
+            else:
+                self._choose_analogue_conformer()
 
     def _build_analogue_complex(self):
         """
@@ -518,7 +521,7 @@ class Bridgeport():
             # Use obabel if small molecule to covert to .sdf
             lig_resname = self.input_params['ligand']['lig_resname']
             small_molecule_params = False
-            if lig_resname != False:
+            if lig_resname != False: # lig_resname will be changed to 
                 small_molecule_params = True
                 if 'analogue_smiles' in self.input_params['ligand']:
                     template_smiles = self.input_params['ligand']['analogue_smiles']
@@ -537,7 +540,11 @@ class Bridgeport():
 
                 # Load input 
                 template = Chem.MolFromSmiles(template_smiles, sanitize=True)
-                mol = Chem.MolFromPDBFile(mol_path, sanitize=True, removeHs=False, proximityBonding=True)
+                AllChem.EmbedMolecule(template)
+                Chem.MolToPDBFile(template, 'template.pdb')
+                mol = Chem.MolFromPDBFile(mol_path, sanitize=True, removeHs=True, proximityBonding=True)
+                Chem.MolToPDBFile(mol, 'mol.pdb')
+
                 image = Draw.MolToImage(mol)
                 image.save('image.png')
                 image = Draw.MolToImage(template)
