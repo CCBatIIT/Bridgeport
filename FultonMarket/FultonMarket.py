@@ -222,7 +222,7 @@ class FultonMarket():
         np.save(os.path.join(save_no_dir, 'energies.npy'), energies.data)
         del energies
         np.save(os.path.join(save_no_dir, 'temperatures.npy'), temperatures)
-        del temperature
+        del temperatures
         
         # Truncate output_checkpoint.ncdf
         checkpoint_copy = os.path.join(self.output_dir, 'output_checkpoint_copy.ncdf')
@@ -293,12 +293,10 @@ class FultonMarket():
         print('STARTING BUILD SIMULATION')
         # Set up integrator
         move = mcmc.LangevinDynamicsMove(timestep=self.dt, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
+
         # Set up simulation
-        if self.restrained_atoms_dsl is None:
-            self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
-        else:
-            self.simulation = ReplicaExchangeSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
-        self.simulation._global_citation_silence = True
+        if hasattr(self, 'simulation'):
+            del self.simulation
 
         # Setup reporter
         atom_inds = tuple([i for i in range(self.system.getNumParticles())])
@@ -310,7 +308,10 @@ class FultonMarket():
         if os.path.exists(self.output_ncdf) and self.interpolate == False:
             self.reporter.open()
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loaded reporter', flush=True) 
-            self.simulation = self.simulation.from_storage(self.reporter)
+            if self.restrained_atoms_dsl is None:
+                self.simulation = ParallelTemperingSampler.from_storage(self.reporter)
+            else:
+                self.simulation = ReplicaExchangeSampler.from_storage(self.reporter)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loaded simulation from', self.output_ncdf, flush=True) 
             ncfile = nc.Dataset(self.output_ncdf)
             n_iters_completed = ncfile.dimensions['iteration'].size - 1
@@ -329,6 +330,7 @@ class FultonMarket():
                 self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
             
             if self.restrained_atoms_dsl is None:
+                self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
                 self.simulation.create(self.ref_state, self.sampler_states, self.reporter, temperatures=self.temperatures, n_temperatures=len(self.temperatures))
             else:
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Creating Thermodynamic States', flush=True)
@@ -339,6 +341,7 @@ class FultonMarket():
                     self._J_restrain_atoms_by_dsl(thermo_state, self.sampler_states, topo, self.restrained_atoms_dsl, spring_cons)
                     if (1 + thermodynamic_states.index(thermo_state)) % (self.n_replicates // 4) == 0:
                         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning Restraints is {round(100*(1 + thermodynamic_states.index(thermo_state))/self.n_replicates, 2)}% Complete', flush=True)
+                self.simulation = ReplicaExchangeSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
                 self.simulation.create(thermodynamic_states=thermodynamic_states, sampler_states=self.sampler_states, storage=self.reporter)
             self.restart = False
 
