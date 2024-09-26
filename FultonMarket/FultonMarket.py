@@ -13,6 +13,8 @@ from typing import List
 from datetime import datetime
 import mdtraj as md
 from shorten_replica_exchange import truncate_ncdf
+import faulthandler
+faulthandler.enable()
 
 class FultonMarket():
     """
@@ -233,7 +235,11 @@ class FultonMarket():
         move = mcmc.LangevinDynamicsMove(timestep=self.dt * unit.femtosecond, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
         
         # Set up simulation
+        if hasattr(self, "simulation"):
+            del self.simulation
+
         self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Instantiated self.simulation', flush=True)
         self.simulation._global_citation_silence = True
 
         # Setup reporter
@@ -241,7 +247,8 @@ class FultonMarket():
         if hasattr(self, "reporter"):
             del self.reporter
         self.reporter = MultiStateReporter(self.output_ncdf, checkpoint_interval=10, analysis_particle_indices=atom_inds)
-        
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Instantiated self.reporter', flush=True)
+                
         # Load from checkpoint, if available
         if os.path.exists(self.output_ncdf) and self.interpolate == False:
             self.reporter.open()
