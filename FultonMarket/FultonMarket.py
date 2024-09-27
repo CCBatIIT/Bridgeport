@@ -3,6 +3,7 @@ from openmm.app import *
 from openmmtools import states, mcmc, multistate
 from openmmtools.states import SamplerState
 from openmmtools.multistate import ParallelTemperingSampler, MultiStateReporter
+from openmmtools.utils.utils import TrackedQuantity
 import tempfile
 import os, sys
 sys.path.append('../MotorRow')
@@ -13,6 +14,7 @@ from typing import List
 from datetime import datetime
 import mdtraj as md
 from shorten_replica_exchange import truncate_ncdf
+from Randolph import Randolph
 import faulthandler
 faulthandler.enable()
 
@@ -99,316 +101,157 @@ class FultonMarket():
 
         # Store variables
         self.total_sim_time = total_sim_time
-        self.iter_length = iteration_length
-        self.dt = dt 
-        self.T_min = T_min
-        self.T_max = T_max
-        self.n_replicates = n_replicates
-        self.init_overlap_thresh = init_overlap_thresh
-        self.term_overlap_thresh = term_overlap_thresh
-        self.output_dir = output_dir
-        self.output_ncdf = os.path.join(self.output_dir, 'output.ncdf')
-        self.checkpoint_ncdf = os.path.join(self.output_dir, 'output_checkpoint.ncdf')
-        self.save_dir = os.path.join(self.output_dir, 'saved_variables')
-        self.interpolate = False
+        self.temperatures = [temp*unit.kelvin for temp in np.logspace(np.log10(T_min),np.log10(T_max), n_replicates)]
+        ref_state = states.ThermodynamicState(system=self.system, temperature=self.temperatures[0], pressure=1.0*unit.bar)
+        self.output_ncdf = os.path.join(output_dir, 'output.ncdf')
+        checkpoint_ncdf = os.path.join(output_dir, 'output_checkpoint.ncdf')
+        self.save_dir = os.path.join(output_dir, 'saved_variables')
         if not os.path.exists(self.save_dir):
             os.mkdir(self.save_dir)
 
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found total simulation time of', self.total_sim_time, 'nanoseconds', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found iteration length of', self.iter_length, 'nanoseconds', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found timestep of', self.dt, 'femtoseconds', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found minimum temperature', self.T_min, 'Kelvin', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found maximum temperature', self.T_max, 'Kelvin', flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found number of replicates', self.n_replicates, flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found initial acceptance rate threshold', self.init_overlap_thresh, flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found terminal acceptance rate threshold', self.term_overlap_thresh, flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found output_dir', self.output_dir, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found total simulation time of', total_sim_time, 'nanoseconds', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found iteration length of', iteration_length, 'nanoseconds', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found timestep of', dt, 'femtoseconds', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found minimum temperature', T_min, 'Kelvin', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found maximum temperature', T_max, 'Kelvin', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found number of replicates', n_replicates, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found initial acceptance rate threshold', init_overlap_thresh, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found terminal acceptance rate threshold', term_overlap_thresh, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found output_dir', output_dir, flush=True)
 
         
         # Loop through short 50 ns simulations to allow for .ncdf truncation
         self._configure_experiment_parameters()
-        while self.n_sims_remaining > 0:
-
-            # Configure simulation times
-            self._configure_simulation_parameters()
-            
-            # Set reference state
-            self.ref_state = states.ThermodynamicState(system=self.system, temperature=self.temperatures[0], pressure=1.0*unit.bar)
+        while self.sim_no < self.total_n_sims:
     
-            # Set up simulation
-            self._build_simulation()
+            # Initialize Randolph
+            if hasattr(self, 'sampler_states'):
+                print('LOAD SAMPLER')
+                simulation = Randolph(sim_no=self.sim_no,
+                                      sim_time=self.sim_time,
+                                      system=self.system,
+                                      ref_state=ref_state,
+                                      temperatures=self.temperatures,
+                                      init_positions=self.init_positions,
+                                      init_box_vectors=self.init_box_vectors,
+                                      output_dir=output_dir,
+                                      output_ncdf=self.output_ncdf,
+                                      checkpoint_ncdf=checkpoint_ncdf,
+                                      iter_length=iteration_length,
+                                      dt=dt,
+                                      sampler_states=self.sampler_states)
+                
+            elif self.sim_no > 0:
+                self._load_initial_args()
+                simulation = Randolph(sim_no=self.sim_no,
+                                      sim_time=self.sim_time,
+                                      system=self.system,
+                                      ref_state=ref_state,
+                                      temperatures=self.temperatures,
+                                      init_positions=self.init_positions,
+                                      init_box_vectors=self.init_box_vectors,
+                                      init_velocities=self.init_velocities,
+                                      output_dir=output_dir,
+                                      output_ncdf=self.output_ncdf,
+                                      checkpoint_ncdf=checkpoint_ncdf,
+                                      iter_length=iteration_length,
+                                      dt=dt)    
+                
+            else:
+                simulation = Randolph(sim_no=self.sim_no,
+                                      sim_time=self.sim_time,
+                                      system=self.system,
+                                      ref_state=ref_state,
+                                      temperatures=self.temperatures,
+                                      init_positions=self.init_positions,
+                                      init_box_vectors=self.init_box_vectors,
+                                      output_dir=output_dir,
+                                      output_ncdf=self.output_ncdf,
+                                      checkpoint_ncdf=checkpoint_ncdf,
+                                      iter_length=iteration_length,
+                                      dt=dt,
+                                      context=self.context)
+                                  
     
             # Run simulation
-            self._simulate() 
+            simulation.main(init_overlap_thresh=init_overlap_thresh, term_overlap_thresh=term_overlap_thresh)
 
             # Save simulation
-            self._save_simulation()
+            self.sampler_states, self.temperatures = simulation.save_simulation(self.save_dir)
+            
+            # Delete output.ncdf files if not last simulation 
+            if not self.sim_no+1 == self.total_n_sims:
+                os.remove(self.output_ncdf)
+                os.remove(checkpoint_ncdf)
 
             # Update counter
-            self.n_sims_remaining -= 1
+            self.sim_no += 1
     
 
-    def _save_simulation(self):
-        """
-        Save the important information from a simulation and then truncate the output.ncdf file to preserve disk space.
-        """
-        # Determine save no. 
-        prev_saves = [int(dir) for dir in os.listdir(self.save_dir)]
-        if len(prev_saves) > 0:
-            new_save_no = max(prev_saves) + 1
-        else:
-            new_save_no = 0
-        save_no_dir = os.path.join(self.save_dir, str(new_save_no))
-        if not os.path.exists(save_no_dir):
-            os.mkdir(save_no_dir)
-
-        # Truncate output.ncdf
-        ncdf_copy = os.path.join(self.output_dir, 'output_copy.ncdf')
-        pos, box_vectors, states, energies, temperatures = truncate_ncdf(self.output_ncdf, ncdf_copy, self.reporter, False)
-        np.save(os.path.join(save_no_dir, 'positions.npy'), pos.data)
-        np.save(os.path.join(save_no_dir, 'box_vectors.npy'), box_vectors.data)
-        np.save(os.path.join(save_no_dir, 'states.npy'), states.data)
-        np.save(os.path.join(save_no_dir, 'energies.npy'), energies.data)
-        np.save(os.path.join(save_no_dir, 'temperatures.npy'), temperatures)
-
-        # Truncate output_checkpoint.ncdf
-        checkpoint_copy = os.path.join(self.output_dir, 'output_checkpoint_copy.ncdf')
-        truncate_ncdf(self.checkpoint_ncdf, checkpoint_copy, self.reporter, True)
-
-        # Write over previous .ncdf files
-        os.system(f'mv {ncdf_copy} {self.output_ncdf}')
-        os.system(f'mv {checkpoint_copy} {self.checkpoint_ncdf}')
-
-        # Close reporter object
+    
+    def _load_initial_args(self):
+        # Get last directory
+        load_no = self.sim_no - 1
+        load_dir = os.path.join(self.save_dir, str(load_no))
+        
+        # Load args (not in correct shapes
+        self.temperatures = np.load(os.path.join(load_dir, 'temperatures.npy'))
+        self.temperatures = [t*unit.kelvin for t in self.temperatures]
+        
         try:
-            self.reporter.close()
+            init_positions = np.load(os.path.join(load_dir, 'positions.npy'))[-1] 
+            init_box_vectors = np.load(os.path.join(load_dir, 'box_vectors.npy'))[-1] 
+            init_velocities = np.load(os.path.join(load_dir, 'velocities.npy')) 
+            state_inds = np.load(os.path.join(load_dir, 'states.npy'))[-1]
         except:
-            pass
+            init_velocities, init_positions, init_box_vectors, state_inds = self._recover_arguments()
+        
+        # Reshape 
+        reshaped_init_positions = np.empty((init_positions.shape))
+        reshaped_init_box_vectors = np.empty((init_box_vectors.shape))
+        reshaped_init_velocities = np.empty((init_velocities.shape))
+        for state in range(len(self.temperatures)):
+            rep_ind = np.where(state_inds == state)[0]
+            reshaped_init_box_vectors[state] = init_box_vectors[rep_ind] 
+            reshaped_init_velocities[state] = init_velocities[rep_ind]
+            reshaped_init_positions[state] = init_positions[rep_ind] 
 
+        # Convert to quantities    
+        self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
+        self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
+        self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
+
+        
+        
     def _configure_experiment_parameters(self):
         # Assert that no empty save directories have been made
-        assert all([len(os.listdir(os.path.join(self.save_dir, dir))) == 5 for dir in os.listdir(self.save_dir)]), "You may have an empty save directory, please remove empty or incomplete save directories before continuing :)"
+        assert all([len(os.listdir(os.path.join(self.save_dir, dir))) >= 5 for dir in os.listdir(self.save_dir)]), "You may have an empty save directory, please remove empty or incomplete save directories before continuing :)"
         
         # Configure experiment parameters
-        self.n_sims_completed = len(os.listdir(self.save_dir))
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.n_sims_completed, flush=True)
+        self.sim_no = len(os.listdir(self.save_dir))
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.sim_no, flush=True)
         self.sim_time = 50 # ns
-        self.n_sims_remaining = np.ceil(self.total_sim_time / self.sim_time) - self.n_sims_completed
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated n_sims_remaining to be', self.n_sims_remaining, flush=True)
+        self.total_n_sims = np.ceil(self.total_sim_time / self.sim_time)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated total_n_sims to be', self.total_n_sims, flush=True)
 
-    def _configure_simulation_parameters(self):
-        """
-        Configure simulation times to meet aggregate simulation time. 
-        """            
-
-        # Read number replicates if different than argument
-        if os.path.exists(self.output_ncdf):
-            self.n_replicates = nc.Dataset(self.output_ncdf).variables['states'].shape[1] 
         
-        # Configure times/steps
-        sim_time_per_rep = self.sim_time / self.n_replicates
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated simulation per replicate to be', np.round(sim_time_per_rep, 6), 'nanoseconds', flush=True)
         
-        steps_per_rep = np.ceil(sim_time_per_rep * 1e6 / self.dt)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per replicate to be', np.round(steps_per_rep,0), 'steps', flush=True)        
+    def _recover_arguments(self):
+        ncfile = nc.Dataset(self.output_ncdf, 'r')
         
-        self.n_steps_per_iter = self.iter_length * 1e6 / self.dt
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated steps per iteration to be', np.round(self.n_steps_per_iter, 0), 'steps', flush=True) 
+        # Read
+        velocities = ncfile.variables['velocities'][-1].data
+        positions = ncfile.variables['positions'][-1].data
+        box_vectors = ncfile.variables['box_vectors'][-1].data
+        state_inds = ncfile.variables['states'][-1].data
         
-        self.n_iters = np.ceil(steps_per_rep / self.n_steps_per_iter)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iterations to be', self.n_iters, 'iterations', flush=True) 
+        ncfile.close()
         
-        self.n_cycles = np.ceil(self.n_iters / 5)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of cycles to be', self.n_cycles, 'cycles', flush=True) 
-        
-        self.n_iters_per_cycle = np.ceil(self.n_iters / self.n_cycles)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iters per cycle to be', self.n_iters_per_cycle, 'iterations', flush=True) 
-
-        # Configure replicates
-        self.temperatures = [temp*unit.kelvin for temp in np.logspace(np.log10(self.T_min),np.log10(self.T_max), self.n_replicates)]
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True)        
-
-    
-    def _build_simulation(self):
-
-        # Set up integrator
-        move = mcmc.LangevinDynamicsMove(timestep=self.dt * unit.femtosecond, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
-        
-        # Set up simulation
-        if hasattr(self, "simulation"):
-            del self.simulation
-
-        self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Instantiated self.simulation', flush=True)
-        self.simulation._global_citation_silence = True
-
-        # Setup reporter
-        atom_inds = tuple([i for i in range(self.system.getNumParticles())])
-        if hasattr(self, "reporter"):
-            del self.reporter
-        self.reporter = MultiStateReporter(self.output_ncdf, checkpoint_interval=10, analysis_particle_indices=atom_inds)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Instantiated self.reporter', flush=True)
-                
-        # Load from checkpoint, if available
-        if os.path.exists(self.output_ncdf) and self.interpolate == False:
-            self.reporter.open()
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loaded reporter', flush=True) 
-            self.simulation = self.simulation.from_storage(self.reporter)
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Loaded simulation from', self.output_ncdf, flush=True) 
-            ncfile = nc.Dataset(self.output_ncdf)
-            n_iters_completed = ncfile.dimensions['iteration'].size - 1
-            ncfile.close()
-            self.current_cycle = int(np.floor(n_iters_completed / self.n_iters_per_cycle))
-            self.restart = True
-            
-        else:                                        
-            # Create simulation
-            if os.path.exists(self.output_ncdf):
-                os.remove(self.output_ncdf)
-            if self.interpolate == False and hasattr(self, 'context'):
-                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
-            elif self.interpolate == False:
-                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
-            self.simulation.create(self.ref_state,
-                                  self.sampler_states,
-                                  self.reporter, 
-                                  temperatures=self.temperatures,
-                                  n_temperatures=len(self.temperatures))
-            self.restart = False
+        return velocities, positions, box_vectors, state_inds
 
 
-    def _simulate(self):
-        """
-        Perform entire simulation
-        """
-
-        # Continue until self.n_cycles reached
-        if not self.restart:
-            self.current_cycle = 0
-        while self.current_cycle <= self.n_cycles:
-
-            # Minimize
-            if self.current_cycle == 0 and not self.restart and not self.interpolate:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing...', flush=True)
-                self.simulation.minimize()
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing finished.', flush=True)
-
-            # Advance 1 cycle
-            self._run_cycle()
             
 
-
-    def _run_cycle(self):
-        """
-        Run one cycle
-        """
-
-        # Take steps
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'CYCLE', self.current_cycle, 'advancing', self.n_iters_per_cycle, 'iterations', flush=True) 
-        if self.simulation.is_completed:
-            self.simulation.extend(self.n_iters_per_cycle)
-        else:
-            self.simulation.run(self.n_iters_per_cycle)
-
-        # Eval acceptance rates
-        if self.n_sims_completed == 0:
-            insert_inds = self._eval_acc_rates(self.init_overlap_thresh)
-        else:
-            insert_inds = self._eval_acc_rates(self.term_overlap_thresh)
-
-        # Interpolate, if necessary
-        if len(insert_inds) > 0:
-            self._interpolate_states(insert_inds)
-            self.reporter.close()
-            self.current_cycle = 0
-            self.interpolate = True
-            self._build_simulation()
-            self._configure_simulation_parameters()
-        else:
-            self.current_cycle += 1
-    
-
-
-    def _eval_acc_rates(self, acceptance_rate_thresh: float=0.40):
-        "Evaluate acceptance rates"        
-        
-        # Get temperatures
-        temperatures = [s.temperature._value for s in self.reporter.read_thermodynamic_states()[0]]
-        
-        # Get mixing statistics
-        accepted, proposed = self.reporter.read_mixing_statistics()
-        accepted = accepted.data
-        proposed = proposed.data
-        acc_rates = np.mean(accepted[1:] / proposed[1:], axis=0)
-        acc_rates = np.nan_to_num(acc_rates) # Adjust for cases with 0 proposed swaps
-    
-        # Iterate through mixing statistics to flag acceptance rates that are too low
-        insert_inds = [] # List of indices to apply new state. Ex: (a "1" means a new state between "0" and the previous "1" indiced state)
-        for state in range(len(acc_rates)-1):
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Mixing between', np.round(temperatures[state], 2), 'and', np.round(temperatures[state+1], 2), ':', acc_rates[state, state+1], flush=True) 
-            rate = acc_rates[state, state+1]
-            if rate < acceptance_rate_thresh:
-                insert_inds.append(state+1)
-    
-        return np.array(insert_inds)
-
-
-
-    def _interpolate_states(self, insert_inds: np.array): #TODO: Add sample state
-    
-        # Add new states
-        prev_temps = [s.temperature._value for s in self.reporter.read_thermodynamic_states()[0]]
-        new_temps = [temp for temp in prev_temps]
-        for displacement, ind in enumerate(insert_inds):
-            temp_below = prev_temps[ind-1]
-            temp_above = prev_temps[ind]
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Inserting state at', np.mean((temp_below, temp_above)), flush=True) 
-            new_temps.insert(ind + displacement, np.mean((temp_below, temp_above)))
-    
-        self.temperatures = [temp*unit.kelvin for temp in new_temps]
-        self.n_replicates = len(self.temperatures)
-
-        # Read sampler states
-        sampler_states = self.reporter.read_sampler_states(self.reporter.read_last_iteration())
-
-        # Add sampler_states for new temperatures
-        self.sampler_states = []
-        displacement = 0
-        for state in range(len(self.temperatures)):
-            if state-displacement in insert_inds:
-                self.sampler_states.append(sampler_states[state-displacement-1])
-                displacement += 1
-            else:
-                self.sampler_states.append(sampler_states[state-displacement])
-            
-
-        # # Read initial positions from this simulation
-        # ncfile = nc.Dataset(self.output_ncdf)
-        # init_positions = ncfile.variables['positions'][0].data
-        # init_box_vectors = ncfile.variables['box_vectors'][0].data
-        # state_inds = ncfile.variables['states'][0].data
-        # ncfile.close()
-
-        # # Reshape positions, box_vectors by state rather than by replicate
-        # reshaped_init_positions = np.empty((init_positions.shape))
-        # reshaped_init_box_vectors = np.empty((init_box_vectors.shape))
-        # for state in range(reshaped_init_positions.shape[0]):
-        #     reshaped_init_positions[state] = init_positions[np.where(state_inds == state)[0]]
-        #     reshaped_init_box_vectors[state] = init_box_vectors[np.where(state_inds == state)[0]]
-
-        # # Reshape positions, box_vectors into new shape to accomodate interpolation
-        # self.init_positions = np.empty((len(self.temperatures), reshaped_init_positions.shape[1], reshaped_init_positions.shape[2]))
-        # self.init_box_vectors = np.empty((len(self.temperatures), 3, 3))
-        # displacement = 0
-        # for state in range(len(self.temperatures)):
-        #     if state-displacement in insert_inds:
-        #         self.init_positions[state] = reshaped_init_positions[state-displacement-1].copy()
-        #         self.init_box_vectors[state] = reshaped_init_box_vectors[state-displacement-1].copy()
-        #         displacement += 1
-        #     else:
-        #         self.init_positions[state] = reshaped_init_positions[state-displacement].copy()
-        #         self.init_box_vectors[state] = reshaped_init_box_vectors[state-displacement].copy()
-                
             
             
 
