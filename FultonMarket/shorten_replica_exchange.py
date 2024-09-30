@@ -38,6 +38,8 @@ def truncate_ncdf(ncdf_in, ncdf_out, reporter, is_checkpoint: bool=False):
                 states = var[:].copy()
             elif var_name == 'energies':
                 energies = var[:].copy().astype('float32')
+            elif var_name == 'velocities':
+                velocities = var[-1].copy().astype('float16')
         
         if var.dimensions[0] == 'iteration':
             if is_checkpoint:
@@ -58,13 +60,19 @@ def truncate_ncdf(ncdf_in, ncdf_out, reporter, is_checkpoint: bool=False):
     dest.close()    
     src.close()
 
-    # Read temperatures
+    # Read reporter
     if not is_checkpoint:
 
-        thermo_states = np.array([state.temperature._value for state in reporter.read_thermodynamic_states()[0]])
+        # Read temperatures
+        temps = np.array([state.temperature._value for state in reporter.read_thermodynamic_states()[0]])
+        
+        # Read sampler states
+        sampler_states = reporter.read_sampler_states(reporter.read_last_iteration())
+        
+        # Close reporter
         reporter.close()
 
-        return pos, box_vecs, states, energies, thermo_states
+        return pos, velocities, box_vecs, states, energies, temps, sampler_states
         
 
 

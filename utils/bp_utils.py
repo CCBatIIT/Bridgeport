@@ -185,13 +185,13 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         #Get reference atoms to align
         ref_align_atoms = [ref_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in ref_match_inds] 
         ref_align_resids = [ref_mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in ref_match_inds]
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in reference', ref_align_atoms, flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified resids to align in reference', ref_align_resids, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in reference', '[' + ', '.join('"'+str(atom)+'"' for atom in ref_align_atoms) + ']', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified resids to align in reference', '[' + ', '.join('"'+str(atom)+'"' for atom in ref_align_resids) + ']', flush=True)
 
 
         # Get analogue atoms to align
         new_align_atoms = [new_mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in new_match_inds] 
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in analogue', new_align_atoms, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in analogue', '[' + ', '.join('"'+str(atom)+'"' for atom in new_align_atoms) + ']', flush=True)
         
         # Remove duplicates from user specifications
         for atom in analogue_atoms + remove_analogue_atoms:
@@ -213,7 +213,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         ref_align_sele = ref_sele.select_atoms('')
         for ref_atom, ref_resid in zip(ref_align_atoms, ref_align_resids):
             ref_align_sele = ref_align_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in reference', ref_align_sele.atoms.names, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in reference', '[' + ', '.join('"'+str(atom)+'"' for atom in ref_align_sele.atoms.names) + ']', flush=True)
 
         # Make selection for matching reference atoms
         ref_match_atoms = ref_align_atoms + known_atoms
@@ -221,7 +221,7 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         ref_match_sele = ref_sele.select_atoms('')
         for ref_atom, ref_resid in zip(ref_match_atoms, ref_match_resids):
             ref_match_sele = ref_match_sele + ref_sele.select_atoms('resid '+ str(ref_resid) + ' and name '+ ref_atom)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to adjust torsions in reference ', ref_match_sele.atoms.names, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to adjust torsions in reference ', '[' + ', '.join('"'+str(atom)+'"' for atom in ref_match_sele.atoms.names) + ']', flush=True)
 
         # Make selection for analogue atoms to align
         new_u = mda.Universe(analogue_out_path)
@@ -229,14 +229,14 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         new_align_sele = new_sele.select_atoms('')
         for new_atom in new_align_atoms:
             new_align_sele = new_align_sele + new_sele.select_atoms('name ' + new_atom)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in analogue', new_align_sele.atoms.names, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to align in analogue', '[' + ', '.join('"'+str(atom)+'"' for atom in new_align_sele.atoms.names) + ']', flush=True)
 
         # Make selection for matching analogue atoms
         new_match_atoms = new_align_atoms + analogue_atoms
         new_match_sele = new_sele.select_atoms('')
         for new_atom in new_match_atoms:
             new_match_sele = new_match_sele + new_sele.select_atoms('name ' + new_atom)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to adjust torsions in analogue ', new_match_sele.atoms.names, flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified atoms to adjust torsions in analogue ', '[' + ', '.join('"'+str(atom)+'"' for atom in new_match_sele.atoms.names) + ']', flush=True)
 
         # Match internal coordinates   
         ref_bat_pdb = f'{"/".join(analogue_out_path.split("/")[:-1])}/{analogue_name}_mcs.pdb'
@@ -257,8 +257,11 @@ def analogue_alignment(smiles: str, known_pdb: str, known_smiles: str, analogue_
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Aligning the following atoms from reference', ref_align_sele.atoms.names, flush=True)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Aligning the following atoms from analogue', new_align_sele.atoms.names, flush=True)
-            alignto(mobile=new_align_sele,
-                    reference=ref_align_sele)
+            try:
+                alignto(mobile=new_align_sele,
+                        reference=ref_align_sele)
+            except:
+                raise Exception(f"Failed to align new_align_sele:{new_align_sele.atoms.names} and ref_align_sele: {ref_align_sele.atoms.names} \n Try setting 'align_all' in your input.json file.")
 
         # Evaluate RMSD
         RMSD = rmsd(new_match_sele.positions.copy(), ref_match_sele.positions.copy())
@@ -402,16 +405,16 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
             
             # Select reference atoms
             ref_tors_sele = ref_match.select_atoms('')
-            print(ref_match.select_atoms('all').atoms.names, ref_match.select_atoms('all').atoms.resids)
+            # print(ref_match.select_atoms('all').atoms.names, ref_match.select_atoms('all').atoms.resids)
             for (r, a) in zip (ref_eq_resids, ref_eq_atoms):
-                print(ref_tors_sele.atoms.names, a, ref_tors_sele.atoms.resids, r, ref_match.select_atoms(f"resid {r} and name {a}").n_atoms)
+                # print(ref_tors_sele.atoms.names, a, ref_tors_sele.atoms.resids, r, ref_match.select_atoms(f"resid {r} and name {a}").n_atoms)
                 ref_tors_sele = ref_tors_sele + ref_match.select_atoms(f"(resid {r} and name {a})")
 
             # Calculated dihedral angle and assign to analogue
             try:
                 c1, c2, c3, c4 = ref_tors_sele.positions
             except:
-                print(ref_eq_resids, ref_eq_atoms)
+                # print(ref_eq_resids, ref_eq_atoms)
                 print('reference atoms names attempted to match:', ref_tors_sele.atoms.names, 'reference resids attempted to match', ref_tors_sele.atoms.resids, flush=True)
                 raise Exception("Could not match torsion")
             dihedral = calc_dihedrals(c1, c2, c3, c4)
