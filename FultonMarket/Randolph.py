@@ -15,6 +15,9 @@ import mdtraj as md
 from copy import deepcopy
 from shorten_replica_exchange import truncate_ncdf
 
+
+spring_constant_unit = (unit.joule)/(unit.angstrom*unit.angstrom*unit.mole)
+
 class Randolph():
     """
     """
@@ -159,7 +162,7 @@ class Randolph():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iters per cycle to be', self.n_iters_per_cycle, 'iterations', flush=True) 
 
         # Configure replicates            
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of', self.n_replicates, 'replicates to be', [np.round(t,1) for t in self.temperatures], flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of', self.n_replicates, 'replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True)
         
         
     def _build_simulation(self):

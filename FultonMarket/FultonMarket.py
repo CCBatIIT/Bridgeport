@@ -67,12 +67,13 @@ class FultonMarket():
             sim = Simulation(self.pdb.topology, self.system, integrator)
             sim.loadState(input_state)
             self.context = sim.context
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found input_state:', input_state, flush=True)
 
     def run(self, total_sim_time: float, iteration_length: float, dt: float=2.0,
             T_min: float=300, T_max: float=360, n_replicates: int=12,
             init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35,
-            output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/')
-            restrained_atoms_dsl:str=None, K_max:unit.Quantity=unit.Quantity(83.68, spring_constant_unit)):
+            output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/'),
+            restrained_atoms_dsl:str=None, K_max=83.68):
         """
         Run parallel temporing replica exchange. 
 
@@ -108,20 +109,19 @@ class FultonMarket():
             restrained_atoms_dsl (str):
                 MDTraj selection string, selected atoms will be restrained
 
-            K_max (Quantity in units (joule)/(angstrom*angstrom*mole)):
+            K_max (Float in units (joule)/(angstrom*angstrom*mole)):
                 Strongest restraint (low temperature state), restraints weaken as temperature rises
         """
 
         # Store variables
         self.total_sim_time = total_sim_time
         self.restrained_atoms_dsl = restrained_atoms_dsl
-        self.temperatures = np.array([temp*unit.kelvin for temp in geometric_distribution(T_min, T_max, n_replicates)])
+        self.temperatures = [temp*unit.kelvin for temp in geometric_distribution(T_min, T_max, n_replicates)]
         if restrained_atoms_dsl is not None: #Leave the top 20% of states unrestrained
             n_unrestrained = n_replicates // 5
-            self.spring_constants = [cons*spring_constant_unit for cons in reversed(geometric_distribution(0, K_max, n_replicates - n_unrestrained)]
+            self.spring_constants = [cons*spring_constant_unit for cons in reversed(geometric_distribution(0, K_max, n_replicates - n_unrestrained))]
             self.spring_constants += [0*spring_constant_unit for i in range(n_unrestrained)]
-            self.spring_constants = np.array(self.spring_constants)
-            assert self.spring_constants.shape == self.temperatures.shape
+            assert len(self.spring_constants) == len(self.temperatures)
         else:
             self.spring_constants = None
         
@@ -139,9 +139,9 @@ class FultonMarket():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found initial acceptance rate threshold', init_overlap_thresh, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found terminal acceptance rate threshold', term_overlap_thresh, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found output_dir', output_dir, flush=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Temperature Schedule', self.temperatures, 'Kelvin', flush=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Temperature Schedule', [np.round(T._value, 1) for T in self.temperatures], 'Kelvin', flush=True)
         if self.restrained_atoms_dsl is not None:
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Restraint Schedule', self.spring_constants, spring_constant_unit, flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Restraint Schedule', [np.round(T._value, 1) for T in self.spring_constants], spring_constant_unit, flush=True)
 
         # Loop through short 50 ns simulations to allow for .ncdf truncation
         self._configure_experiment_parameters()
@@ -184,9 +184,10 @@ class FultonMarket():
                                       iter_length=iteration_length,
                                       dt=dt,
                                       restrained_atoms_dsl=self.restrained_atoms_dsl,
-                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology)))    
+                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))    
                 
-            else:
+            
+            elif hasattr(self, 'context'):
                 simulation = Randolph(sim_no=self.sim_no,
                                       sim_time=self.sim_time,
                                       system=self.system,
@@ -202,7 +203,24 @@ class FultonMarket():
                                       dt=dt,
                                       context=self.context,
                                       restrained_atoms_dsl=self.restrained_atoms_dsl,
-                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology)))
+                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
+
+            else:
+                simulation = Randolph(sim_no=self.sim_no,
+                                      sim_time=self.sim_time,
+                                      system=self.system,
+                                      ref_state=ref_state,
+                                      temperatures=self.temperatures,
+                                      spring_constants=self.spring_constants,
+                                      init_positions=self.init_positions,
+                                      init_box_vectors=self.init_box_vectors,
+                                      output_dir=output_dir,
+                                      output_ncdf=self.output_ncdf,
+                                      checkpoint_ncdf=checkpoint_ncdf,
+                                      iter_length=iteration_length,
+                                      dt=dt,
+                                      restrained_atoms_dsl=self.restrained_atoms_dsl,
+                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
                                   
     
             # Run simulation
@@ -228,7 +246,7 @@ class FultonMarket():
         
         # Load args (not in correct shapes
         self.temperatures = np.load(os.path.join(load_dir, 'temperatures.npy'))
-        self.temperatures = np.array([t*unit.kelvin for t in self.temperatures])
+        self.temperatures = [t*unit.kelvin for t in self.temperatures]
         
         try:
             init_positions = np.load(os.path.join(load_dir, 'positions.npy'))[-1] 
@@ -242,7 +260,7 @@ class FultonMarket():
         reshaped_init_positions = np.empty((init_positions.shape))
         reshaped_init_box_vectors = np.empty((init_box_vectors.shape))
         reshaped_init_velocities = np.empty((init_velocities.shape))
-        for state in range(self.temperatures.shape[0]):
+        for state in range(len(self.temperatures)):
             rep_ind = np.where(state_inds == state)[0]
             reshaped_init_box_vectors[state] = init_box_vectors[rep_ind] 
             reshaped_init_velocities[state] = init_velocities[rep_ind]

@@ -54,11 +54,6 @@ for ind in intracellular_CA_inds:
     selection_string += f'(resid {ind}) or '
 selection_string = selection_string[:-4] + ')'
 
-market.run(total_sim_time=total_sim_time,
-           iteration_length=0.001,
-           n_replicates=n_replica,
-           T_min=310,
-           T_max=367.44,
-           output_dir=output_dir,
-           restrained_atoms_dsl=selection_string)
+market.run(total_sim_time=total_sim_time, iteration_length=0.001, n_replicates=n_replica,
+           T_min=310, T_max=367.44, output_dir=output_dir, restrained_atoms_dsl=selection_string)
 
