@@ -70,7 +70,7 @@ class FultonMarket():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found input_state:', input_state, flush=True)
 
     def run(self, total_sim_time: float, iteration_length: float, dt: float=2.0,
-            T_min: float=300, T_max: float=360, n_replicates: int=12,
+            T_min: float=300, T_max: float=360, n_replicates: int=12, sim_length=50,
             init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35,
             output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/'),
             restrained_atoms_dsl:str=None, K_max=83.68):
@@ -144,7 +144,7 @@ class FultonMarket():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Restraint Schedule', [np.round(T._value, 1) for T in self.spring_constants], spring_constant_unit, flush=True)
 
         # Loop through short 50 ns simulations to allow for .ncdf truncation
-        self._configure_experiment_parameters()
+        self._configure_experiment_parameters(sim_length=sim_length)
         while self.sim_no < self.total_n_sims:
     
             # Initialize Randolph
@@ -272,14 +272,14 @@ class FultonMarket():
         self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
 
 
-    def _configure_experiment_parameters(self):
+    def _configure_experiment_parameters(self, sim_length=50):
         # Assert that no empty save directories have been made
         assert all([len(os.listdir(os.path.join(self.save_dir, dir))) >= 5 for dir in os.listdir(self.save_dir)]), "You may have an empty save directory, please remove empty or incomplete save directories before continuing :)"
         
         # Configure experiment parameters
         self.sim_no = len(os.listdir(self.save_dir))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found n_sims_completed to be', self.sim_no, flush=True)
-        self.sim_time = 50 # ns
+        self.sim_time = sim_length # ns
         self.total_n_sims = np.ceil(self.total_sim_time / self.sim_time)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated total_n_sims to be', self.total_n_sims, flush=True)
     
