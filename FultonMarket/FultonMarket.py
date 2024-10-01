@@ -150,77 +150,39 @@ class FultonMarket():
             # Initialize Randolph
             if hasattr(self, 'sampler_states'):
                 print('LOAD SAMPLER')
-                simulation = Randolph(sim_no=self.sim_no,
-                                      sim_time=self.sim_time,
-                                      system=self.system,
-                                      ref_state=ref_state,
-                                      temperatures=self.temperatures,
-                                      spring_constants=self.spring_constants,
-                                      init_positions=self.init_positions,
-                                      init_box_vectors=self.init_box_vectors,
-                                      output_dir=output_dir,
-                                      output_ncdf=self.output_ncdf,
-                                      checkpoint_ncdf=checkpoint_ncdf,
-                                      iter_length=iteration_length,
-                                      dt=dt,
-                                      sampler_states=self.sampler_states,
-                                      restrained_atoms_dsl=self.restrained_atoms_dsl,
-                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
-                
+                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
+                              temperatures=self.temperatures, spring_constants=self.spring_constants,
+                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
+                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
+                              iter_length=iteration_length, dt=dt, sampler_states=self.sampler_states,
+                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
+            
             elif self.sim_no > 0:
                 self._load_initial_args()
-                simulation = Randolph(sim_no=self.sim_no,
-                                      sim_time=self.sim_time,
-                                      system=self.system,
-                                      ref_state=ref_state,
-                                      temperatures=self.temperatures,
-                                      spring_constants=self.spring_constants,
-                                      init_positions=self.init_positions,
-                                      init_box_vectors=self.init_box_vectors,
-                                      init_velocities=self.init_velocities,
-                                      output_dir=output_dir,
-                                      output_ncdf=self.output_ncdf,
-                                      checkpoint_ncdf=checkpoint_ncdf,
-                                      iter_length=iteration_length,
-                                      dt=dt,
-                                      restrained_atoms_dsl=self.restrained_atoms_dsl,
-                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))    
-                
+                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
+                              temperatures=self.temperatures, spring_constants=self.spring_constants,
+                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors, init_velocities=self.init_velocities,
+                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
+                              iter_length=iteration_length, dt=dt,
+                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
             
             elif hasattr(self, 'context'):
-                simulation = Randolph(sim_no=self.sim_no,
-                                      sim_time=self.sim_time,
-                                      system=self.system,
-                                      ref_state=ref_state,
-                                      temperatures=self.temperatures,
-                                      spring_constants=self.spring_constants,
-                                      init_positions=self.init_positions,
-                                      init_box_vectors=self.init_box_vectors,
-                                      output_dir=output_dir,
-                                      output_ncdf=self.output_ncdf,
-                                      checkpoint_ncdf=checkpoint_ncdf,
-                                      iter_length=iteration_length,
-                                      dt=dt,
-                                      context=self.context,
-                                      restrained_atoms_dsl=self.restrained_atoms_dsl,
-                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
-
+                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
+                              temperatures=self.temperatures, spring_constants=self.spring_constants,
+                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
+                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
+                              iter_length=iteration_length, dt=dt, context=self.context,
+                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
+            
             else:
-                simulation = Randolph(sim_no=self.sim_no,
-                                      sim_time=self.sim_time,
-                                      system=self.system,
-                                      ref_state=ref_state,
-                                      temperatures=self.temperatures,
-                                      spring_constants=self.spring_constants,
-                                      init_positions=self.init_positions,
-                                      init_box_vectors=self.init_box_vectors,
-                                      output_dir=output_dir,
-                                      output_ncdf=self.output_ncdf,
-                                      checkpoint_ncdf=checkpoint_ncdf,
-                                      iter_length=iteration_length,
-                                      dt=dt,
-                                      restrained_atoms_dsl=self.restrained_atoms_dsl,
-                                      mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
+                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
+                              temperatures=self.temperatures, spring_constants=self.spring_constants,
+                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
+                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
+                              iter_length=iteration_length, dt=dt,
+                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
+                
+            simulation = Randolph(**params)
                                   
     
             # Run simulation
