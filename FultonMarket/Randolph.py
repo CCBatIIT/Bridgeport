@@ -162,8 +162,11 @@ class Randolph():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iters per cycle to be', self.n_iters_per_cycle, 'iterations', flush=True) 
 
         # Configure replicates            
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of', self.n_replicates, 'replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True)
-        
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of', self.n_replicates,
+                                      'replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True)
+        if self.restrained_atoms_dsl is not None:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated spring_constants of', self.n_replicates,
+                                          'replicates to be', [np.round(t._value,1) for t in self.spring_constants], flush=True)
         
     def _build_simulation(self):
         """
@@ -207,9 +210,11 @@ class Randolph():
             self.simulation.create(thermodynamic_state=self.ref_state, sampler_states=self.sampler_states,
                                    storage=self.reporter, temperatures=self.temperatures, n_temperatures=len(self.temperatures))
         else:
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Creating Thermodynamic States', flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Creating {len(self.temperatures)} Thermodynamic States', flush=True)
             thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done Creating Thermodynamic States', flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning {len(self.spring_constants)} Restraints', flush=True)
+            assert len(self.temperatures) == len(self.spring_constants)
             for thermo_state, spring_cons in zip(thermodynamic_states, self.spring_constants):
                 self._restrain_atoms_by_dsl(thermo_state, self.mdtraj_topology, self.restrained_atoms_dsl, spring_cons)
                 if (1 + thermodynamic_states.index(thermo_state)) % (self.n_replicates // 4) == 0:
@@ -282,7 +287,7 @@ class Randolph():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Inserting state at', np.mean((temp_below, temp_above)), flush=True) 
             new_temps.insert(ind + displacement, np.mean((temp_below, temp_above)))
 
-        # Add new restraints
+        # Add new restraints if in PTwRE
         if self.restrained_atoms_dsl is not None:
             prev_spring_cons = [s._value for s in self.spring_constants]
             new_spring_cons = [cons for cons in prev_spring_cons]
