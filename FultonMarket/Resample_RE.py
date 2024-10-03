@@ -144,7 +144,7 @@ class RE_Analyzer():
         return t0, g, Neff_max, indices, A_n
 
 
-    def _determine_equilibraiton(self):
+    def _determine_equilibration(self):
         """
         Automated equilibration detection
         suggests an equilibration index (with respect to the whole simulation) by detecting equilibration for the average energies
@@ -180,6 +180,17 @@ class RE_Analyzer():
         pass
 
 
+    def obtain_positions_box_vecs(self, start=None, stop=None):
+        # Extract trajectory information
+        positions = []
+        box_vectors = []
+        for sim_no, storage_dir in enumerate(self.storage_dirs):
+            positions.append(np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r'))
+            box_vectors.append(np.load(os.path.join(storage_dir, 'box_vectors.npy'), mmap_mode='r'))
+        
+        return positions, box_vectors
+    
+    
     def determine_interpolation_inds(self):
         """
         determine the indices (with respect to the last simulation) which are missing from other simulations
@@ -202,7 +213,7 @@ class RE_Analyzer():
         if backfilled_energies is None:
             backfilled_energies, _ = self.backfill_energies()
         if t0 is None:
-            t0, _ = self._determine_equilibraiton()
+            t0, _ = self._determine_equilibration()
         # Get MBAR weights    
         u_kln = deepcopy(backfilled_energies[t0:])
         N_k = np.array([backfilled_energies.shape[0] - t0 for i in range(backfilled_energies.shape[1])])
@@ -218,7 +229,7 @@ class RE_Analyzer():
         if backfilled_energies is None:
             backfilled_energies, _ = self.backfill_energies()
         if t0 is None:
-            t0, _ = self._determine_equilibraiton()
+            t0, _ = self._determine_equilibration()
         if weights is None:
             weights, _, _ = self.obtain_MBAR_weights(backfilled_energies=backfilled_energies, t0=t0)
         
@@ -234,6 +245,7 @@ class RE_Analyzer():
 
     def make_positions_map(self, backfilled_energies=None, backfill_indices=None, interpolation_inds=None):
         """
+        
         """
         if backfilled_energies is None or backfill_indices is None:
             backfilled_energies, backfill_indices = self.backfill_energies()
@@ -241,9 +253,7 @@ class RE_Analyzer():
             interpolation_inds = self.determine_interpolation_inds()
 
         # Extract trajectory information
-        positions = []
-        for sim_no, storage_dir in enumerate(self.storage_dirs):
-            positions.append(np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r'))
+        positions, _ = self.obtain_positions_box_vecs()
         
         # Make maps
         positions_map = np.empty((backfilled_energies.shape[1], backfilled_energies.shape[0], 3), dtype=int) # Dimensions are (states, iters, corresponding[sim_no, state, iter])
@@ -269,7 +279,8 @@ class RE_Analyzer():
         return positions_map
 
 
-    def write_resampled_trajectory(self, pdb_in_fn, resampled_configs=None, positions_map=None, n_frames=500):
+    def write_resampled_trajectory(self, pdb_in_fn, resampled_configs=None, positions_map=None,
+                                   n_frames=500, output_dcd=None, output_pdb=None, write_result=True):
         """
         """
         
@@ -279,11 +290,8 @@ class RE_Analyzer():
             positions_map = self.make_positions_map()
         
         # Extract trajectory information
-        positions = []
-        box_vectors = []
-        for sim_no, storage_dir in enumerate(self.storage_dirs):
-            positions.append(np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r'))
-            box_vectors.append(np.load(os.path.join(storage_dir, 'box_vectors.npy'), mmap_mode='r'))
+        positions, box_vectors = self.obtain_positions_box_vecs()
+        
         #Parse input pdb
         if not os.path.isfile(os.path.join(self.input_dir, pdb_in_fn)):
             if not os.path.isabs(pdb_in_fn):
@@ -300,8 +308,11 @@ class RE_Analyzer():
         
         pos = np.empty((n_frames, positions[0].shape[2], 3))
         box_vec = np.empty((n_frames, 3, 3))
-        output_pdb = os.path.join(write_dir, 'resampled.pdb')
-        output_dcd = os.path.join(write_dir, 'resanpled.dcd')
+        
+        if output_pdb is None:
+            output_pdb = os.path.join(write_dir, 'resampled.pdb')
+        if output_dcd is None:
+            output_dcd = os.path.join(write_dir, 'resampled.dcd')
         
         # Iterate through resampled frames
         for i, (state, iter) in enumerate(resampled_configs):
@@ -325,12 +336,84 @@ class RE_Analyzer():
         
         traj = md.load(output_dcd, top=pdb_in_fn)
         traj.image_molecules()
-        traj[0].save_pdb(output_pdb)
-        traj.save_dcd(output_dcd)
+        if write_result:
+            traj[0].save_pdb(output_pdb)
+            traj.save_dcd(output_dcd)
 
         return traj
 
 
+    def resample_from_post_equilibration(self, pdb_in_fn, n_frames=500,
+                                         output_dcd=None, output_pdb=None):
+        
+        backfilled_energies, backfill_indices = self.backfill_energies()
+        t0, _ = self._determine_equilibration()
+        interpolation_inds = self.determine_interpolation_inds()
+        
+        weights, _, _ = self.obtain_MBAR_weights(backfilled_energies=backfilled_energies,
+                                                 t0=t0)
+        
+        resampled_configs = self.obtain_resampled_configs_indices(n_frames=n_frames,
+                                                                  weights=weights,
+                                                                  backfilled_energies=backfilled_energies,
+                                                                  t0=t0)
+        
+        
+        positions_map = self.make_positions_map(backfilled_energies=backfilled_energies,
+                                                backfill_indices=backfill_indices,
+                                                interpolation_inds=interpolation_inds)
+        
+        resampled_traj = self.write_resampled_trajectory(pdb_in_fn,
+                                                         resampled_configs=resampled_configs,
+                                                         positions_map=positions_map,
+                                                         n_frames=n_frames,
+                                                         output_dcd=output_dcd,
+                                                         output_pdb=output_pdb,
+                                                         write_result=True)
+        return resampled_traj
+
+
+    
+        
+    def resample_an_interval(self, pdb_in_fn, start, stop, n_frames=500,
+                            output_dcd=None, output_pdb=None):
+
+        backfilled_energies, backfill_indices = self.backfill_energies()
+        energies_on_interval = backfilled_energies[start:stop]
+        interpolation_inds = self.determine_interpolation_inds()
+        
+        weights, _, _ = self.obtain_MBAR_weights(backfilled_energies=energies_on_interval,
+                                                 t0=0)
+        
+        resampled_configs = self.obtain_resampled_configs_indices(n_frames=n_frames,
+                                                                  weights=weights,
+                                                                  backfilled_energies=energies_on_interval,
+                                                                  t0=0)
+
+        resampled_configs[:, 1] += start
+        
+        
+        positions_map = self.make_positions_map(backfilled_energies=backfilled_energies,
+                                                backfill_indices=backfill_indices,
+                                                interpolation_inds=interpolation_inds)
+        
+        
+        
+        resampled_traj = self.write_resampled_trajectory(pdb_in_fn,
+                                                         resampled_configs=resampled_configs,
+                                                         positions_map=positions_map,
+                                                         n_frames=n_frames,
+                                                         output_dcd=output_dcd,
+                                                         output_pdb=output_pdb,
+                                                         write_result=True)
+        return resampled_traj
+        
+        
+        
+        
+        
+    
+    
     def backfill_energies(self, energies:[np.array]=None):
         """
         Under development
