@@ -38,6 +38,8 @@ class RE_Analyzer():
         self.state_inds = [np.load(os.path.join(storage_dir, 'states.npy'), mmap_mode='r') for storage_dir in self.storage_dirs]
         fprint(f"Shapes of temperature arrays: {[(i, temp.shape) for i, temp in enumerate(self.obtain_temps())]}")
 
+        self.interpolation_inds = self.determine_interpolation_inds()
+
     
     def obtain_temps(self):
         """
@@ -100,6 +102,39 @@ class RE_Analyzer():
         return np.concatenate(array_list, axis=axis)
         
         
+    def state_trajectory(self, state_no):
+        positions, box_vecs = self.obtain_positions_box_vecs()
+        total_iters = np.sum([state_arr.shape[0] for state_arr in self.state_inds])
+        pos = np.empty((total_iters, positions[0].shape[2], 3))
+
+        sim_counter = 0
+        for pos_arr, state_arr in zip(positions, self.state_inds):
+            rep_ind = np.where(self.state_inds[frame_sim_no][frame_sim_iter] == frame_state_no)[0][0]
+            pos[sim_counter : state_arr.shape[0] + sim_counter, :, :] = pos_arr[:, , :, :]
+        
+        
+        # Make maps
+        sim_counter = 0
+        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
+            shift = 0
+            for state_no in range(backfilled_energies.shape[1]):
+                if state_no in sim_interpolate_inds:
+                    backfilled_index = sim_interpolate_inds.index(state_no)
+                    for iter, backfilled_ind in enumerate(backfill_indices[sim_no][backfilled_index]):
+                        counter = 0
+                        for fill_sim_ind in filled_sim_inds:
+                            if backfilled_ind >= counter and backfilled_ind < positions[fill_sim_ind].shape[0]+counter:
+                                positions_map[state_no, iter+sim_counter] = np.array([fill_sim_ind, state_no-shift, backfilled_ind-counter])
+                                break
+                            else:
+                                counter += positions[fill_sim_ind].shape[0]
+                    shift += 1
+                else:
+                    for iter in range(positions[sim_no].shape[0]):
+                        positions_map[state_no, iter+sim_counter] = np.array([sim_no, state_no-shift, iter])
+            sim_counter += positions[sim_no].shape[0]
+        return positions_map
+    
     def obtain_state_specific_energies(self, energies=None, concat=True, reduce=True):
         """
         Obtain energies of each replicate in its own state (iters, state, state) -> (iters, state)
@@ -144,18 +179,19 @@ class RE_Analyzer():
         return t0, g, Neff_max, indices, A_n
 
 
-    def _determine_equilibration(self):
+    def determine_equilibration(self, ave_energies=None, depth=50):
         """
         Automated equilibration detection
         suggests an equilibration index (with respect to the whole simulation) by detecting equilibration for the average energies
-        starting from each of the first 100 frames
+        starting from each of the first 50 frames
         returns the likely best index of equilibration
         """
-        ave_energies = self.average_energy()
+        if ave_energies = None:
+            ave_energies = self.average_energy()
         t0s_inds = []
-        for i in range(100):
+        for i in range(depth):
             A_t = ave_energies[i:]   
-            t0, _, _, _, _ = self.gather_uncorrelated_samples(A_t)
+            t0, _, _ = timeseries.detect_equilibration(ave_energies)
             t0s_inds.append([i, t0+i])
         t0s_inds = np.array(t0s_inds)
         counts = np.bincount(t0s_inds[:, 1])
@@ -213,7 +249,7 @@ class RE_Analyzer():
         if backfilled_energies is None:
             backfilled_energies, _ = self.backfill_energies()
         if t0 is None:
-            t0, _ = self._determine_equilibration()
+            t0, _ = self.determine_equilibration()
         # Get MBAR weights    
         u_kln = deepcopy(backfilled_energies[t0:])
         N_k = np.array([backfilled_energies.shape[0] - t0 for i in range(backfilled_energies.shape[1])])
@@ -229,7 +265,7 @@ class RE_Analyzer():
         if backfilled_energies is None:
             backfilled_energies, _ = self.backfill_energies()
         if t0 is None:
-            t0, _ = self._determine_equilibration()
+            t0, _ = self.determine_equilibration()
         if weights is None:
             weights, _, _ = self.obtain_MBAR_weights(backfilled_energies=backfilled_energies, t0=t0)
         
@@ -243,14 +279,12 @@ class RE_Analyzer():
         return resampled_configs
 
 
-    def make_positions_map(self, backfilled_energies=None, backfill_indices=None, interpolation_inds=None):
+    def make_positions_map(self, backfilled_energies=None, backfill_indices=None):
         """
         
         """
         if backfilled_energies is None or backfill_indices is None:
             backfilled_energies, backfill_indices = self.backfill_energies()
-        if interpolation_inds is None:
-            interpolation_inds = self.determine_interpolation_inds()
 
         # Extract trajectory information
         positions, _ = self.obtain_positions_box_vecs()
@@ -258,7 +292,7 @@ class RE_Analyzer():
         # Make maps
         positions_map = np.empty((backfilled_energies.shape[1], backfilled_energies.shape[0], 3), dtype=int) # Dimensions are (states, iters, corresponding[sim_no, state, iter])
         sim_counter = 0
-        for sim_no, sim_interpolate_inds in enumerate(interpolation_inds):
+        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
             shift = 0
             for state_no in range(backfilled_energies.shape[1]):
                 if state_no in sim_interpolate_inds:
@@ -347,8 +381,7 @@ class RE_Analyzer():
                                          output_dcd=None, output_pdb=None):
         
         backfilled_energies, backfill_indices = self.backfill_energies()
-        t0, _ = self._determine_equilibration()
-        interpolation_inds = self.determine_interpolation_inds()
+        t0, _ = self.determine_equilibration()
         
         weights, _, _ = self.obtain_MBAR_weights(backfilled_energies=backfilled_energies,
                                                  t0=t0)
@@ -360,8 +393,7 @@ class RE_Analyzer():
         
         
         positions_map = self.make_positions_map(backfilled_energies=backfilled_energies,
-                                                backfill_indices=backfill_indices,
-                                                interpolation_inds=interpolation_inds)
+                                                backfill_indices=backfill_indices)
         
         resampled_traj = self.write_resampled_trajectory(pdb_in_fn,
                                                          resampled_configs=resampled_configs,
@@ -377,25 +409,30 @@ class RE_Analyzer():
         
     def resample_an_interval(self, pdb_in_fn, start, stop, n_frames=500,
                             output_dcd=None, output_pdb=None):
-
+        #Get energies
         backfilled_energies, backfill_indices = self.backfill_energies()
         energies_on_interval = backfilled_energies[start:stop]
-        interpolation_inds = self.determine_interpolation_inds()
+        #Average energy of states in their own state, on the interval
+        specific_energies = np.empty(energies_on_interval.shape[:-1])
+            for j in range(specific_energies.shape[1]):
+                specific_energies[:, j] = energies[:, j, j]
+        ave_energies = np.mean(specific_energies, axis=1)
+        
+        t0, _, _ = self.determine_equilibration(self, ave_energies=ave_energies)
         
         weights, _, _ = self.obtain_MBAR_weights(backfilled_energies=energies_on_interval,
-                                                 t0=0)
+                                                 t0=t0)
         
         resampled_configs = self.obtain_resampled_configs_indices(n_frames=n_frames,
                                                                   weights=weights,
                                                                   backfilled_energies=energies_on_interval,
-                                                                  t0=0)
+                                                                  t0=t0)
 
         resampled_configs[:, 1] += start
         
         
         positions_map = self.make_positions_map(backfilled_energies=backfilled_energies,
-                                                backfill_indices=backfill_indices,
-                                                interpolation_inds=interpolation_inds)
+                                                backfill_indices=backfill_indices)
         
         
         
@@ -425,8 +462,7 @@ class RE_Analyzer():
         
         
         temps = self.obtain_temps()
-        interpolation_inds = self.determine_interpolation_inds()
-        filled_sims = [True if not interpolation_inds[i] else False for i in range(len(interpolation_inds))]
+        filled_sims = [True if not self.interpolation_inds[i] else False for i in range(len(self.interpolation_inds))]
         filled_sim_inds = [i for i in range(len(filled_sims)) if filled_sims[i] == True]
         final_temps = temps[-1]
         
@@ -452,8 +488,8 @@ class RE_Analyzer():
         
         # Resample from MBAR weights
         backfilled_energies = []
-        backfill_indices = [[] for i in range(len(interpolation_inds))]
-        for sim_no, sim_interpolate_inds in enumerate(interpolation_inds):
+        backfill_indices = [[] for i in range(len(self.interpolation_inds))]
+        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
             sim_energies = np.zeros((energies[sim_no].shape[0], final_temps.shape[0], final_temps.shape[0])) # reformat into dimensions (iterations, state, state)
             if len(sim_interpolate_inds) > 0:
                 fill_states = np.array(sim_interpolate_inds)
