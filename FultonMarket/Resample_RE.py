@@ -34,7 +34,8 @@ class RE_Analyzer():
         assert os.path.isdir(self.stor_dir)
         fprint(f"Found storage directory at {self.stor_dir}")
         self.storage_dirs = sorted(glob.glob(self.stor_dir + '/*'), key=lambda x: int(x.split('/')[-1]))
-        #determine if resampling is necessary
+
+        self.state_inds = [np.load(os.path.join(storage_dir, 'states.npy'), mmap_mode='r') for storage_dir in self.storage_dirs]
         fprint(f"Shapes of temperature arrays: {[(i, temp.shape) for i, temp in enumerate(self.obtain_temps())]}")
 
     
@@ -210,7 +211,7 @@ class RE_Analyzer():
         return weights, backfilled_energies, t0
 
 
-    def obtain_resampled_configs_indices(self, n_frames, weights=None, backfilled_energies=None, t0=None):
+    def obtain_resampled_configs_indices(self, n_frames=500, weights=None, backfilled_energies=None, t0=None):
         """
         
         """
@@ -268,9 +269,14 @@ class RE_Analyzer():
         return positions_map
 
 
-    def write_resampled_trajectories(self):
+    def write_resampled_trajectory(self, pdb_in_fn, resampled_configs=None, positions_map=None, n_frames=500):
         """
         """
+        
+        if resampled_configs is None:
+            resampled_configs = self.obtain_resampled_configs_indices(n_frames=n_frames)
+        if positions_map is None:
+            positions_map = self.make_positions_map()
         
         # Extract trajectory information
         positions = []
@@ -278,18 +284,24 @@ class RE_Analyzer():
         for sim_no, storage_dir in enumerate(self.storage_dirs):
             positions.append(np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r'))
             box_vectors.append(np.load(os.path.join(storage_dir, 'box_vectors.npy'), mmap_mode='r'))
+        #Parse input pdb
+        if not os.path.isfile(os.path.join(self.input_dir, pdb_in_fn)):
+            if not os.path.isabs(pdb_in_fn):
+                raise Exception('Could not find input pbd')
+            os.system(f'scp {pdb_in_fn} {os.path.join(self.input_dir, pdb_in_fn)}')
+        pdb_in_fn = os.path.join(self.input_dir, pdb_in_fn)
         
         # Write new trajectory from resampled frames
-        w_d = self.input_dir
-        name = w_d.split('_')[0]
-        input_pdb_name = os.path.join(input_pdb, f'{name}.pdb')
-        print(input_pdb_name)
-        traj = md.load_pdb(input_pdb_name)
+        write_dir = os.path.join(self.input_dir, 'resampled')
+        if not os.path.isdir(write_dir):
+            os.mkdir(write_dir)
+        name = pdb_in_fn.split('/')[-1][:-4] #take off prefacing directories and extension
+        traj = md.load_pdb(pdb_in_fn)
         
         pos = np.empty((n_frames, positions[0].shape[2], 3))
         box_vec = np.empty((n_frames, 3, 3))
-        output_pdb = os.path.join(output_dir, 'pdb', f"{dir}.pdb")
-        output_dcd = os.path.join(output_dir, 'dcd', f"{dir}.dcd")
+        output_pdb = os.path.join(write_dir, 'resampled.pdb')
+        output_dcd = os.path.join(write_dir, 'resanpled.dcd')
         
         # Iterate through resampled frames
         for i, (state, iter) in enumerate(resampled_configs):
@@ -298,10 +310,10 @@ class RE_Analyzer():
             frame_sim_no, frame_state_no, frame_sim_iter = positions_map[state, iter]
         
             try:
-                rep_ind = np.where(state_inds[frame_sim_no][frame_sim_iter] == frame_state_no)[0][0]
+                rep_ind = np.where(self.state_inds[frame_sim_no][frame_sim_iter] == frame_state_no)[0][0]
             except:
                 print(state, iter)
-                print(frame_sim_no, frame_state_no, frame_sim_iter, '\n', state_inds[frame_sim_no][frame_sim_iter], frame_state_no)
+                print(frame_sim_no, frame_state_no, frame_sim_iter, '\n', self.state_inds[frame_sim_no][frame_sim_iter], frame_state_no)
                 raise Exception()
         
             pos[i] = np.array(positions[frame_sim_no][frame_sim_iter][rep_ind])
@@ -311,17 +323,14 @@ class RE_Analyzer():
         traj.unitcell_vectors = box_vec.copy()
         traj.save_dcd(output_dcd)
         
-        traj = md.load(output_dcd, top=input_pdb_name)
+        traj = md.load(output_dcd, top=pdb_in_fn)
         traj.image_molecules()
         traj[0].save_pdb(output_pdb)
         traj.save_dcd(output_dcd)
-        
-        print('For', dir, 'sampled', traj.n_frames, 'frames from', len(flat_inds), 'number of samples', flush=True)
-        print('Time taken:', datetime.now() - start)
 
-    
-        
-        
+        return traj
+
+
     def backfill_energies(self, energies:[np.array]=None):
         """
         Under development
