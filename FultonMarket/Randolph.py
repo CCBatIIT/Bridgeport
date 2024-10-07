@@ -116,6 +116,10 @@ class Randolph():
         np.save(os.path.join(save_no_dir, 'states.npy'), states.data)
         np.save(os.path.join(save_no_dir, 'energies.npy'), energies.data)
         np.save(os.path.join(save_no_dir, 'temperatures.npy'), temperatures)
+        
+        if self.restrained_atoms_dsl is not None:
+            spring_constants = np.array([np.round(t._value,2) for t in self.spring_constants])
+            np.save(os.path.join(save_no_dir, 'spring_constants.npy'), spring_constants)
 
         # Truncate output_checkpoint.ncdf
         checkpoint_copy = os.path.join(self.output_dir, 'output_checkpoint_copy.ncdf')
@@ -131,7 +135,10 @@ class Randolph():
         except:
             pass    
         
-        return sampler_states, [t*unit.kelvin for t in temperatures]
+        if self.restrained_atoms_dsl is not None:
+            return sampler_states, [t*unit.kelvin for t in temperatures], [t*spring_constant_unit for t in self.spring_constants]
+        else:
+            return sampler_states, [t*unit.kelvin for t in temperatures]
         
         
     def _configure_simulation_parameters(self):

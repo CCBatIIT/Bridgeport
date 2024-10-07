@@ -119,8 +119,8 @@ class FultonMarket():
         self.temperatures = [temp*unit.kelvin for temp in geometric_distribution(T_min, T_max, n_replicates)]
         if restrained_atoms_dsl is not None: #Leave the top 20% of states unrestrained
             n_unrestrained = n_replicates // 5
-            self.spring_constants = [cons*spring_constant_unit for cons in reversed(geometric_distribution(0, K_max, n_replicates - n_unrestrained))]
-            self.spring_constants += [0*spring_constant_unit for i in range(n_unrestrained)]
+            self.spring_constants = [cons * spring_constant_unit for cons in reversed(geometric_distribution(0, K_max, n_replicates - n_unrestrained))]
+            self.spring_constants += [0.0 * spring_constant_unit for i in range(n_unrestrained)]
             assert len(self.spring_constants) == len(self.temperatures)
         else:
             self.spring_constants = None
@@ -146,42 +146,27 @@ class FultonMarket():
         # Loop through short 50 ns simulations to allow for .ncdf truncation
         self._configure_experiment_parameters(sim_length=sim_length)
         while self.sim_no < self.total_n_sims:
-    
+            
+            params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
+                          temperatures=self.temperatures, spring_constants=self.spring_constants,
+                          init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
+                          output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
+                          iter_length=iteration_length, dt=dt,
+                          restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
+             
             # Initialize Randolph
-            if hasattr(self, 'sampler_states'):
-                print('LOAD SAMPLER')
-                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
-                              temperatures=self.temperatures, spring_constants=self.spring_constants,
-                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
-                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
-                              iter_length=iteration_length, dt=dt, sampler_states=self.sampler_states,
-                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
-            
-            elif self.sim_no > 0:
-                self._load_initial_args()
-                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
-                              temperatures=self.temperatures, spring_constants=self.spring_constants,
-                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors, init_velocities=self.init_velocities,
-                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
-                              iter_length=iteration_length, dt=dt,
-                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
-            
+            if self.sim_no > 0:
+                self._load_initial_args() #sets positions, velocities, box_vecs, temperatures, and spring_constants
+                params['init_velocities'] = self.init_velocities
+                params['init_positions'] = self.init_positions
+                params['init_box_vectors'] = self.init_box_vectors
+                params['temperatures'] = self.temperatures
+                if restrained_atoms_dsl is not None:
+                    params['spring_constants'] = self.spring_constants
+
             elif hasattr(self, 'context'):
-                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
-                              temperatures=self.temperatures, spring_constants=self.spring_constants,
-                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
-                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
-                              iter_length=iteration_length, dt=dt, context=self.context,
-                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
-            
-            else:
-                params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
-                              temperatures=self.temperatures, spring_constants=self.spring_constants,
-                              init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
-                              output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
-                              iter_length=iteration_length, dt=dt,
-                              restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
-                
+                params['context'] = self.context
+             
             simulation = Randolph(**params)
                                   
     
@@ -189,7 +174,11 @@ class FultonMarket():
             simulation.main(init_overlap_thresh=init_overlap_thresh, term_overlap_thresh=term_overlap_thresh)
 
             # Save simulation
-            self.sampler_states, self.temperatures = simulation.save_simulation(self.save_dir)
+            if restrained_atoms_dsl is not None:
+                self.sampler_states, self.temperatures, self.spring_constants = simulation.save_simulation(self.save_dir)
+            else:
+                self.sampler_states, self.temperatures = simulation.save_simulation(self.save_dir)
+
             
             # Delete output.ncdf files if not last simulation 
             if not self.sim_no+1 == self.total_n_sims:
@@ -209,6 +198,9 @@ class FultonMarket():
         # Load args (not in correct shapes
         self.temperatures = np.load(os.path.join(load_dir, 'temperatures.npy'))
         self.temperatures = [t*unit.kelvin for t in self.temperatures]
+        if self.spring_constants is not None:
+            self.spring_constants = np.load(os.path.join(load_dir, 'spring_constants.npy'))
+            self.spring_constants = [s*spring_constant_unit for s in self.spring_constants]
         
         try:
             init_positions = np.load(os.path.join(load_dir, 'positions.npy'))[-1] 
