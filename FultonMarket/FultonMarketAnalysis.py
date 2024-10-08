@@ -10,11 +10,16 @@ import mdtraj as md
 from copy import deepcopy
 from datetime import datetime
 import matplotlib.pyplot as plt
+from typing import List
 
 fprint = lambda my_string: print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + ' // ' + str(my_string), flush=True)
 get_kT = lambda temp: temp*cons.gas_constant
 geometric_distribution = lambda min_val, max_val, n_vals: [min_val + (max_val - min_val) * (math.exp(float(i) / float(n_vals-1)) - 1.0) / (math.e - 1.0) for i in range(n_vals)]
 rmsd = lambda a, b: np.sqrt(np.mean(np.sum((b-a)**2, axis=-1), axis=-1))
+
+        # if reduce:
+        #     temps = np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2)
+        #     reshaped_energy = reshaped_energy / get_kT(temps)
 
 class FultonMarketAnalysis():
     """
@@ -23,10 +28,12 @@ class FultonMarketAnalysis():
     methods:
         init: input_dir
     """
-    def __init__(self, input_dir:str):
+    def __init__(self, input_dir:str, skip: int=0):
         """
         get Numpy arrays, determine indices of interpolations, and set state_inds
         """
+        
+        # Find directores
         if input_dir.endswith('/'):
             input_dir = input_dir[:-1]
         self.input_dir = input_dir
@@ -35,69 +42,98 @@ class FultonMarketAnalysis():
         fprint(f"Found storage directory at {self.stor_dir}")
         self.storage_dirs = sorted(glob.glob(self.stor_dir + '/*'), key=lambda x: int(x.split('/')[-1]))
 
-        self.state_inds = [np.load(os.path.join(storage_dir, 'states.npy'), mmap_mode='r')[10:] for storage_dir in self.storage_dirs]
+        
+        # Load saved variables
+        self.temperatures = [np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2) for storage_dir in self.storage_dirs]
         fprint(f"Shapes of temperature arrays: {[(i, temp.shape) for i, temp in enumerate(self.get_temperatures())]}")
+        self.state_inds = [np.load(os.path.join(storage_dir, 'states.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
+        self.unshaped_energies = [np.load(os.path.join(storage_dir, 'energies.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
+        self.unshaped_positions = [np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
+        self.unshaped_box_vectors = [np.load(os.path.join(storage_dir, 'box_vectors.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
+        
+        # Reshape lists 
+        self.energies = self._reshape_list(energies)
+        self.map = self._get_postions_map()
+        
 
+        # Determine if interpolation occured and resample to fill in missing states
         self.interpolation_inds = self.determine_interpolation_inds()
 
-    
-    def get_temperatures(self):
-        """
-        get a list of temperature arrays associated with each simulation in the run
-
-        Returns:
-            temps: [np.array]: list of arrays for temperatures
-        """
-        return [np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2) for storage_dir in self.storage_dirs]
         
     
-    def _reshape_energy(self, storage_dir=None, sim_num=None, reduce=True):
-        """
-        Reshape the energy array of storage_dir from (iter, replicate, state) to (iter, state, state)
-        Providing the storage_dir argument overrides the cycle number argument
-        cycle number is provided as an integer, one of the directories in input_dir/saved_variables/
+    def _reshape_list(self, unshaped_list: List):
+    """
+    Return a list of reshaped arrays. 
+    
+    Parameters:
+    ------------
+        unshaped_list (List):
+            List of numpy arrays that need the 1st axis reshaped 
+    """
+    reshaped_array = []
+    for i in range(len(self.storage_dirs)):
+        reshaped_array.append(self._reshape(unshaped_arr=unshaped_list[i], sim_no=i))
+    return reshaped_array      
 
-        Input:
-            storage_dir as string or sim_num as string/int
-                the saved_variables directory as a string or the integer representing the saved variables dir
-
-        Returns:
-            reshaped_energy: np.array: energy array of the same shae as energies.npy
-                Reshaped from (iter, replicate, state) to (iter, state, state)
+    
+    def _reshape_array(self, unshaped_arr: np.array):
         """
-        assert storage_dir is not None or sim_num is not None
-        if storage_dir is None and sim_num is not None:
-            storage_dir = self.storage_dirs[[stor_dir.endswith(str(sim_num)) for stor_dir in self.storage_dirs].index(True)]
-        elif storage_dir is not None:
-            assert storage_dir in self.storage_dirs
-        
-        energy_arr = np.load(os.path.join(storage_dir, 'energies.npy'), mmap_mode='r')[10:]
-        state_arr = np.load(os.path.join(storage_dir, 'states.npy'), mmap_mode='r')[10:]
-        reshaped_energy = np.empty(energy_arr.shape)
-        for state in range(energy_arr.shape[1]):
-            for iter_num in range(energy_arr.shape[0]):
-                reshaped_energy[iter_num, state, :] = energy_arr[iter_num, np.where(state_arr[iter_num] == state)[0], :]
-        
-        if reduce:
-            temps = np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2)
-            reshaped_energy = reshaped_energy / get_kT(temps)
+        Return a reshaped array. 
+
+        Parameters:
+        ------------
+            unshaped_arr (np.array):
+                Numpy arrays that need the 1st axis reshaped.
+        """        
+        # Reshape 1st axis
+        reshaped_arr = np.empty(unshaped_arr.shape)
+        for state in range(unshaped_arr.shape[1]):
+            for iter_num in range(unshaped_arr.shape[0]):
+                reshaped_arr[iter_num, state, :] = unshaped_arr[iter_num, np.where(state_arr[iter_num] == state)[0], :]
         
         return reshaped_energy
     
     
-    def get_reshaped_energies(self, reduce=True):
+    
+    def _get_postions_map(self, backfilled_energies=None, backfill_indices=None):
         """
-        Iterate self._reshape_energy over the storage directories, provide the result as a list of arrays
-
-        Returns:
-            reshaped_energies: [np.array]
+        TODO
         """
-        reshaped_energies = []
-        for i in range(len(self.storage_dirs)):
-            reshaped_energies.append(self._reshape_energy(sim_num=i, reduce=reduce))
-        return reshaped_energies
+        if backfilled_energies is None or backfill_indices is None:
+            backfilled_energies, backfill_indices = self.backfill_energies()
 
+        # Extract trajectory information
+        positions, _ = self.get_positions_box_vecs()
+        
+        # Make maps
+        positions_map = np.empty((backfilled_energies.shape[1], backfilled_energies.shape[0], 3), dtype=int) # Dimensions are (states, iters, corresponding[sim_no, state, iter])
+        sim_counter = 0
+        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
+            shift = 0
+            for state_no in range(backfilled_energies.shape[1]):
+                if state_no in sim_interpolate_inds:
+                    backfilled_index = sim_interpolate_inds.index(state_no)
+                    for iter, backfilled_ind in enumerate(backfill_indices[sim_no][backfilled_index]):
+                        counter = 0
+                        for fill_sim_ind in filled_sim_inds:
+                            if backfilled_ind >= counter and backfilled_ind < positions[fill_sim_ind].shape[0]+counter:
+                                positions_map[state_no, iter+sim_counter] = np.array([fill_sim_ind, state_no-shift, backfilled_ind-counter])
+                                break
+                            else:
+                                counter += positions[fill_sim_ind].shape[0]
+                    shift += 1
+                else:
+                    for iter in range(positions[sim_no].shape[0]):
+                        positions_map[state_no, iter+sim_counter] = np.array([sim_no, state_no-shift, iter])
+            sim_counter += positions[sim_no].shape[0]
+        return positions_map
 
+    
+    
+    
+    
+    
+    
     def concatenate(self, array_list:[np.array], axis=0):
         """
         Shorthand for typical concatenations done here, default over axis zero
@@ -289,37 +325,6 @@ class FultonMarketAnalysis():
         return resampled_configs
 
 
-    def make_positions_map(self, backfilled_energies=None, backfill_indices=None):
-        """
-        """
-        if backfilled_energies is None or backfill_indices is None:
-            backfilled_energies, backfill_indices = self.backfill_energies()
-
-        # Extract trajectory information
-        positions, _ = self.get_positions_box_vecs()
-        
-        # Make maps
-        positions_map = np.empty((backfilled_energies.shape[1], backfilled_energies.shape[0], 3), dtype=int) # Dimensions are (states, iters, corresponding[sim_no, state, iter])
-        sim_counter = 0
-        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
-            shift = 0
-            for state_no in range(backfilled_energies.shape[1]):
-                if state_no in sim_interpolate_inds:
-                    backfilled_index = sim_interpolate_inds.index(state_no)
-                    for iter, backfilled_ind in enumerate(backfill_indices[sim_no][backfilled_index]):
-                        counter = 0
-                        for fill_sim_ind in filled_sim_inds:
-                            if backfilled_ind >= counter and backfilled_ind < positions[fill_sim_ind].shape[0]+counter:
-                                positions_map[state_no, iter+sim_counter] = np.array([fill_sim_ind, state_no-shift, backfilled_ind-counter])
-                                break
-                            else:
-                                counter += positions[fill_sim_ind].shape[0]
-                    shift += 1
-                else:
-                    for iter in range(positions[sim_no].shape[0]):
-                        positions_map[state_no, iter+sim_counter] = np.array([sim_no, state_no-shift, iter])
-            sim_counter += positions[sim_no].shape[0]
-        return positions_map
 
 
     def write_resampled_trajectory(self, pdb_in_fn, resampled_configs=None, positions_map=None,
