@@ -124,60 +124,41 @@ class FultonMarket():
         self._configure_experiment_parameters()
         while self.sim_no < self.total_n_sims:
     
+    
+            #Build parameters dict
+            params = dict(sim_no=self.sim_no, 
+                          sim_time=self.sim_time, 
+                          system=self.system, 
+                          ref_state=ref_state,
+                          temperatures=self.temperatures, 
+                          init_positions=self.init_positions,
+                          init_box_vectors=self.init_box_vectors,
+                          output_dir=output_dir, 
+                          output_ncdf=self.output_ncdf, 
+                          checkpoint_ncdf=checkpoint_ncdf,
+                          iter_length=iteration_length, 
+                          dt=dt)
+    
             # Initialize Randolph
-            if hasattr(self, 'sampler_states'):
-                print('LOAD SAMPLER')
-                simulation = Randolph(sim_no=self.sim_no,
-                                      sim_time=self.sim_time,
-                                      system=self.system,
-                                      ref_state=ref_state,
-                                      temperatures=self.temperatures,
-                                      init_positions=self.init_positions,
-                                      init_box_vectors=self.init_box_vectors,
-                                      output_dir=output_dir,
-                                      output_ncdf=self.output_ncdf,
-                                      checkpoint_ncdf=checkpoint_ncdf,
-                                      iter_length=iteration_length,
-                                      dt=dt,
-                                      sampler_states=self.sampler_states)
-                
-            elif self.sim_no > 0:
-                self._load_initial_args()
-                simulation = Randolph(sim_no=self.sim_no,
-                                      sim_time=self.sim_time,
-                                      system=self.system,
-                                      ref_state=ref_state,
-                                      temperatures=self.temperatures,
-                                      init_positions=self.init_positions,
-                                      init_box_vectors=self.init_box_vectors,
-                                      init_velocities=self.init_velocities,
-                                      output_dir=output_dir,
-                                      output_ncdf=self.output_ncdf,
-                                      checkpoint_ncdf=checkpoint_ncdf,
-                                      iter_length=iteration_length,
-                                      dt=dt)    
-                
-            else:
-                simulation = Randolph(sim_no=self.sim_no,
-                                      sim_time=self.sim_time,
-                                      system=self.system,
-                                      ref_state=ref_state,
-                                      temperatures=self.temperatures,
-                                      init_positions=self.init_positions,
-                                      init_box_vectors=self.init_box_vectors,
-                                      output_dir=output_dir,
-                                      output_ncdf=self.output_ncdf,
-                                      checkpoint_ncdf=checkpoint_ncdf,
-                                      iter_length=iteration_length,
-                                      dt=dt,
-                                      context=self.context)
+            if self.sim_no > 0:
+                self._load_initial_args() #sets positions, velocities, box_vecs, temperatures, and spring_constants
+                params['init_velocities'] = self.init_velocities
+                params['init_positions'] = self.init_positions
+                params['init_box_vectors'] = self.init_box_vectors
+                params['temperatures'] = self.temperatures
+
+            elif hasattr(self, 'context'):
+                params['context'] = self.context
+             
+            simulation = Randolph(**params)
                                   
     
             # Run simulation
-            simulation.main(init_overlap_thresh=init_overlap_thresh, term_overlap_thresh=term_overlap_thresh)
+            simulation.main(init_overlap_thresh=init_overlap_thresh,
+                            term_overlap_thresh=term_overlap_thresh)
 
             # Save simulation
-            self.sampler_states, self.temperatures = simulation.save_simulation(self.save_dir)
+            self.temperatures = simulation.save_simulation(self.save_dir)
             
             # Delete output.ncdf files if not last simulation 
             if not self.sim_no+1 == self.total_n_sims:

@@ -66,13 +66,10 @@ def truncate_ncdf(ncdf_in, ncdf_out, reporter, is_checkpoint: bool=False):
         # Read temperatures
         temps = np.array([state.temperature._value for state in reporter.read_thermodynamic_states()[0]])
         
-        # Read sampler states
-        sampler_states = reporter.read_sampler_states(reporter.read_last_iteration())
-        
         # Close reporter
         reporter.close()
 
-        return pos, velocities, box_vecs, states, energies, temps, sampler_states
+        return pos, velocities, box_vecs, states, energies, temps
         
 
 
