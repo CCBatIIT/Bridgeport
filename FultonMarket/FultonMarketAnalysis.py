@@ -11,15 +11,14 @@ from copy import deepcopy
 from datetime import datetime
 import matplotlib.pyplot as plt
 from typing import List
+import seaborn as sns
 
 fprint = lambda my_string: print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + ' // ' + str(my_string), flush=True)
 get_kT = lambda temp: temp*cons.gas_constant
 geometric_distribution = lambda min_val, max_val, n_vals: [min_val + (max_val - min_val) * (math.exp(float(i) / float(n_vals-1)) - 1.0) / (math.e - 1.0) for i in range(n_vals)]
 rmsd = lambda a, b: np.sqrt(np.mean(np.sum((b-a)**2, axis=-1), axis=-1))
 
-        # if reduce:
-        #     temps = np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2)
-        #     reshaped_energy = reshaped_energy / get_kT(temps)
+
 
 class FultonMarketAnalysis():
     """
@@ -44,39 +43,45 @@ class FultonMarketAnalysis():
 
         
         # Load saved variables
-        self.temperatures = [np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2) for storage_dir in self.storage_dirs]
-        fprint(f"Shapes of temperature arrays: {[(i, temp.shape) for i, temp in enumerate(self.get_temperatures())]}")
+        self.temperatures_list = [np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2) for storage_dir in self.storage_dirs]
+        self.temperatures = self.temperatures_list[-1]
+        fprint(f"Shapes of temperature arrays: {[(i, temp.shape) for i, temp in enumerate(self.temperatures_list)]}")
         self.state_inds = [np.load(os.path.join(storage_dir, 'states.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
         self.unshaped_energies = [np.load(os.path.join(storage_dir, 'energies.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
         self.unshaped_positions = [np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
         self.unshaped_box_vectors = [np.load(os.path.join(storage_dir, 'box_vectors.npy'), mmap_mode='r')[skip:] for storage_dir in self.storage_dirs]
         
         # Reshape lists 
-        self.energies = self._reshape_list(energies)
-        self.map = self._get_postions_map()
-        
+        self.energies = self._reshape_list(self.unshaped_energies)
+        self.reduced_potentials = [e / get_kT(temps) for (e, temps) in zip(self.energies, self.temperatures_list)]
+
+        # Compute positions/box_vectors map 
+        self._get_postions_map()
+        self.skip = skip        
 
         # Determine if interpolation occured and resample to fill in missing states
-        self.interpolation_inds = self.determine_interpolation_inds()
+        self._backfill()
+        fprint(f'Shape of final energies determined to be: {self.energies.shape}')
 
         
     
     def _reshape_list(self, unshaped_list: List):
-    """
-    Return a list of reshaped arrays. 
-    
-    Parameters:
-    ------------
-        unshaped_list (List):
-            List of numpy arrays that need the 1st axis reshaped 
-    """
-    reshaped_array = []
-    for i in range(len(self.storage_dirs)):
-        reshaped_array.append(self._reshape(unshaped_arr=unshaped_list[i], sim_no=i))
-    return reshaped_array      
+        """
+        Return a list of reshaped arrays. 
+        
+        Parameters:
+        ------------
+            unshaped_list (List):
+                List of numpy arrays that need the 1st axis reshaped 
+        """
+        reshaped_array = []
+        for i in range(len(self.storage_dirs)):
+            reshaped_array.append(self._reshape_array(unshaped_arr=unshaped_list[i], state_arr=self.state_inds[i]))
+        return reshaped_array      
 
     
-    def _reshape_array(self, unshaped_arr: np.array):
+    
+    def _reshape_array(self, unshaped_arr: np.array, state_arr: np.array):
         """
         Return a reshaped array. 
 
@@ -84,6 +89,9 @@ class FultonMarketAnalysis():
         ------------
             unshaped_arr (np.array):
                 Numpy arrays that need the 1st axis reshaped.
+
+            state_arr (np.array)
+                Numpy array with the state indices for each replicate
         """        
         # Reshape 1st axis
         reshaped_arr = np.empty(unshaped_arr.shape)
@@ -91,453 +99,402 @@ class FultonMarketAnalysis():
             for iter_num in range(unshaped_arr.shape[0]):
                 reshaped_arr[iter_num, state, :] = unshaped_arr[iter_num, np.where(state_arr[iter_num] == state)[0], :]
         
-        return reshaped_energy
+        return reshaped_arr
     
     
     
-    def _get_postions_map(self, backfilled_energies=None, backfill_indices=None):
+    def _get_postions_map(self):
         """
-        TODO
+        Dimensions of map:  Dimensions are (sim_no, iteration, state) >>> corresponding[sim_no, state, iter]. EXAMPLE: self.map[1,0] could return [0, 1, 2] which means the correct positions for the 1st interation at the 0th state of the reshaped energies matrix can be cound at the the 2nd iteration of the 1st replicate of the 0th simulation.
         """
-        if backfilled_energies is None or backfill_indices is None:
-            backfilled_energies, backfill_indices = self.backfill_energies()
-
-        # Extract trajectory information
-        positions, _ = self.get_positions_box_vecs()
+        
         
         # Make maps
-        positions_map = np.empty((backfilled_energies.shape[1], backfilled_energies.shape[0], 3), dtype=int) # Dimensions are (states, iters, corresponding[sim_no, state, iter])
-        sim_counter = 0
-        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
-            shift = 0
-            for state_no in range(backfilled_energies.shape[1]):
-                if state_no in sim_interpolate_inds:
-                    backfilled_index = sim_interpolate_inds.index(state_no)
-                    for iter, backfilled_ind in enumerate(backfill_indices[sim_no][backfilled_index]):
-                        counter = 0
-                        for fill_sim_ind in filled_sim_inds:
-                            if backfilled_ind >= counter and backfilled_ind < positions[fill_sim_ind].shape[0]+counter:
-                                positions_map[state_no, iter+sim_counter] = np.array([fill_sim_ind, state_no-shift, backfilled_ind-counter])
-                                break
-                            else:
-                                counter += positions[fill_sim_ind].shape[0]
-                    shift += 1
-                else:
-                    for iter in range(positions[sim_no].shape[0]):
-                        positions_map[state_no, iter+sim_counter] = np.array([sim_no, state_no-shift, iter])
-            sim_counter += positions[sim_no].shape[0]
-        return positions_map
+        self.map = []
+        for sim_no, sim_state_inds in enumerate(self.state_inds):
+    
+            # Build map for simulation
+            sim_map = np.empty((self.energies[sim_no].shape[0], self.energies[sim_no].shape[1], 3), dtype=int)
+    
+            # Iterate through simulation iters, states to build map
+            for sim_iter in range(sim_map.shape[0]):
+                for sim_state in range(sim_map.shape[1]):
+                    sim_map[sim_iter, sim_state, :] = np.array([sim_no, sim_iter, np.where(sim_state_inds[sim_iter] == sim_state)[0][0]], dtype=int)
+    
+            # Add sim_map
+            self.map.append(sim_map.astype(int))
 
-    
-    
-    
-    
-    
-    
-    def concatenate(self, array_list:[np.array], axis=0):
+
+    def _determine_interpolation_inds(self):
         """
-        Shorthand for typical concatenations done here, default over axis zero
+        determine the indices (with respect to the last simulation) which are missing from other simulations
         """
-        return np.concatenate(array_list, axis=axis)
         
+        # Iterate through temperatures
+        self.interpolation_inds = []
+        for i, sim_temps in enumerate(self.temperatures_list):
+            missing_sim_inds = []
+            for i, temp in enumerate(self.temperatures):
+                if temp not in sim_temps:
+                    missing_sim_inds.append(i)
         
-    def state_trajectory(self, state_no=0, top_file=None, stride=1):
+            # Assert that interpolation made sense
+            assert len(missing_sim_inds) + len(sim_temps) == len(self.temperatures)
+            self.interpolation_inds.append(missing_sim_inds)
+
+
+
+    def _backfill(self):
         """
-        Only for non-interpolated positions array sets, for now
-    
-        State_no is the thermodynamics state to retrieve
-        If pdb file is provided (top_file), then an MdTraj trajectory will be returned
-        If top_file is None - the numpy array of positions will be returned
+        
         """
-        positions, box_vecs = self.get_positions_box_vecs()
-        total_iters = np.sum([state_arr.shape[0] for state_arr in self.state_inds])
-        pos = np.empty((total_iters, positions[0].shape[2], 3))
-        box_vec = np.empty((total_iters, 3, 3))
+        # Determine interpolation inds
+        self._determine_interpolation_inds()
+        fprint(f'Detected interpolations at: {self.interpolation_inds}')
+
+        # Determine which simulations to resample from
+        filled_sims = [True if not self.interpolation_inds[i] else False for i in range(len(self.interpolation_inds))]
+        filled_sim_inds = [i for i in range(len(filled_sims)) if filled_sims[i] == True]
+
+        #Make an interpolation map
+        interpolation_map = [np.arange(self.temperatures.shape[0]) for i in range(len(self.temperatures))] # in shape (state, state) >>> state_ind
+        for i, interpolation_ind_set in enumerate(self.interpolation_inds):
+            for ind in interpolation_ind_set:
+                interpolation_map[i] = interpolation_map[i][interpolation_map[i] != ind]
+
+        # print(interpolation_map)
+
+        # Iterate throught simulations to backfill energies
+        backfilled_energies = []
+        backfilled_potentials = []
+        backfilled_map = []
+        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
+            
+            #Create an array for this simulations energies, in the final simulation's shape on axis 1, 2
+            sim_energies = np.zeros((self.energies[sim_no].shape[0], self.temperatures.shape[0], self.temperatures.shape[0]))
+            sim_reduced_potentials = np.zeros((self.reduced_potentials[sim_no].shape[0], self.temperatures.shape[0], self.temperatures.shape[0]))
+            sim_map = np.zeros((self.map[sim_no].shape[0], self.temperatures.shape[0], 3))
+
+            #Fill this array with the values that exist
+            for i, ind in enumerate(interpolation_map[sim_no]):
+                sim_energies[:, ind, interpolation_map[sim_no]] = self.energies[sim_no][:, i, :]
+                sim_reduced_potentials[:, ind, interpolation_map[sim_no]] = self.reduced_potentials[sim_no][:, i, :]
+                sim_map[:,ind] = self.map[sim_no][:,i]
+
+            #Fill in rows and columns 
+            for state_no in sim_interpolate_inds:
+
+                # Get state-specific objects to resample from
+                filled_reduced_potentials = np.concatenate([self.reduced_potentials[sim_no] for sim_no in filled_sim_inds])
+                filled_energies = np.concatenate([self.energies[sim_no] for sim_no in filled_sim_inds])
+                filled_map = np.concatenate([self.map[sim_no] for sim_no in filled_sim_inds])
+                
+                state_reduced_potentials = filled_reduced_potentials[:, state_no]
+                state_energies = filled_energies[:, state_no]
+                state_map = filled_map[:, state_no]
+
+                N_k = np.array([state_reduced_potentials.shape[0]])
+
+                # Resample
+                res_potentials, res_energies, res_mappings, res_inds = resample_with_MBAR(objs=[state_reduced_potentials, state_energies, state_map], u_kln=np.array([state_reduced_potentials[:,state_no]]), N_k=N_k, reshape_weights=state_reduced_potentials.shape[0], return_inds=True, size=len(sim_energies))
+
+
+                # Assign resampled configurations to empty rows/cols
+                sim_energies[:, state_no] = res_energies.copy()
+                sim_reduced_potentials[:, state_no] = res_potentials.copy()
+                sim_map[:, state_no] = res_mappings.copy()
+
+                sim_energies[:, :, state_no] = [filled_energies[resampled_ind, :, state_no] for resampled_ind in res_inds]
+                sim_reduced_potentials[:, :, state_no] = [filled_reduced_potentials[resampled_ind, :, state_no] for resampled_ind in res_inds]
+
+
+            backfilled_energies.append(sim_energies)
+            backfilled_potentials.append(sim_reduced_potentials)
+            backfilled_map.append(sim_map)
+
+        # Concatenate
+        self.energies = np.concatenate(backfilled_energies, axis=0)
+        self.reduced_potentials = np.concatenate(backfilled_potentials, axis=0)
+        self.map = np.concatenate(backfilled_map, axis=0)
     
-        sim_counter = 0
-        for pos_arr, box_arr, state_arr in zip(positions, box_vecs, self.state_inds):
-            print(sim_counter)
-            pos[sim_counter : state_arr.shape[0] + sim_counter] = pos_arr[np.where(state_arr == state_no)]
-            box_vec[sim_counter : state_arr.shape[0] + sim_counter] = box_arr[np.where(state_arr == state_no)]
-            sim_counter += state_arr.shape[0]
     
-        if top_file is None:
-            return pos
-        else:
-            traj = md.load_pdb(top_file)
-            traj.xyz = pos.copy()
-            traj.unitcell_vectors = box_vec.copy()
-            traj.save_dcd('temp.dcd')
-            traj = md.load('temp.dcd', top=top_file)
-            os.remove('temp.dcd')
-            traj.image_molecules()
-            return traj
     
-    def get_state_specific_energies(self, energies=None, concat=True, reduce=True):
+    def get_state_energies(self, state_indice: int=0):
         """
         get energies of each replicate in its own state (iters, state, state) -> (iters, state)
         Optionally reduce energies based on temperatures, and concatenate the list of arrays to a single array
         """
-        if energies is None:
-            energies = self.get_reshaped_energies(reduce=reduce)
         
-        if type(energies) == list:
-            from_numpy = False
-        elif type(energies) == np.ndarray:
-            from_numpy = True
-        else:
-            raise Exception('(>_<)')
-
-        if from_numpy:
-            specific_energies = np.empty(energies.shape[:-1])
-            for j in range(specific_energies.shape[1]):
-                specific_energies[:, j] = energies[:, j, j]
-        else:
-            specific_energies = []
-            for ener_arr in energies:
-                spec_ener = np.empty(ener_arr.shape[:-1])
-                for j in range(spec_ener.shape[1]):
-                    spec_ener[:, j] = ener_arr[:, j, j]
-                specific_energies.append(spec_ener)
-            if concat:
-                specific_energies = self.concatenate(specific_energies)
-
-        return specific_energies
-
+        state_energies = self.energies[:,state_indice, state_indice]
+        
+        return state_energies
     
-    def get_uncorrelated_samples(self, A_t):
+    
+    
+    def get_average_energy(self, plot: bool=False, figsize: tuple=(6,6)):
         """
-        get a series of uncorrelated samples from a correlated energy timeseries
         """
-        from pymbar import timeseries
-        t0, g, Neff_max = timeseries.detect_equilibration(A_t) # compute indices of uncorrelated timeseries
-        A_t_equil = A_t[t0:]
-        indices = timeseries.subsample_correlated_data(A_t_equil, g=g)
-        A_n = A_t_equil[indices]
-        return t0, g, Neff_max, indices, A_n
+        
+        # Determine equilibration
+        self._determine_equilibration()
+        
+        # Plot if specified:
+        if plot:
+            fig, ax = plt.subplots(figsize=figsize)
+            ax.plot(range(self.average_energies.shape[0]), self.average_energies, color='k')
+            ax.vlines(self.t0, self.average_energies.min(), self.average_energies.max(), color='r', label='equilibration')
+            ax.legend(bbox_to_anchor=(1,1))
+            ax.set_title('Mean energy')
+            ax.set_ylabel('Energy (kJ/mol)')
+            ax.set_xlabel('Time (ps)')
+            fig.tight_layout()
+            plt.show
+            return self.average_energies[self.t0:], fig, ax
+        else:
+            return self.average_energies[self.t0:]
+        
+        
+    def plot_energy_distributions(self, figsize: tuple=(8,4)):   
+        
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        state_energies = np.array([self.get_state_energies(state_indice=state_no) for state_no in range(self.energies.shape[1])]).T
+        
+        sns.kdeplot(state_energies, ax=ax, legend=False)
+        ax.set_xlabel('Energy (kJ/mol)')
+        fig.tight_layout()
+        plt.show()
+        
+        return fig, ax
+        
+        
 
-
-    def determine_equilibration(self, ave_energies=None, depth=1):
+    def _determine_equilibration(self):
         """
         Automated equilibration detection
         suggests an equilibration index (with respect to the whole simulation) by detecting equilibration for the average energies
         starting from each of the first 50 frames
         returns the likely best index of equilibration
         """
-        if ave_energies is None:
-            ave_energies = self.average_energy()
-        t0s_inds = []
-        for i in range(depth):
-            A_t = ave_energies[i:]   
-            t0, _, _ = timeseries.detect_equilibration(A_t)
-            t0s_inds.append([i, t0+i])
-        t0s_inds = np.array(t0s_inds)
-        counts = np.bincount(t0s_inds[:, 1])
-        t0 = np.argmax(counts)
-        return t0, ave_energies[t0:]
+        # Compute average energies
+        self.average_energies = np.zeros((self.energies.shape[0], self.energies.shape[1]))
+        for state_no in range(self.energies.shape[1]):
+            self.average_energies[:,state_no] = self.get_state_energies(state_indice=state_no)
+        self.average_energies = self.average_energies.mean(axis=1)
 
+        t0, g, Neff_max = timeseries.detect_equilibration(self.average_energies) # compute indices of uncorrelated timeseries
+        A_t_equil = self.average_energies[t0:]
+        indices = timeseries.subsample_correlated_data(A_t_equil, g=g)
+        A_n = A_t_equil[indices]
+        
+        # Save equilibration/uncorrelated inds to new variables
+        self.t0 = t0
+        fprint(f'Equilibration detected at {np.round(self.t0 / 10, 3)} ns') 
+        self.uncorrelated_indices = indices
+        
 
-    def get_average_energy(self, energies=None, reduce=True):
+    
+    def importance_resampling(self, n_samples:int=1000, use_uncorrelated_inds: bool=False):
         """
-        Returns a one dimensional array of the average energy of replicates against simulation time
-        """
-        if energies is None:
-            energies = self.get_state_specific_energies(concat=True, reduce=reduce)
+        """           
+        
+        #Ensure equilibration has been detected
+        self._determine_equilibration()
+        
+        # Create map to match shape of weights
+  
+        # Get MBAR weights
+        if use_uncorrelated_inds:
+            u_kln = self.reduced_potentials[self.t0:][self.uncorrelated_indices].T
+            N_k = [len(self.uncorrelated_indices) for i in range(self.reduced_potentials.shape[1])]
+            self.flat_inds = np.array([[state, ind] for ind in self.uncorrelated_indices for state in range(self.reduced_potentials.shape[1])])
 
-        return np.mean(energies, axis=1)
+        else:
+            self.flat_inds = np.array([[state, ind] for ind in range(self.t0, self.reduced_potentials.shape[0]) for state in range(self.reduced_potentials.shape[1])])
+            u_kln = self.reduced_potentials[self.t0:].T
+            N_k = [self.reduced_potentials[self.t0:].shape[0] for i in range(self.reduced_potentials.shape[1])]
+        self.resampled_inds, self.weights = resample_with_MBAR(objs=[self.flat_inds], u_kln=u_kln, N_k=N_k, size=n_samples, return_inds=False, return_weights=True, specify_state=0)
+        
+        
 
-
-    def free_energy_difference(self, t0=None, uncorr_indices=None, energies=None):
-        """
-        Calculate Free Energy differences using the MBAR method
-        """
-        raise NotImplementedError
-
-
-    def get_positions_box_vecs(self):
-        """
-        Extract the positions and box_vectors from numpy arrays
-        Returns
-            positions:[np.array]
-            box_vectors:[np.array]
-        """
-        # Extract trajectory information
-        positions = []
-        box_vectors = []
+    def plot_weights(self, state_no: int=0, figsize: tuple=(4,4)):
+        # Reshape weights
+        self.weights = self.weights.copy().reshape(self.temperatures.shape[0], self.reduced_potentials.shape[0] - self.t0, self.temperatures.shape[0])[:,:,state_no].T
+        
+        # Get sum of weights by state
+        sum_weights = self.weights.sum(axis=0)
+        
+        # Plot
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.bar(range(sum_weights.shape[0]), sum_weights, color='k')
+        ax.set_ylabel('MBAR Weights')
+        ax.set_xlabel('Temperature (K)')
+        ax.set_xticks(range(self.temperatures.shape[0])[::10], self.temperatures[::10], rotation=90)
+        fig.tight_layout()
+        plt.show()
+        
+        return fig, ax
+    
+    
+    
+    def _load_positions_box_vecs(self):
+        
+        # Load
+        self.positions = []
+        self.box_vectors = []
         for sim_no, storage_dir in enumerate(self.storage_dirs):
-            positions.append(np.load(os.path.join(storage_dir, 'positions.npy')[:10], mmap_mode='r'))
-            box_vectors.append(np.load(os.path.join(storage_dir, 'box_vectors.npy')[:10], mmap_mode='r'))
-        
-        return positions, box_vectors
+            self.positions.append(np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r')[self.skip:])
+            self.box_vectors.append(np.load(os.path.join(storage_dir, 'box_vectors.npy'), mmap_mode='r')[self.skip:]) 
     
     
-    def determine_interpolation_inds(self):
-        """
-        determine the indices (with respect to the last simulation) which are missing from other simulations
-        """
-        missing_indices = []
-        temps = self.get_temperatures()
-        final_temps = temps[-1]
-        for i, temp_arr in enumerate(temps):
-            sim_inds = []
-            for i, temp in enumerate(final_temps):
-                if temp not in temp_arr:
-                    sim_inds.append(i)
-            missing_indices.append(sim_inds)
-        return missing_indices
-
-
-    def get_MBAR_weights(self, backfilled_energies=None, t0=None):
-        """
-        Given an energy matrix, and an equilibration time, determine the MBAR weights of post equilibration samples
-
-        To determine weights of all samples, feed t0 = 0
-        """
-        if backfilled_energies is None:
-            backfilled_energies, _ = self.backfill_energies()
-        if t0 is None:
-            t0, _ = self.determine_equilibration()
-        # Get MBAR weights    
-        u_kln = deepcopy(backfilled_energies[t0:])
-        N_k = np.array([backfilled_energies.shape[0] - t0 for i in range(backfilled_energies.shape[1])])
-        mbar = MBAR(u_kln.T, N_k, initialize='BAR')
-        weights = mbar.weights()
-        return weights, backfilled_energies, t0
-
-
-    def get_resampled_configs_indices(self, n_frames=500, weights=None, backfilled_energies=None, t0=None):
-        """
-        """
-        if backfilled_energies is None:
-            backfilled_energies, _ = self.backfill_energies()
-        if t0 is None:
-            t0, _ = self.determine_equilibration()
-        if weights is None:
-            weights, _, _ = self.get_MBAR_weights(backfilled_energies=backfilled_energies, t0=t0)
+    
+    def write_resampled_traj(self, pdb_in: str, pdb_out: str, dcd_out: str, return_traj: bool=False):
         
-        # Reshape state, iters to match weights
-        flat_inds = np.array([[state, ind] for ind in range(t0, backfilled_energies.shape[0]) for state in range(backfilled_energies.shape[1])])
-        print('Flattened inds', flat_inds.shape, flush=True)
+        # Make sure resampling has already occured
+        if not hasattr(self, 'resampled_inds'):
+            self.importance_resampling()
+            
+        # Load pos, box_vec
+        self._load_positions_box_vecs()
         
-        # Resample based on weights
-        resampled = np.random.choice(np.arange(0, len(flat_inds), 1), size=n_frames, replace=False, p=weights[:,0])
-        resampled_configs = flat_inds[resampled]
-        return resampled_configs
-
-
-
-
-    def write_resampled_trajectory(self, pdb_in_fn, resampled_configs=None, positions_map=None,
-                                   n_frames=500, output_dcd=None, output_pdb=None, write_result=True):
-        """
-        """
+        # Create mdtraj obj
+        traj = md.load_pdb(pdb_in)
         
-        if resampled_configs is None:
-            resampled_configs = self.get_resampled_configs_indices(n_frames=n_frames)
-        if positions_map is None:
-            positions_map = self.make_positions_map()
+        # Use the map to find the resampled configurations
+        pos = np.empty((len(self.resampled_inds), self.positions[0].shape[2], 3))
+        box_vec = np.empty((len(self.resampled_inds), 3, 3))
+        for i, (state, iter) in enumerate(self.resampled_inds):
+            
+            # Use map
+            sim_no, sim_iter, sim_rep_ind = self.map[iter, state].astype(int)
+            
+            pos[i] = np.array(self.positions[sim_no][sim_iter][sim_rep_ind])
+            box_vec[i] = np.array(self.box_vectors[sim_no][sim_iter][sim_rep_ind])
         
-        # Extract trajectory information
-        positions, box_vectors = self.get_positions_box_vecs()
-        
-        #Parse input pdb
-        if not os.path.isfile(os.path.join(self.input_dir, pdb_in_fn)):
-            if not os.path.isabs(pdb_in_fn):
-                raise Exception('Could not find input pbd')
-            os.system(f'scp {pdb_in_fn} {os.path.join(self.input_dir, pdb_in_fn)}')
-        pdb_in_fn = os.path.join(self.input_dir, pdb_in_fn)
-        
-        # Write new trajectory from resampled frames
-        write_dir = os.path.join(self.input_dir, 'resampled')
-        if not os.path.isdir(write_dir):
-            os.mkdir(write_dir)
-        name = pdb_in_fn.split('/')[-1][:-4] #take off prefacing directories and extension
-        traj = md.load_pdb(pdb_in_fn)
-        
-        pos = np.empty((n_frames, positions[0].shape[2], 3))
-        box_vec = np.empty((n_frames, 3, 3))
-        
-        if output_pdb is None:
-            output_pdb = os.path.join(write_dir, 'resampled.pdb')
-        if output_dcd is None:
-            output_dcd = os.path.join(write_dir, 'resampled.dcd')
-        
-        # Iterate through resampled frames
-        for i, (state, iter) in enumerate(resampled_configs):
-        
-            # Get indices using positions_map
-            frame_sim_no, frame_state_no, frame_sim_iter = positions_map[state, iter]
-        
-            try:
-                rep_ind = np.where(self.state_inds[frame_sim_no][frame_sim_iter] == frame_state_no)[0][0]
-            except:
-                print(state, iter)
-                print(frame_sim_no, frame_state_no, frame_sim_iter, '\n', self.state_inds[frame_sim_no][frame_sim_iter], frame_state_no)
-                raise Exception()
-        
-            pos[i] = np.array(positions[frame_sim_no][frame_sim_iter][rep_ind])
-            box_vec[i] = box_vectors[frame_sim_no][frame_sim_iter][rep_ind]
-        
+        # Apply pos, box_vec to mdtraj obj
         traj.xyz = pos.copy()
         traj.unitcell_vectors = box_vec.copy()
-        traj.save_dcd(output_dcd)
+        traj.save_dcd(dcd_out)
         
-        traj = md.load(output_dcd, top=pdb_in_fn)
+        # Correct periodic issues
+        traj = md.load(dcd_out, top=pdb_in)
         traj.image_molecules()
-        if write_result:
-            traj[0].save_pdb(output_pdb)
-            traj.save_dcd(output_dcd)
+        traj[0].save_pdb(pdb_out)
+        traj.save_dcd(dcd_out)
+        
+        if return_traj:
+            return traj
+        
 
-        return traj
-
-
-    def resample_from_post_equilibration(self, pdb_in_fn, n_frames=500,
-                                         output_dcd=None, output_pdb=None):
+    def state_trajectory(self, pdb_in: str, state_no=0, stride: int=1, return_traj: bool=False):
+        """    
+        State_no is the thermodynamics state to retrieve
+        If pdb file is provided (top_file), then an MdTraj trajectory will be returned
+        If top_file is None - the numpy array of positions will be returned
+        """
+        if not (hasattr(self, 'positions') or hasattr(self, 'box_vectors')):
+            self._load_positions_box_vecs()
+            
+        # Create mdtraj obj
+        traj = md.load_pdb(pdb_in)
         
-        backfilled_energies, backfill_indices = self.backfill_energies()
-        t0, _ = self.determine_equilibration()
+        # Use the map to find the resampled configurations
+        pos = np.empty((self.reduced_potentials.shape[0], self.positions[0].shape[2], 3))
+        box_vec = np.empty((self.reduced_potentials.shape[0], 3, 3))
+        for iter in range(0, self.reduced_potentials.shape[0], stride):
+            
+            # Use map
+            sim_no, sim_iter, sim_rep_ind = self.map[iter, state].astype(int)
+            
+            pos[i] = np.array(self.positions[sim_no][sim_iter][sim_rep_ind])
+            box_vec[i] = np.array(self.box_vectors[sim_no][sim_iter][sim_rep_ind])
         
-        weights, _, _ = self.get_MBAR_weights(backfilled_energies=backfilled_energies,
-                                                 t0=t0)
+        # Apply pos, box_vec to mdtraj obj
+        traj.xyz = pos.copy()
+        traj.unitcell_vectors = box_vec.copy()
+        traj.save_dcd(dcd_out)
         
-        resampled_configs = self.get_resampled_configs_indices(n_frames=n_frames,
-                                                                  weights=weights,
-                                                                  backfilled_energies=backfilled_energies,
-                                                                  t0=t0)
+        # Correct periodic issues
+        traj = md.load(dcd_out, top=pdb_in)
+        traj.image_molecules()
+        traj[0].save_pdb(pdb_out)
+        traj.save_dcd(dcd_out)
         
-        
-        positions_map = self.make_positions_map(backfilled_energies=backfilled_energies,
-                                                backfill_indices=backfill_indices)
-        
-        resampled_traj = self.write_resampled_trajectory(pdb_in_fn,
-                                                         resampled_configs=resampled_configs,
-                                                         positions_map=positions_map,
-                                                         n_frames=n_frames,
-                                                         output_dcd=output_dcd,
-                                                         output_pdb=output_pdb,
-                                                         write_result=True)
-        return resampled_traj
+        if return_traj:
+            return traj
+    
 
 
     
+
+
+
         
-    def resample_an_interval(self, pdb_in_fn, start, stop, n_frames=500,
-                            output_dcd=None, output_pdb=None):
-        fprint(f'Resampling on interval {start} - {stop}')
-        #Get energies
-        backfilled_energies, backfill_indices = self.backfill_energies()
-        energies_on_interval = backfilled_energies[start:stop]
-        #Average energy of states in their own state, on the interval
-        specific_energies = np.empty(energies_on_interval.shape[:-1])
-        for j in range(specific_energies.shape[1]):
-            specific_energies[:, j] = energies_on_interval[:, j, j]
-        ave_energies = np.mean(specific_energies, axis=1)
-        fprint(f'Energies Retrieved')
-        t0, _ = self.determine_equilibration(ave_energies=ave_energies)
-        fprint(f'Auto equil is {t0}')
-        weights, _, _ = self.get_MBAR_weights(backfilled_energies=energies_on_interval,
-                                                 t0=t0)
-        fprint(f'Weights Retrieved')
-        resampled_configs = self.get_resampled_configs_indices(n_frames=n_frames,
-                                                                  weights=weights,
-                                                                  backfilled_energies=energies_on_interval,
-                                                                  t0=t0)
+
+
+@staticmethod
+def resample_with_MBAR(objs: List, u_kln: np.array, N_k: np.array, size: int, reshape_weights: tuple=None, specify_state: int=0, return_inds: bool=False, return_weights: bool=False):
+
+    # Get MBAR weights
+    weights = compute_MBAR_weights(u_kln, N_k)
+
+    # Reshape weights if specified
+    if reshape_weights is not None:
+        weights = weights.reshape(reshape_weights)
         
-        resampled_configs[:, 1] += start
-        fprint(f'Resampled Configs')
-        
-        positions_map = self.make_positions_map(backfilled_energies=backfilled_energies,
-                                                backfill_indices=backfill_indices)
-        fprint(f'Positions Map Made')
-        
-        
-        resampled_traj = self.write_resampled_trajectory(pdb_in_fn,
-                                                         resampled_configs=resampled_configs,
-                                                         positions_map=positions_map,
-                                                         n_frames=n_frames,
-                                                         output_dcd=output_dcd,
-                                                         output_pdb=output_pdb,
-                                                         write_result=True)
-        fprint(f'Done Resampling {n_frames} on interval {start}:{stop}')
-        return resampled_traj
+    # Get probabilities
+    if len(weights.shape) == 1:
+        probs = weights.copy()
+    else:
+        probs = weights[:, specify_state]
 
 
-    def backfill_energies(self, energies:[np.array]=None):
-        """
-        Under development
+    # Resample
+    resampled_inds = np.random.choice(range(len(probs)), size=size, replace=False, p=probs)
+    resampled_objs = []
+    for obj in objs:
+        resampled_objs.append(np.array([obj[resampled_ind] for resampled_ind in resampled_inds]))
 
-        Currently works fine for non-interpolated groups of simulations (all temps same size)
-        """
-        if energies is None:
-            energies = self.get_reshaped_energies()
-        
-        
-        temps = self.get_temperatures()
-        filled_sims = [True if not self.interpolation_inds[i] else False for i in range(len(self.interpolation_inds))]
-        filled_sim_inds = [i for i in range(len(filled_sims)) if filled_sims[i] == True]
-        final_temps = temps[-1]
-        
-        # #Make an interpolation map
-        # interpolation_map = [np.arange(final_temps.shape[0]) for i in range(len(temps))]
-        # for i, interpolation_ind_set in enumerate(interpolation_inds):
-        #     for ind in interpolation_ind_set:
-        #         interpolation_map[i] = interpolation_map[i][interpolation_map[i] != ind]
+    # Return resampled objects
+    return_list = []
+    if len(objs) == 1:
+        return_list.append(resampled_objs[0])
+    elif len(objs) > 1:
+        for resampled_obj in resampled_objs:
+            return_list.append(resampled_obj)
 
-        # backfilled_energies = []
+    if return_inds:
+        return_list.append(resampled_inds)
+    if return_weights:
+        return_list.append(weights)
 
-        # for sim_no, sim_interpolate_inds in enumerate(interpolation_inds):
-        #     #Create an array for this simulations energies, in the final simulation's shape on axis 1, 2
-        #     sim_energies = np.zeros((energies[sim_no].shape[0], final_temps.shape[0], final_temps.shape[0]))
-        #     #Fill this array with the values that exist
-        #     for i, ind in enumerate(interpolation_map[sim_no]):
-        #         sim_energies[:, ind, interpolation_map[sim_no]] = energies[sim_no][:, i, :]
-        #     #Fill in rows and columns (
-        #     #TODO
-        #     backfilled_energies.append(sim_energies)
-
-        # return self.concatenate(backfilled_energies)
-        
-        # Resample from MBAR weights
-        backfilled_energies = []
-        backfill_indices = [[] for i in range(len(self.interpolation_inds))]
-        for sim_no, sim_interpolate_inds in enumerate(self.interpolation_inds):
-            sim_energies = np.zeros((energies[sim_no].shape[0], final_temps.shape[0], final_temps.shape[0])) # reformat into dimensions (iterations, state, state)
-            if len(sim_interpolate_inds) > 0:
-                fill_states = np.array(sim_interpolate_inds)
-                sim_keep_inds = np.array([i for i in range(len(final_temps)) if i not in sim_interpolate_inds])
-                shift = 0
-                for state_no in range(sim_energies.shape[1]):
-                    # Proceed if state needs to be filled
-                    if state_no in fill_states:
-
-                        # Get MBAR weights for filled energy state
-                        temp_energies = np.concatenate([energies[i] for i in filled_sim_inds])
-                        temp_state_energies = np.array([np.concatenate([energies[i] for i in filled_sim_inds])[:, state_no, state_no]])
-                        N_k = np.array([temp_state_energies.shape[1]])
-                        mbar = MBAR(temp_state_energies, N_k=N_k, initialize='BAR')
-                        weights = mbar.weights().reshape(temp_state_energies.shape[1])
-                        
-                        # Resample    
-                        resampled_inds = np.random.choice(range(len(weights)), size=len(energies[sim_no]), replace=False, p=weights)
-                        backfill_indices[sim_no].append(list(resampled_inds))
-                        sim_energies[:,state_no,:] = np.array([temp_energies[resampled_ind, state_no, :] for resampled_ind in resampled_inds]).copy()
-                        
-                        # Add to shift
-                        shift += 1
-
-                    # If no resampling is needed, copy original energies
-                    else:
-                        sim_energies[:, state_no, sim_keep_inds] = energies[sim_no][:, state_no-shift, :].copy()
-                        sim_temps = temps[sim_no]
-                        for sim_interpolate_i in sim_interpolate_inds:
-                            sim_energies[:,state_no,sim_interpolate_i] = (energies[sim_no][:,state_no-shift,state_no-shift] * sim_temps[sim_interpolate_i-shift] / final_temps[sim_interpolate_i]).copy() # mu_2 = m_1 * (T_1 / T_2)
-                            
-
-                # Add backfilled simulation energies
-                backfilled_energies.append(sim_energies)
-                    
-            else:
-                backfilled_energies.append(energies[sim_no])
+    return return_list
 
 
-        return np.concatenate(backfilled_energies, axis=0), backfill_indices
+@staticmethod
+def compute_MBAR_weights(u_kln, N_k):
+    """
+    """
+
+    mbar = MBAR(u_kln, N_k, initialize='BAR')
+
+    return mbar.weights()
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    
+
+
+
