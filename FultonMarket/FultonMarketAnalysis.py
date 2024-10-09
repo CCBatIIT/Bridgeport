@@ -246,7 +246,7 @@ class FultonMarketAnalysis():
             ax.legend(bbox_to_anchor=(1,1))
             ax.set_title('Mean energy')
             ax.set_ylabel('Energy (kJ/mol)')
-            ax.set_xlabel('Time (ps)')
+            ax.set_xlabel('Iterations')
             fig.tight_layout()
             plt.show
             return self.average_energies[self.t0:], fig, ax
@@ -386,7 +386,7 @@ class FultonMarketAnalysis():
             return traj
         
 
-    def state_trajectory(self, pdb_in: str, state_no=0, stride: int=1, return_traj: bool=False):
+    def state_trajectory(self, pdb_in: str, state_no=0, stride: int=1):
         """    
         State_no is the thermodynamics state to retrieve
         If pdb file is provided (top_file), then an MdTraj trajectory will be returned
@@ -399,12 +399,13 @@ class FultonMarketAnalysis():
         traj = md.load_pdb(pdb_in)
         
         # Use the map to find the resampled configurations
-        pos = np.empty((self.reduced_potentials.shape[0], self.positions[0].shape[2], 3))
-        box_vec = np.empty((self.reduced_potentials.shape[0], 3, 3))
-        for iter in range(0, self.reduced_potentials.shape[0], stride):
+        inds = np.arange(0, self.reduced_potentials.shape[0], stride)
+        pos = np.empty((len(inds), self.positions[0].shape[2], 3))
+        box_vec = np.empty((len(inds), 3, 3))
+        for i, ind in enumerate(inds):
             
             # Use map
-            sim_no, sim_iter, sim_rep_ind = self.map[iter, state].astype(int)
+            sim_no, sim_iter, sim_rep_ind = self.map[ind, state_no].astype(int)
             
             pos[i] = np.array(self.positions[sim_no][sim_iter][sim_rep_ind])
             box_vec[i] = np.array(self.box_vectors[sim_no][sim_iter][sim_rep_ind])
@@ -412,16 +413,19 @@ class FultonMarketAnalysis():
         # Apply pos, box_vec to mdtraj obj
         traj.xyz = pos.copy()
         traj.unitcell_vectors = box_vec.copy()
-        traj.save_dcd(dcd_out)
+        traj.save_dcd('temp.dcd')
+        traj[0].save_pdb('temp.pdb')
         
         # Correct periodic issues
-        traj = md.load(dcd_out, top=pdb_in)
+        traj = md.load('temp.dcd', top='temp.pdb')
         traj.image_molecules()
-        traj[0].save_pdb(pdb_out)
-        traj.save_dcd(dcd_out)
         
-        if return_traj:
-            return traj
+        # Align 
+        prot_sel = traj.topology.select('protein and name CA')
+        traj = traj.superpose(traj, frame=0, atom_indices=prot_sel, ref_atom_indices=prot_sel)
+        
+
+        return traj
     
 
 
