@@ -67,6 +67,182 @@ class FultonMarketAnalysis():
         fprint(f'Shape of final energies determined to be: {self.energies.shape}')
 
         
+        
+    def get_state_energies(self, state_indice: int=0):
+        """
+        get energies of each replicate in its own state (iters, state, state) -> (iters, state)
+        Optionally reduce energies based on temperatures, and concatenate the list of arrays to a single array
+        """
+        
+        state_energies = self.energies[:,state_indice, state_indice]
+        
+        return state_energies
+    
+    
+    def get_average_energy(self, plot: bool=False, figsize: tuple=(6,6)):
+        """
+        """
+        
+        # Determine equilibration
+        self._determine_equilibration()
+        
+        # Plot if specified:
+        if plot:
+            fig, ax = plt.subplots(figsize=figsize)
+            ax.plot(range(self.average_energies.shape[0]), self.average_energies, color='k')
+            ax.vlines(self.t0, self.average_energies.min(), self.average_energies.max(), color='r', label='equilibration')
+            ax.legend(bbox_to_anchor=(1,1))
+            ax.set_title('Mean energy')
+            ax.set_ylabel('Energy (kJ/mol)')
+            ax.set_xlabel('Iterations')
+            fig.tight_layout()
+            plt.show
+            return self.average_energies[self.t0:], fig, ax
+        else:
+            return self.average_energies[self.t0:]
+        
+        
+    def plot_energy_distributions(self, figsize: tuple=(8,4)):   
+        
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        state_energies = np.array([self.get_state_energies(state_indice=state_no) for state_no in range(self.energies.shape[1])]).T
+        
+        sns.kdeplot(state_energies, ax=ax, legend=False)
+        ax.set_xlabel('Energy (kJ/mol)')
+        fig.tight_layout()
+        plt.show()
+        
+        return fig, ax 
+    
+    
+    
+    def importance_resampling(self, n_samples:int=1000, equilibration_method: str='PCA'):
+        """
+        """           
+        self.equilibration_method = equilibration_method
+        
+        #Ensure equilibration has been detected
+        if not hasattr(self, 't0'):
+            self._determine_equilibration()
+        
+        # Create map to match shape of weights
+  
+        # Get MBAR weights
+        if self.equilibration_method == 'energy':
+            u_kln = self.reduced_potentials[self.t0:][self.uncorrelated_indices].T
+            N_k = [len(self.uncorrelated_indices) for i in range(self.reduced_potentials.shape[1])]
+            self.flat_inds = np.array([[state, ind] for ind in self.uncorrelated_indices for state in range(self.reduced_potentials.shape[1])])
+
+        else:
+            self.flat_inds = np.array([[state, ind] for ind in range(self.t0, self.reduced_potentials.shape[0]) for state in range(self.reduced_potentials.shape[1])])
+            u_kln = self.reduced_potentials[self.t0:].T
+            N_k = [self.reduced_potentials[self.t0:].shape[0] for i in range(self.reduced_potentials.shape[1])]
+        self.resampled_inds, self.weights = resample_with_MBAR(objs=[self.flat_inds], u_kln=u_kln, N_k=N_k, size=n_samples, return_inds=False, return_weights=True, specify_state=0)
+        
+        
+
+    def plot_weights(self, state_no: int=0, figsize: tuple=(4,4)):
+        # Reshape weights
+        self.weights = self.weights.copy().reshape(self.temperatures.shape[0], self.reduced_potentials.shape[0] - self.t0, self.temperatures.shape[0])[:,:,state_no].T
+        
+        # Get sum of weights by state
+        sum_weights = self.weights.sum(axis=0)
+        
+        # Plot
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.bar(range(sum_weights.shape[0]), sum_weights, color='k')
+        ax.set_ylabel('MBAR Weights')
+        ax.set_xlabel('Temperature (K)')
+        ax.set_xticks(range(self.temperatures.shape[0])[::10], self.temperatures[::10], rotation=90)
+        fig.tight_layout()
+        plt.show()
+        
+        return fig, ax
+    
+    
+    
+    def write_resampled_traj(self, pdb_out: str, dcd_out: str, return_traj: bool=False):
+        
+        # Make sure resampling has already occured
+        if not hasattr(self, 'resampled_inds'):
+            self.importance_resampling()
+            
+        # Load pos, box_vec
+        self._load_positions_box_vecs()
+        
+        # Create mdtraj obj
+        traj = md.load_pdb(self.pdb)
+        
+        # Use the map to find the resampled configurations
+        pos = np.empty((len(self.resampled_inds), self.positions[0].shape[2], 3))
+        box_vec = np.empty((len(self.resampled_inds), 3, 3))
+        for i, (state, iter) in enumerate(self.resampled_inds):
+            
+            # Use map
+            sim_no, sim_iter, sim_rep_ind = self.map[iter, state].astype(int)
+            
+            pos[i] = np.array(self.positions[sim_no][sim_iter][sim_rep_ind])
+            box_vec[i] = np.array(self.box_vectors[sim_no][sim_iter][sim_rep_ind])
+        
+        # Apply pos, box_vec to mdtraj obj
+        traj.xyz = pos.copy()
+        traj.unitcell_vectors = box_vec.copy()
+        traj.save_dcd(dcd_out)
+        
+        # Correct periodic issues
+        traj = md.load(dcd_out, top=self.pdb)
+        traj.image_molecules()
+        traj[0].save_pdb(pdb_out)
+        traj.save_dcd(dcd_out)
+        
+        if return_traj:
+            return traj
+       
+    
+
+    def state_trajectory(self, state_no=0, stride: int=1):
+        """    
+        State_no is the thermodynamics state to retrieve
+        If pdb file is provided (top_file), then an MdTraj trajectory will be returned
+        If top_file is None - the numpy array of positions will be returned
+        """
+        if not (hasattr(self, 'positions') or hasattr(self, 'box_vectors')):
+            self._load_positions_box_vecs()
+            
+        # Create mdtraj obj
+        traj = md.load_pdb(self.pdb)
+        
+        # Use the map to find the resampled configurations
+        inds = np.arange(0, self.reduced_potentials.shape[0], stride)
+        pos = np.empty((len(inds), self.positions[0].shape[2], 3))
+        box_vec = np.empty((len(inds), 3, 3))
+        for i, ind in enumerate(inds):
+            
+            # Use map
+            sim_no, sim_iter, sim_rep_ind = self.map[ind, state_no].astype(int)
+            
+            pos[i] = np.array(self.positions[sim_no][sim_iter][sim_rep_ind])
+            box_vec[i] = np.array(self.box_vectors[sim_no][sim_iter][sim_rep_ind])
+        
+        # Apply pos, box_vec to mdtraj obj
+        traj.xyz = pos.copy()
+        traj.unitcell_vectors = box_vec.copy()
+        traj.save_dcd('temp.dcd')
+        traj[0].save_pdb('temp.pdb')
+        
+        # Correct periodic issues
+        traj = md.load('temp.dcd', top='temp.pdb')
+        traj.image_molecules()
+        
+        # Align 
+        prot_sel = traj.topology.select('protein and name CA')
+        traj = traj.superpose(traj, frame=0, atom_indices=prot_sel, ref_atom_indices=prot_sel)
+        
+
+        return traj
+    
+    
     
     def _reshape_list(self, unshaped_list: List):
         """
@@ -221,56 +397,6 @@ class FultonMarketAnalysis():
         self.map = np.concatenate(backfilled_map, axis=0)
     
     
-    
-    def get_state_energies(self, state_indice: int=0):
-        """
-        get energies of each replicate in its own state (iters, state, state) -> (iters, state)
-        Optionally reduce energies based on temperatures, and concatenate the list of arrays to a single array
-        """
-        
-        state_energies = self.energies[:,state_indice, state_indice]
-        
-        return state_energies
-    
-    
-    
-    def get_average_energy(self, plot: bool=False, figsize: tuple=(6,6)):
-        """
-        """
-        
-        # Determine equilibration
-        self._determine_equilibration()
-        
-        # Plot if specified:
-        if plot:
-            fig, ax = plt.subplots(figsize=figsize)
-            ax.plot(range(self.average_energies.shape[0]), self.average_energies, color='k')
-            ax.vlines(self.t0, self.average_energies.min(), self.average_energies.max(), color='r', label='equilibration')
-            ax.legend(bbox_to_anchor=(1,1))
-            ax.set_title('Mean energy')
-            ax.set_ylabel('Energy (kJ/mol)')
-            ax.set_xlabel('Iterations')
-            fig.tight_layout()
-            plt.show
-            return self.average_energies[self.t0:], fig, ax
-        else:
-            return self.average_energies[self.t0:]
-        
-        
-    def plot_energy_distributions(self, figsize: tuple=(8,4)):   
-        
-        fig, ax = plt.subplots(figsize=figsize)
-        
-        state_energies = np.array([self.get_state_energies(state_indice=state_no) for state_no in range(self.energies.shape[1])]).T
-        
-        sns.kdeplot(state_energies, ax=ax, legend=False)
-        ax.set_xlabel('Energy (kJ/mol)')
-        fig.tight_layout()
-        plt.show()
-        
-        return fig, ax
-        
-        
 
     def _determine_equilibration(self):
         """
@@ -326,50 +452,6 @@ class FultonMarketAnalysis():
             
             
         fprint(f'Equilibration detected at {np.round(self.t0 / 10, 3)} ns')
-
-    
-    def importance_resampling(self, n_samples:int=1000, equilibration_method: str='PCA'):
-        """
-        """           
-        self.equilibration_method = equilibration_method
-        
-        #Ensure equilibration has been detected
-        if not hasattr(self, 't0'):
-            self._determine_equilibration()
-        
-        # Create map to match shape of weights
-  
-        # Get MBAR weights
-        if self.equilibration_method == 'energy':
-            u_kln = self.reduced_potentials[self.t0:][self.uncorrelated_indices].T
-            N_k = [len(self.uncorrelated_indices) for i in range(self.reduced_potentials.shape[1])]
-            self.flat_inds = np.array([[state, ind] for ind in self.uncorrelated_indices for state in range(self.reduced_potentials.shape[1])])
-
-        else:
-            self.flat_inds = np.array([[state, ind] for ind in range(self.t0, self.reduced_potentials.shape[0]) for state in range(self.reduced_potentials.shape[1])])
-            u_kln = self.reduced_potentials[self.t0:].T
-            N_k = [self.reduced_potentials[self.t0:].shape[0] for i in range(self.reduced_potentials.shape[1])]
-        self.resampled_inds, self.weights = resample_with_MBAR(objs=[self.flat_inds], u_kln=u_kln, N_k=N_k, size=n_samples, return_inds=False, return_weights=True, specify_state=0)
-        
-        
-
-    def plot_weights(self, state_no: int=0, figsize: tuple=(4,4)):
-        # Reshape weights
-        self.weights = self.weights.copy().reshape(self.temperatures.shape[0], self.reduced_potentials.shape[0] - self.t0, self.temperatures.shape[0])[:,:,state_no].T
-        
-        # Get sum of weights by state
-        sum_weights = self.weights.sum(axis=0)
-        
-        # Plot
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.bar(range(sum_weights.shape[0]), sum_weights, color='k')
-        ax.set_ylabel('MBAR Weights')
-        ax.set_xlabel('Temperature (K)')
-        ax.set_xticks(range(self.temperatures.shape[0])[::10], self.temperatures[::10], rotation=90)
-        fig.tight_layout()
-        plt.show()
-        
-        return fig, ax
     
     
     
@@ -381,88 +463,6 @@ class FultonMarketAnalysis():
         for sim_no, storage_dir in enumerate(self.storage_dirs):
             self.positions.append(np.load(os.path.join(storage_dir, 'positions.npy'), mmap_mode='r')[self.skip:])
             self.box_vectors.append(np.load(os.path.join(storage_dir, 'box_vectors.npy'), mmap_mode='r')[self.skip:]) 
-    
-    
-    
-    def write_resampled_traj(self, pdb_out: str, dcd_out: str, return_traj: bool=False):
-        
-        # Make sure resampling has already occured
-        if not hasattr(self, 'resampled_inds'):
-            self.importance_resampling()
-            
-        # Load pos, box_vec
-        self._load_positions_box_vecs()
-        
-        # Create mdtraj obj
-        traj = md.load_pdb(self.pdb)
-        
-        # Use the map to find the resampled configurations
-        pos = np.empty((len(self.resampled_inds), self.positions[0].shape[2], 3))
-        box_vec = np.empty((len(self.resampled_inds), 3, 3))
-        for i, (state, iter) in enumerate(self.resampled_inds):
-            
-            # Use map
-            sim_no, sim_iter, sim_rep_ind = self.map[iter, state].astype(int)
-            
-            pos[i] = np.array(self.positions[sim_no][sim_iter][sim_rep_ind])
-            box_vec[i] = np.array(self.box_vectors[sim_no][sim_iter][sim_rep_ind])
-        
-        # Apply pos, box_vec to mdtraj obj
-        traj.xyz = pos.copy()
-        traj.unitcell_vectors = box_vec.copy()
-        traj.save_dcd(dcd_out)
-        
-        # Correct periodic issues
-        traj = md.load(dcd_out, top=self.pdb)
-        traj.image_molecules()
-        traj[0].save_pdb(pdb_out)
-        traj.save_dcd(dcd_out)
-        
-        if return_traj:
-            return traj
-        
-
-    def state_trajectory(self, state_no=0, stride: int=1):
-        """    
-        State_no is the thermodynamics state to retrieve
-        If pdb file is provided (top_file), then an MdTraj trajectory will be returned
-        If top_file is None - the numpy array of positions will be returned
-        """
-        if not (hasattr(self, 'positions') or hasattr(self, 'box_vectors')):
-            self._load_positions_box_vecs()
-            
-        # Create mdtraj obj
-        traj = md.load_pdb(self.pdb)
-        
-        # Use the map to find the resampled configurations
-        inds = np.arange(0, self.reduced_potentials.shape[0], stride)
-        pos = np.empty((len(inds), self.positions[0].shape[2], 3))
-        box_vec = np.empty((len(inds), 3, 3))
-        for i, ind in enumerate(inds):
-            
-            # Use map
-            sim_no, sim_iter, sim_rep_ind = self.map[ind, state_no].astype(int)
-            
-            pos[i] = np.array(self.positions[sim_no][sim_iter][sim_rep_ind])
-            box_vec[i] = np.array(self.box_vectors[sim_no][sim_iter][sim_rep_ind])
-        
-        # Apply pos, box_vec to mdtraj obj
-        traj.xyz = pos.copy()
-        traj.unitcell_vectors = box_vec.copy()
-        traj.save_dcd('temp.dcd')
-        traj[0].save_pdb('temp.pdb')
-        
-        # Correct periodic issues
-        traj = md.load('temp.dcd', top='temp.pdb')
-        traj.image_molecules()
-        
-        # Align 
-        prot_sel = traj.topology.select('protein and name CA')
-        traj = traj.superpose(traj, frame=0, atom_indices=prot_sel, ref_atom_indices=prot_sel)
-        
-
-        return traj
-    
 
 
     
