@@ -251,4 +251,3 @@ class FultonMarket():
         
         return velocities, positions, box_vectors, state_inds
 
-
