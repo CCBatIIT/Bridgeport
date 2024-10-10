@@ -45,7 +45,7 @@ class MultiAnalysis():
         else:
             self.input_dirs = input_dir
         assert check_paths_exist(self.input_dirs)
-        fprint(f'Found input directories: {self.input_dirs}'
+        fprint(f'Found input directories: {self.input_dirs}')
             
         self.drugs = [dir.split('_')[0] for dir in self.input_dirs]
         
@@ -54,7 +54,7 @@ class MultiAnalysis():
         else:
             self.input_pdbs = input_pdb_dir
         assert check_paths_exist(self.input_pdbs)
-        fprint(f'Found input pdbs: {self.input_pdbs}'
+        fprint(f'Found input pdbs: {self.input_pdbs}')
 
         
                
