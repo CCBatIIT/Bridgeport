@@ -12,6 +12,8 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from typing import List
 import seaborn as sns
+from sklearn.decomposition import PCA
+from pymbar.timeseries import detect_equilibration
 
 fprint = lambda my_string: print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + ' // ' + str(my_string), flush=True)
 get_kT = lambda temp: temp*cons.gas_constant
@@ -27,7 +29,7 @@ class FultonMarketAnalysis():
     methods:
         init: input_dir
     """
-    def __init__(self, input_dir:str, skip: int=0):
+    def __init__(self, input_dir:str, pdb: str, skip: int=0):
         """
         get Numpy arrays, determine indices of interpolations, and set state_inds
         """
@@ -40,6 +42,7 @@ class FultonMarketAnalysis():
         assert os.path.isdir(self.stor_dir)
         fprint(f"Found storage directory at {self.stor_dir}")
         self.storage_dirs = sorted(glob.glob(self.stor_dir + '/*'), key=lambda x: int(x.split('/')[-1]))
+        self.pdb = pdb
 
         
         # Load saved variables
@@ -276,35 +279,68 @@ class FultonMarketAnalysis():
         starting from each of the first 50 frames
         returns the likely best index of equilibration
         """
-        # Compute average energies
-        self.average_energies = np.zeros((self.energies.shape[0], self.energies.shape[1]))
-        for state_no in range(self.energies.shape[1]):
-            self.average_energies[:,state_no] = self.get_state_energies(state_indice=state_no)
-        self.average_energies = self.average_energies.mean(axis=1)
+        # PCA
+        def detect_PC_equil(pc, reduced_cartesian):
+            t0, _, _ = detect_equilibration(reduced_cartesian[:,pc])
 
-        t0, g, Neff_max = timeseries.detect_equilibration(self.average_energies) # compute indices of uncorrelated timeseries
-        A_t_equil = self.average_energies[t0:]
-        indices = timeseries.subsample_correlated_data(A_t_equil, g=g)
-        A_n = A_t_equil[indices]
+            return t0*10
         
-        # Save equilibration/uncorrelated inds to new variables
-        self.t0 = t0
-        fprint(f'Equilibration detected at {np.round(self.t0 / 10, 3)} ns') 
-        self.uncorrelated_indices = indices
         
+        # Compute average energies
+        if self.equilibration_method == 'energy':
+            
+            self.average_energies = np.zeros((self.energies.shape[0], self.energies.shape[1]))
+            for state_no in range(self.energies.shape[1]):
+                self.average_energies[:,state_no] = self.get_state_energies(state_indice=state_no)
+            self.average_energies = self.average_energies.mean(axis=1)
+
+            t0, g, Neff_max = timeseries.detect_equilibration(self.average_energies) # compute indices of uncorrelated timeseries
+            A_t_equil = self.average_energies[t0:]
+            indices = timeseries.subsample_correlated_data(A_t_equil, g=g)
+            A_n = A_t_equil[indices]
+            self.t0 = t0
+            self.uncorrelated_indices = indices
+            
+         
+        elif self.equilibration_method == 'PCA':    
+            # Get state traj
+            state0_traj = self.state_trajectory(state_no=0, stride=10)
+
+            # PCA
+            pca = PCA()
+            reduced_cartesian = pca.fit_transform(state0_traj.xyz.reshape(state0_traj.n_frames, state0_traj.n_atoms * 3))
+            explained_variance = np.array([np.sum(pca.explained_variance_ratio_[:i+1]) for i in range(pca.n_components_)])
+
+            n_components = int(np.argwhere(explained_variance >= 0.9)[0])
+            equil_times = np.empty(n_components)
+            for pc in range(n_components):
+                equil_times[pc] = detect_PC_equil(pc, reduced_cartesian)
+
+            weights = pca.explained_variance_ratio_[:n_components]
+
+            # Save equilibration/uncorrelated inds to new variables
+            self.t0 = np.sum(equil_times  * (weights / weights.sum())).astype(int)
+          
+        else:
+            print('equilibration_method must be either PCA or energy')
+            
+            
+        fprint(f'Equilibration detected at {np.round(self.t0 / 10, 3)} ns')
 
     
-    def importance_resampling(self, n_samples:int=1000, use_uncorrelated_inds: bool=False):
+    def importance_resampling(self, n_samples:int=1000, equilibration_method: str='PCA'):
         """
         """           
+        self.equilibration_method = equilibration_method
         
         #Ensure equilibration has been detected
-        self._determine_equilibration()
+        if not hasattr(self, 't0'):
+            self._determine_equilibration()
         
         # Create map to match shape of weights
   
         # Get MBAR weights
-        if use_uncorrelated_inds:
+        if self.equilibration_method == 'energy':
             u_kln = self.reduced_potentials[self.t0:][self.uncorrelated_indices].T
             N_k = [len(self.uncorrelated_indices) for i in range(self.reduced_potentials.shape[1])]
             self.flat_inds = np.array([[state, ind] for ind in self.uncorrelated_indices for state in range(self.reduced_potentials.shape[1])])
@@ -348,7 +384,7 @@ class FultonMarketAnalysis():
     
     
     
-    def write_resampled_traj(self, pdb_in: str, pdb_out: str, dcd_out: str, return_traj: bool=False):
+    def write_resampled_traj(self, pdb_out: str, dcd_out: str, return_traj: bool=False):
         
         # Make sure resampling has already occured
         if not hasattr(self, 'resampled_inds'):
@@ -358,7 +394,7 @@ class FultonMarketAnalysis():
         self._load_positions_box_vecs()
         
         # Create mdtraj obj
-        traj = md.load_pdb(pdb_in)
+        traj = md.load_pdb(self.pdb)
         
         # Use the map to find the resampled configurations
         pos = np.empty((len(self.resampled_inds), self.positions[0].shape[2], 3))
@@ -377,7 +413,7 @@ class FultonMarketAnalysis():
         traj.save_dcd(dcd_out)
         
         # Correct periodic issues
-        traj = md.load(dcd_out, top=pdb_in)
+        traj = md.load(dcd_out, top=self.pdb)
         traj.image_molecules()
         traj[0].save_pdb(pdb_out)
         traj.save_dcd(dcd_out)
@@ -386,7 +422,7 @@ class FultonMarketAnalysis():
             return traj
         
 
-    def state_trajectory(self, pdb_in: str, state_no=0, stride: int=1):
+    def state_trajectory(self, state_no=0, stride: int=1):
         """    
         State_no is the thermodynamics state to retrieve
         If pdb file is provided (top_file), then an MdTraj trajectory will be returned
@@ -396,7 +432,7 @@ class FultonMarketAnalysis():
             self._load_positions_box_vecs()
             
         # Create mdtraj obj
-        traj = md.load_pdb(pdb_in)
+        traj = md.load_pdb(self.pdb)
         
         # Use the map to find the resampled configurations
         inds = np.arange(0, self.reduced_potentials.shape[0], stride)
