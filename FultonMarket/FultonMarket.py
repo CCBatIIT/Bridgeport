@@ -190,7 +190,6 @@ class FultonMarket():
                 init_box_vectors = np.load(os.path.join(load_dir, 'box_vectors.npy'))[-1] 
                 state_inds = np.load(os.path.join(load_dir, 'states.npy'))[-1]
                 init_velocities = None
-                self.context = None
             except:
                 init_velocities, init_positions, init_box_vectors, state_inds = self._recover_arguments()
         
@@ -214,6 +213,9 @@ class FultonMarket():
         self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
         if init_velocities is not None:
             self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
+        else:
+            self.init_velocities = None
+            self.context = None
 
         
         
