@@ -182,7 +182,7 @@ class Randolph():
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
             if self.sim_no > 0:
-                self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i], velocities=self.init_velocities[i]) for i in range(self.n_replicates)]
+                self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i]) for i in range(self.n_replicates)]
             else:
                 self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
 
