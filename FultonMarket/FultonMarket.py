@@ -122,6 +122,7 @@ class FultonMarket():
             self.spring_constants = [cons * spring_constant_unit for cons in reversed(geometric_distribution(0, K_max, n_replicates - n_unrestrained))]
             self.spring_constants += [0.0 * spring_constant_unit for i in range(n_unrestrained)]
             assert len(self.spring_constants) == len(self.temperatures)
+            restrained_positions = self.init_positions
         else:
             self.spring_constants = None
         
@@ -151,8 +152,7 @@ class FultonMarket():
                           temperatures=self.temperatures, spring_constants=self.spring_constants,
                           init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
                           output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
-                          iter_length=iteration_length, dt=dt,
-                          restrained_atoms_dsl=self.restrained_atoms_dsl, mdtraj_topology=md.Topology.from_openmm(self.pdb.topology))
+                          iter_length=iteration_length, dt=dt)
              
             # Initialize Randolph
             if self.sim_no > 0:
@@ -166,6 +166,11 @@ class FultonMarket():
 
             elif hasattr(self, 'context'):
                 params['context'] = self.context
+
+            if self.restrained_atoms_dsl is not None:
+                params['restrained_atoms_dsl'] = self.restrained_atoms_dsl
+                params['mdtraj_topology'] = md.Topology.from_openmm(self.pdb.topology)
+                params['restraint_positions'] = restrained_positions
              
             simulation = Randolph(**params)
                                   

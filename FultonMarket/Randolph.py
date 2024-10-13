@@ -40,7 +40,8 @@ class Randolph():
                  context=None,
                  spring_constants:np.array=None,
                  restrained_atoms_dsl:str=None,
-                 mdtraj_topology:md.Topology=None):
+                 mdtraj_topology:md.Topology=None,
+                 restraint_positions=None):
         """
         """
         # Assign attributes
@@ -68,6 +69,7 @@ class Randolph():
         self.restrained_atoms_dsl = restrained_atoms_dsl
         self.spring_constants = spring_constants
         self.mdtraj_topology = mdtraj_topology
+        self.restraint_positions = restraint_positions
 
         # Configure simulation parameters
         self._configure_simulation_parameters()
@@ -366,6 +368,6 @@ class Randolph():
         restraint_force.addPerParticleParameter('y0')
         restraint_force.addPerParticleParameter('z0')
         for index in restrained_atom_indices:
-            parameters = self.init_positions[index,:]
+            parameters = self.restraint_positions[index,:]
             restraint_force.addParticle(index, parameters)
         thermodynamic_state.system.addForce(restraint_force)
