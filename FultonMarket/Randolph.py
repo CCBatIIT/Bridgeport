@@ -46,17 +46,13 @@ class Randolph():
         self.temperatures = temperatures.copy()
         self.ref_state = ref_state
         self.n_replicates = len(self.temperatures)
-        self.init_positions = init_positions
-        self.init_box_vectors = init_box_vectors
+        self.init_positions = init_positions.copy()
+        self.init_box_vectors = init_box_vectors.copy()
+        self.init_velocities = init_velocities.copy()
         self.iter_length = iter_length
         self.dt = dt
         self.context = context
-        self.interpolate = False
-        if init_velocities is not None:
-            self.init_velocities = init_velocities
-        else:
-            self.init_velocities = None
-        
+
         
         # Configure simulation parameters
         self._configure_simulation_parameters()
@@ -177,18 +173,15 @@ class Randolph():
         self.reporter = MultiStateReporter(self.output_ncdf, checkpoint_interval=10, analysis_particle_indices=atom_inds)
         
         # Initialize sampler states if starting from scratch, otherwise they should be determinine in interpolation or passed through from Fulton Market
-        if not self.iterpolate:
-            if self.init_velocities is not None:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Velocity" method', flush=True)
-                self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i], velocities=self.init_velocities[i]) for i in range(self.n_replicates)]
-            elif self.context is not None:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Context" method', flush=True)
-                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
-            else:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
-                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
+        if self.init_velocities is not None:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Velocity" method', flush=True)
+            self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i], velocities=self.init_velocities[i]) for i in range(self.n_replicates)]
+        elif self.context is not None:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Context" method', flush=True)
+            self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
         else:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Interpolate" method', flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
+            self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
 
             
         self.simulation.create(thermodynamic_state=self.ref_state,
@@ -222,7 +215,6 @@ class Randolph():
             self._interpolate_states(insert_inds)
             self.reporter.close()
             self.current_cycle = 0
-            self.interpolate = True
             self._configure_simulation_parameters()
             self._build_simulation()
         else:
