@@ -58,7 +58,6 @@ class Randolph():
         self.init_box_vectors = init_box_vectors
         self.iter_length = iter_length
         self.dt = dt
-        self.sampler_states = sampler_states
         self.context = context
         self.interpolate = False
         if init_velocities is not None:
@@ -111,7 +110,7 @@ class Randolph():
 
         # Truncate output.ncdf
         ncdf_copy = os.path.join(self.output_dir, 'output_copy.ncdf')
-        pos, velos, box_vectors, states, energies, temperatures, sampler_states = truncate_ncdf(self.output_ncdf, ncdf_copy, self.reporter, False)
+        pos, velos, box_vectors, states, energies, temperatures = truncate_ncdf(self.output_ncdf, ncdf_copy, self.reporter, False)
         np.save(os.path.join(save_no_dir, 'positions.npy'), pos.data)
         np.save(os.path.join(save_no_dir, 'velocities.npy'), velos.data)
         np.save(os.path.join(save_no_dir, 'box_vectors.npy'), box_vectors.data)
@@ -199,21 +198,16 @@ class Randolph():
         self.reporter = MultiStateReporter(self.output_ncdf, checkpoint_interval=10, analysis_particle_indices=atom_inds)
         
         # Initialize sampler states if starting from scratch, otherwise they should be determinine in interpolation or passed through from Fulton Market
-        if self.sampler_states is None:
-            if self.init_velocities is not None:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Velocity" method', flush=True)
-                self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i], velocities=self.init_velocities[i]) for i in range(self.n_replicates)]
-            elif self.context is not None:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Context" method', flush=True)
-                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
-                print(self.sampler_states.positions[0], self.sampler_states.box_vectors, self.sampler_states.velocities[0])
-            else:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
-                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
-        elif self.interpolate:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Interpolate" method', flush=True)
+        if self.init_velocities is not None:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Velocity" method', flush=True)
+            self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i], velocities=self.init_velocities[i]) for i in range(self.n_replicates)]
+        elif self.context is not None:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Context" method', flush=True)
+            self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
         else:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "Load Sampler" method', flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
+            self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
+        
             
         if self.restrained_atoms_dsl is None:
             self.simulation.create(thermodynamic_state=self.ref_state, sampler_states=self.sampler_states,
@@ -285,7 +279,7 @@ class Randolph():
         return np.array(insert_inds)
         
         
-    def _interpolate_states(self, insert_inds: np.array): #TODO: Add sample state
+    def _interpolate_states(self, insert_inds: np.array):
     
         # Add new states
         prev_temps = [s.temperature._value for s in self.reporter.read_thermodynamic_states()[0]]
@@ -310,18 +304,11 @@ class Randolph():
         self.temperatures = [temp*unit.kelvin for temp in new_temps]
         self.n_replicates = len(self.temperatures)
 
-        # Read sampler states
-        sampler_states = self.reporter.read_sampler_states(self.reporter.read_last_iteration())
+        # Add pos, box_vecs, velos for new temperatures
+        self.init_positions = np.insert(self.init_positions, insert_inds, [self.init_positions[ind-1] for ind in insert_inds], axis=0)
+        self.init_box_vectors = np.insert(self.init_box_vectors, insert_inds, [self.init_box_vectors[state-1] for ind in insert_inds], axis=0)
+        self.init_velocities = np.insert(self.init_velocities, insert_inds, [self.init_velocities[state-1] for ind in insert_inds], axis=0)
 
-        # Add sampler_states for new temperatures
-        self.sampler_states = []
-        displacement = 0
-        for state in range(len(self.temperatures)):
-            if state-displacement in insert_inds:
-                self.sampler_states.append(sampler_states[state-displacement-1])
-                displacement += 1
-            else:
-                self.sampler_states.append(sampler_states[state-displacement])
 
 
     def _restrain_atoms_by_dsl(self, thermodynamic_state, topology, atoms_dsl, spring_constant):
@@ -371,3 +358,4 @@ class Randolph():
             parameters = self.restraint_positions[index,:]
             restraint_force.addParticle(index, parameters)
         thermodynamic_state.system.addForce(restraint_force)
+
