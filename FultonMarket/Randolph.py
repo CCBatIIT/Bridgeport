@@ -181,7 +181,10 @@ class Randolph():
             self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
-            self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
+            if self.sim_no > 0:
+                self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i], velocities=self.init_velocities[i]) for i in range(self.n_replicates)]
+            else:
+                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
 
             
         self.simulation.create(thermodynamic_state=self.ref_state,
