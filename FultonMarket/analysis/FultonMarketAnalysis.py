@@ -437,7 +437,7 @@ class FultonMarketAnalysis():
             reduced_cartesian = pca.fit_transform(state0_traj.xyz.reshape(state0_traj.n_frames, state0_traj.n_atoms * 3))
             explained_variance = np.array([np.sum(pca.explained_variance_ratio_[:i+1]) for i in range(pca.n_components_)])
 
-            n_components = int(np.argwhere(explained_variance >= 0.9)[0])
+            n_components = int(np.where(explained_variance >= 0.9)[0])
             equil_times = np.empty(n_components)
             for pc in range(n_components):
                 equil_times[pc] = detect_PC_equil(pc, reduced_cartesian)
