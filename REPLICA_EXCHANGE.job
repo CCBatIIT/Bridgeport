@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name="REPEXCHANGE"
-#SBATCH --output="/expanse/lustre/projects/iit119/dcooper/MOR/logs/REPEXCHANGE.%j.%N.out"
+#SBATCH --job-name="US-PTwRE"
+#SBATCH --output="US-PTwRE.%j.%N.out"
 #SBATCH --partition=gpu-shared
 #SBATCH --gpus=1
 #SBATCH --nodes=1
@@ -9,7 +9,7 @@
 #SBATCH --account=iit122
 #SBATCH -t 48:00:00
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=dcooper6@hawk.iit.edu
+#SBATCH --mail-user=jdepaoloboisvert@hawk.iit.edu
 
 source ~/.bashrc
 

@@ -2,7 +2,7 @@ from openmm import *
 from openmm.app import *
 from openmmtools import states, mcmc, multistate
 from openmmtools.states import SamplerState, ThermodynamicState
-from openmmtools.multistate import ParallelTemperingSampler, MultiStateReporter
+from openmmtools.multistate import ParallelTemperingSampler, ReplicaExchangeSampler, MultiStateReporter
 import tempfile
 import os, sys
 sys.path.append('../MotorRow')
@@ -14,6 +14,9 @@ from datetime import datetime
 import mdtraj as md
 from copy import deepcopy
 from shorten_replica_exchange import truncate_ncdf
+
+
+spring_constant_unit = (unit.joule)/(unit.angstrom*unit.angstrom*unit.mole)
 
 class Randolph():
     """
@@ -33,7 +36,12 @@ class Randolph():
                  iter_length: int,
                  dt: float, 
                  init_velocities=None,
-                 context=None):
+                 sampler_states=None,
+                 context=None,
+                 spring_constants:np.array=None,
+                 restrained_atoms_dsl:str=None,
+                 mdtraj_topology:md.Topology=None,
+                 restraint_positions=None):
         """
         """
         # Assign attributes
@@ -46,20 +54,24 @@ class Randolph():
         self.temperatures = temperatures.copy()
         self.ref_state = ref_state
         self.n_replicates = len(self.temperatures)
-        self.init_positions = init_positions
-        self.init_box_vectors = init_box_vectors
-        self.init_velocities = init_velocities
+        self.init_positions = init_positions.copy()
+        self.init_box_vectors = init_box_vectors.copy()
+        self.init_velocities = init_velocities.copy()
         self.iter_length = iter_length
         self.dt = dt
         self.context = context
-
+        
+        #Restraints if necessary
+        self.restrained_atoms_dsl = restrained_atoms_dsl
+        self.spring_constants = spring_constants
+        self.mdtraj_topology = mdtraj_topology
+        self.restraint_positions = restraint_positions
         
         # Configure simulation parameters
         self._configure_simulation_parameters()
         
         # Build simulation
         self._build_simulation()
-        
 
     
     def main(self, init_overlap_thresh: float, term_overlap_thresh: float):
@@ -81,10 +93,9 @@ class Randolph():
                 print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing finished.', flush=True)
 
             # Advance 1 cycle
-            self._run_cycle()    
+            self._run_cycle()
             
-            
-            
+    
     def save_simulation(self, save_dir):
         """
         Save the important information from a simulation and then truncate the output.ncdf file to preserve disk space.
@@ -103,6 +114,10 @@ class Randolph():
         np.save(os.path.join(save_no_dir, 'states.npy'), states.data)
         np.save(os.path.join(save_no_dir, 'energies.npy'), energies.data)
         np.save(os.path.join(save_no_dir, 'temperatures.npy'), temperatures)
+        
+        if self.restrained_atoms_dsl is not None:
+            spring_constants = np.array([np.round(t._value,2) for t in self.spring_constants])
+            np.save(os.path.join(save_no_dir, 'spring_constants.npy'), spring_constants)
 
         # Truncate output_checkpoint.ncdf
         checkpoint_copy = os.path.join(self.output_dir, 'output_checkpoint_copy.ncdf')
@@ -118,8 +133,10 @@ class Randolph():
         except:
             pass    
         
-        return [t*unit.kelvin for t in temperatures]
-            
+        if self.restrained_atoms_dsl is not None:
+            return sampler_states, [t*unit.kelvin for t in temperatures], [t*spring_constant_unit for t in self.spring_constants]
+        else:
+            return sampler_states, [t*unit.kelvin for t in temperatures]
         
         
     def _configure_simulation_parameters(self):
@@ -150,9 +167,11 @@ class Randolph():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated number of iters per cycle to be', self.n_iters_per_cycle, 'iterations', flush=True) 
 
         # Configure replicates            
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of', self.n_replicates, 'replicates to be', [np.round(t,1) for t in self.temperatures], flush=True)        
-
-        
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of', self.n_replicates,
+                                      'replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True)
+        if self.restrained_atoms_dsl is not None:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated spring_constants of', self.n_replicates,
+                                          'replicates to be', [np.round(t._value,1) for t in self.spring_constants], flush=True)
         
     def _build_simulation(self):
         """
@@ -161,7 +180,10 @@ class Randolph():
         move = mcmc.LangevinDynamicsMove(timestep=self.dt * unit.femtosecond, collision_rate=1.0 / unit.picosecond, n_steps=self.n_steps_per_iter, reassign_velocities=False)
         
         # Set up simulation
-        self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
+        if self.restrained_atoms_dsl is None:
+            self.simulation = ParallelTemperingSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
+        else:
+            self.simulation = ReplicaExchangeSampler(mcmc_moves=move, number_of_iterations=self.n_iters)
         self.simulation._global_citation_silence = True
 
         # Remove existing .ncdf files
@@ -185,16 +207,23 @@ class Randolph():
                 self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i]) for i in range(self.n_replicates)]
             else:
                 self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
-
             
-        self.simulation.create(thermodynamic_state=self.ref_state,
-                               sampler_states=self.sampler_states,
-                               storage=self.reporter, 
-                               temperatures=self.temperatures,
-                               n_temperatures=len(self.temperatures))
-
-            
-            
+        if self.restrained_atoms_dsl is None:
+            self.simulation.create(thermodynamic_state=self.ref_state, sampler_states=self.sampler_states,
+                                   storage=self.reporter, temperatures=self.temperatures, n_temperatures=len(self.temperatures))
+        else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Creating {len(self.temperatures)} Thermodynamic States', flush=True)
+            thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done Creating Thermodynamic States', flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning {len(self.spring_constants)} Restraints', flush=True)
+            assert len(self.temperatures) == len(self.spring_constants)
+            for thermo_state, spring_cons in zip(thermodynamic_states, self.spring_constants):
+                self._restrain_atoms_by_dsl(thermo_state, self.mdtraj_topology, self.restrained_atoms_dsl, spring_cons)
+                if (1 + thermodynamic_states.index(thermo_state)) % (self.n_replicates // 4) == 0:
+                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning Restraints is {round(100*(1 + thermodynamic_states.index(thermo_state))/self.n_replicates, 2)}% Complete', flush=True)
+            self.simulation.create(thermodynamic_states=thermodynamic_states, sampler_states=self.sampler_states, storage=self.reporter)
+        
+        
     def _run_cycle(self):
         """
         Run one cycle
@@ -222,9 +251,8 @@ class Randolph():
             self._build_simulation()
         else:
             self.current_cycle += 1
-        
-
-
+            
+            
     def _eval_acc_rates(self, acceptance_rate_thresh: float=0.40):
         "Evaluate acceptance rates"        
         
@@ -247,10 +275,9 @@ class Randolph():
                 insert_inds.append(state+1)
     
         return np.array(insert_inds)
-
-
-
-    def _interpolate_states(self, insert_inds: np.array): 
+        
+        
+    def _interpolate_states(self, insert_inds: np.array):
     
         # Add new states
         prev_temps = [s.temperature._value for s in self.reporter.read_thermodynamic_states()[0]]
@@ -260,12 +287,73 @@ class Randolph():
             temp_above = prev_temps[ind]
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Inserting state at', np.mean((temp_below, temp_above)), flush=True) 
             new_temps.insert(ind + displacement, np.mean((temp_below, temp_above)))
-    
+
+        # Add new restraints if in PTwRE
+        if self.restrained_atoms_dsl is not None:
+            prev_spring_cons = [s._value for s in self.spring_constants]
+            new_spring_cons = [cons for cons in prev_spring_cons]
+            for displacement, ind in enumerate(insert_inds):
+                cons_below = prev_spring_cons[ind-1]
+                cons_above = prev_spring_cons[ind]
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Inserting state with Spring Constant', np.mean((cons_below, cons_above)), flush=True) 
+                new_spring_cons.insert(ind + displacement, np.mean((cons_below, cons_above)))
+            self.spring_constants = [cons * spring_constant_unit for cons in new_spring_cons]
+            
         self.temperatures = [temp*unit.kelvin for temp in new_temps]
         self.n_replicates = len(self.temperatures)
-        # Read sampler states
 
         # Add pos, box_vecs, velos for new temperatures
         self.init_positions = np.insert(self.init_positions, insert_inds, [self.init_positions[ind-1] for ind in insert_inds], axis=0)
         self.init_box_vectors = np.insert(self.init_box_vectors, insert_inds, [self.init_box_vectors[state-1] for ind in insert_inds], axis=0)
         self.init_velocities = np.insert(self.init_velocities, insert_inds, [self.init_velocities[state-1] for ind in insert_inds], axis=0)
+
+
+
+    def _restrain_atoms_by_dsl(self, thermodynamic_state, topology, atoms_dsl, spring_constant):
+        """
+        Unceremoniously Ripped from the OpenMMTools github, simply to change sigma to K
+        Apply a soft harmonic restraint to the given atoms.
+        This modifies the ``ThermodynamicState`` object.
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+            The thermodynamic state with the system. This will be modified.
+        topology : mdtraj.Topology or openmm.Topology
+            The topology of the system.
+        atoms_dsl : str
+           The MDTraj DSL string for selecting the atoms to restrain.
+        spring_constant : openmm.unit.Quantity, optional
+            Controls the strength of the restrain. The smaller, the tighter
+            (units of distance, default is 3.0*angstrom).
+        """
+
+        # Make sure the topology is an MDTraj topology.
+        if isinstance(topology, md.Topology):
+            mdtraj_topology = topology
+        else:
+            mdtraj_topology = md.Topology.from_openmm(topology)
+        
+        #Determine indices of the atoms to restrain
+        restrained_atom_indices = mdtraj_topology.select(atoms_dsl)
+        if len(restrained_atom_indices) == 0:
+            raise Exception('No Atoms To Restrain!')
+        
+        #Assign Spring Constant, ensuring it is the appropriate unit
+        K = spring_constant  # Spring constant.
+        if type(K) != unit.Quantity:
+            K = K * spring_constant_unit
+        elif K.unit != spring_constant_unit:
+            raise Exception('Improper Spring Constant Unit')
+        
+        #Energy and Force for Restraint
+        energy_expression = '(K/2)*periodicdistance(x, y, z, x0, y0, z0)^2'
+        restraint_force = openmm.CustomExternalForce(energy_expression)
+        restraint_force.addGlobalParameter('K', K)
+        restraint_force.addPerParticleParameter('x0')
+        restraint_force.addPerParticleParameter('y0')
+        restraint_force.addPerParticleParameter('z0')
+        for index in restrained_atom_indices:
+            parameters = self.restraint_positions[index,:]
+            restraint_force.addParticle(index, parameters)
+        thermodynamic_state.system.addForce(restraint_force)
+
