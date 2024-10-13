@@ -70,7 +70,7 @@ class FultonMarket():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found input_state:', input_state, flush=True)
 
     def run(self, total_sim_time: float, iteration_length: float, dt: float=2.0,
-            T_min: float=300, T_max: float=360, n_replicates: int=12, sim_length=50,
+            T_min: float=300, T_max: float=367.447, n_replicates: int=12, sim_length=50,
             init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35,
             output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/'),
             restrained_atoms_dsl:str=None, K_max=83.68):
@@ -148,11 +148,19 @@ class FultonMarket():
         self._configure_experiment_parameters(sim_length=sim_length)
         while self.sim_no < self.total_n_sims:
             
-            params = dict(sim_no=self.sim_no, sim_time=self.sim_time, system=self.system, ref_state=ref_state,
-                          temperatures=self.temperatures, spring_constants=self.spring_constants,
-                          init_positions=self.init_positions, init_box_vectors=self.init_box_vectors,
-                          output_dir=output_dir, output_ncdf=self.output_ncdf, checkpoint_ncdf=checkpoint_ncdf,
-                          iter_length=iteration_length, dt=dt)
+            params = dict(sim_no=self.sim_no,
+                          sim_time=self.sim_time,
+                          system=self.system,
+                          ref_state=ref_state,
+                          temperatures=self.temperatures,
+                          spring_constants=self.spring_constants,
+                          init_positions=self.init_positions,
+                          init_box_vectors=self.init_box_vectors,
+                          output_dir=output_dir,
+                          output_ncdf=self.output_ncdf,
+                          checkpoint_ncdf=checkpoint_ncdf,
+                          iter_length=iteration_length,
+                          dt=dt)
              
             # Initialize Randolph
             if self.sim_no > 0:
@@ -173,8 +181,7 @@ class FultonMarket():
                 params['restraint_positions'] = restrained_positions
              
             simulation = Randolph(**params)
-                                  
-    
+            
             # Run simulation
             simulation.main(init_overlap_thresh=init_overlap_thresh, term_overlap_thresh=term_overlap_thresh)
 
@@ -213,22 +220,38 @@ class FultonMarket():
             init_velocities = np.load(os.path.join(load_dir, 'velocities.npy')) 
             state_inds = np.load(os.path.join(load_dir, 'states.npy'))[-1]
         except:
-            init_velocities, init_positions, init_box_vectors, state_inds = self._recover_arguments()
+            try:
+                init_positions = np.load(os.path.join(load_dir, 'positions.npy'))[-1]
+                init_box_vectors = np.load(os.path.join(load_dir, 'box_vectors.npy'))[-1]
+                init_velocities = None
+                state_inds = np.load(os.path.join(load_dir, 'states.npy'))[-1]
+            except:
+                init_velocities, init_positions, init_box_vectors, state_inds = self._recover_arguments()
         
         # Reshape 
         reshaped_init_positions = np.empty((init_positions.shape))
         reshaped_init_box_vectors = np.empty((init_box_vectors.shape))
-        reshaped_init_velocities = np.empty((init_velocities.shape))
         for state in range(len(self.temperatures)):
             rep_ind = np.where(state_inds == state)[0]
             reshaped_init_box_vectors[state] = init_box_vectors[rep_ind] 
-            reshaped_init_velocities[state] = init_velocities[rep_ind]
-            reshaped_init_positions[state] = init_positions[rep_ind] 
+            reshaped_init_positions[state] = init_positions[rep_ind]
+        
+        if init_velocities is not None:
+            reshaped_init_velocities = np.empty((init_velocities.shape))
+            for state in range(len(self.temperatures)):
+                rep_ind = np.where(state_inds == state)[0]
+                reshaped_init_velocities[state] = init_velocities[rep_ind] 
+        
+        
 
         # Convert to quantities    
         self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
-        self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
         self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
+        if init_velocities is not None:
+            self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
+        else:
+            self.init_velocities = None
+            self.context = None
 
 
     def _configure_experiment_parameters(self, sim_length=50):

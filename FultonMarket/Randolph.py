@@ -54,22 +54,19 @@ class Randolph():
         self.temperatures = temperatures.copy()
         self.ref_state = ref_state
         self.n_replicates = len(self.temperatures)
-        self.init_positions = init_positions
-        self.init_box_vectors = init_box_vectors
+        self.init_positions = init_positions.copy()
+        self.init_box_vectors = init_box_vectors.copy()
+        self.init_velocities = init_velocities.copy()
         self.iter_length = iter_length
         self.dt = dt
         self.context = context
-        self.interpolate = False
-        if init_velocities is not None:
-            self.init_velocities = init_velocities
-        else:
-            self.init_velocities = None
+        
         #Restraints if necessary
         self.restrained_atoms_dsl = restrained_atoms_dsl
         self.spring_constants = spring_constants
         self.mdtraj_topology = mdtraj_topology
         self.restraint_positions = restraint_positions
-
+        
         # Configure simulation parameters
         self._configure_simulation_parameters()
         
@@ -206,8 +203,10 @@ class Randolph():
             self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors).from_context(self.context)
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
-            self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
-        
+            if self.sim_no > 0:
+                self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i]) for i in range(self.n_replicates)]
+            else:
+                self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
             
         if self.restrained_atoms_dsl is None:
             self.simulation.create(thermodynamic_state=self.ref_state, sampler_states=self.sampler_states,
@@ -248,7 +247,6 @@ class Randolph():
             self._interpolate_states(insert_inds)
             self.reporter.close()
             self.current_cycle = 0
-            self.interpolate = True
             self._configure_simulation_parameters()
             self._build_simulation()
         else:
