@@ -46,9 +46,9 @@ class Randolph():
         self.temperatures = temperatures.copy()
         self.ref_state = ref_state
         self.n_replicates = len(self.temperatures)
-        self.init_positions = init_positions.copy()
-        self.init_box_vectors = init_box_vectors.copy()
-        self.init_velocities = init_velocities.copy()
+        self.init_positions = init_positions
+        self.init_box_vectors = init_box_vectors
+        self.init_velocities = init_velocities
         self.iter_length = iter_length
         self.dt = dt
         self.context = context

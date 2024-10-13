@@ -182,25 +182,38 @@ class FultonMarket():
         try:
             init_positions = np.load(os.path.join(load_dir, 'positions.npy'))[-1] 
             init_box_vectors = np.load(os.path.join(load_dir, 'box_vectors.npy'))[-1] 
-            init_velocities = np.load(os.path.join(load_dir, 'velocities.npy')) 
             state_inds = np.load(os.path.join(load_dir, 'states.npy'))[-1]
+            init_velocities = np.load(os.path.join(load_dir, 'velocities.npy')) 
         except:
-            init_velocities, init_positions, init_box_vectors, state_inds = self._recover_arguments()
+            try:
+                init_positions = np.load(os.path.join(load_dir, 'positions.npy'))[-1] 
+                init_box_vectors = np.load(os.path.join(load_dir, 'box_vectors.npy'))[-1] 
+                state_inds = np.load(os.path.join(load_dir, 'states.npy'))[-1]
+                init_velocities = None
+                self.context = None
+            except:
+                init_velocities, init_positions, init_box_vectors, state_inds = self._recover_arguments()
         
         # Reshape 
         reshaped_init_positions = np.empty((init_positions.shape))
         reshaped_init_box_vectors = np.empty((init_box_vectors.shape))
-        reshaped_init_velocities = np.empty((init_velocities.shape))
         for state in range(len(self.temperatures)):
             rep_ind = np.where(state_inds == state)[0]
             reshaped_init_box_vectors[state] = init_box_vectors[rep_ind] 
-            reshaped_init_velocities[state] = init_velocities[rep_ind]
             reshaped_init_positions[state] = init_positions[rep_ind] 
 
+        if init_velocities is not None:
+            reshaped_init_velocities = np.empty((init_velocities.shape))
+            for state in range(len(self.temperatures)):
+                rep_ind = np.where(state_inds == state)[0]
+                reshaped_init_velocities[state] = init_velocities[rep_ind]
+
+                
         # Convert to quantities    
         self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
-        self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
         self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
+        if init_velocities is not None:
+            self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
 
         
         
