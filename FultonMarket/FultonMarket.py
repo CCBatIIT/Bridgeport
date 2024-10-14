@@ -140,6 +140,8 @@ class FultonMarket():
             # Unpack .pdb
             self.spring_centers = self.make_interpolated_positions_array(self.input_pdb, spring_centers2_pdb, n_replicates) #All atoms, not just protein
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Second Spring Centers and Made the Shifting Center Schedule', flush=True)
+            # Additionally, in this Umbrella Sampling mode - the temps should all be the max
+            self.temperatures = [T_max * unit.kelvin for temp in geometric_distribution(T_min, T_max, n_replicates)]
         elif self.spring_constants is not None:
             self.spring_centers = self.init_positions
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Restraining All States to the Initial Positions', flush=True)
