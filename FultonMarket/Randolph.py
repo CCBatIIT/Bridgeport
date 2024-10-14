@@ -304,8 +304,8 @@ class Randolph():
 
         # Add pos, box_vecs, velos for new temperatures
         self.init_positions = np.insert(self.init_positions, insert_inds, [self.init_positions[ind-1] for ind in insert_inds], axis=0)
-        self.init_box_vectors = np.insert(self.init_box_vectors, insert_inds, [self.init_box_vectors[state-1] for ind in insert_inds], axis=0)
-        self.init_velocities = np.insert(self.init_velocities, insert_inds, [self.init_velocities[state-1] for ind in insert_inds], axis=0)
+        self.init_box_vectors = np.insert(self.init_box_vectors, insert_inds, [self.init_box_vectors[ind-1] for ind in insert_inds], axis=0)
+        self.init_velocities = np.insert(self.init_velocities, insert_inds, [self.init_velocities[ind-1] for ind in insert_inds], axis=0)
 
 
 
