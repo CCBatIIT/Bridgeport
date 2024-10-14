@@ -306,9 +306,9 @@ class FultonMarket():
         """
         #Get the important coordinates from two pdbs, aligning them
         traj1, traj2 = md.load(spring_centers1_pdb), md.load(spring_centers2_pdb)
-        prot_inds1, prot_inds2 = traj1.select('protein'), traj2.select('protein')
-        assert prot_inds1 == prot_inds2
-        not_prot_inds1 = traj1.select('not protein')
+        prot_inds1, prot_inds2 = traj1.top.select('protein'), traj2.top.select('protein')
+        assert np.alltrue(prot_inds1 == prot_inds2)
+        not_prot_inds1 = traj1.top.select('not protein')
         traj2 = traj2.superpose(traj1, atom_indices=prot_inds1)
         xyz1, xyz2 = traj1.xyz[0], traj2.xyz[0]
         #Create the array
@@ -317,6 +317,6 @@ class FultonMarket():
         gammas = 1 - lambdas
         for i in range(num_replicates):
             positions_array[i, prot_inds1] = lambdas[i]*xyz1[prot_inds1] + gammas[i]*xyz2[prot_inds2]
-            positions_array[i, not_prot_inds1] = xyz[not_prot_inds1]
+            positions_array[i, not_prot_inds1] = xyz1[not_prot_inds1]
         return positions_array
 
