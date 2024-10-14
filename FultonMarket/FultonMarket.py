@@ -69,11 +69,19 @@ class FultonMarket():
             self.context = sim.context
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found input_state:', input_state, flush=True)
 
-    def run(self, total_sim_time: float, iteration_length: float, dt: float=2.0,
-            T_min: float=300, T_max: float=367.447, n_replicates: int=12, sim_length=50,
-            init_overlap_thresh: float=0.5, term_overlap_thresh: float=0.35,
+    def run(self, 
+            total_sim_time: float, 
+            iteration_length: float, 
+            dt: float=2.0,
+            T_min: float=300, 
+            T_max: float=367.447, 
+            n_replicates: int=12, 
+            sim_length=50,
+            init_overlap_thresh: float=0.5, 
+            term_overlap_thresh: float=0.35,
             output_dir: str=os.path.join(os.getcwd(), 'FultonMarket_output/'),
-            restrained_atoms_dsl:str=None, K_max=83.68):
+            restrained_atoms_dsl:str=None, 
+            K_max=83.68):
         """
         Run parallel temporing replica exchange. 
 
