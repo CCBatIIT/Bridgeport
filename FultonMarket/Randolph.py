@@ -134,9 +134,9 @@ class Randolph():
             pass    
         
         if self.restrained_atoms_dsl is not None:
-            return sampler_states, [t*unit.kelvin for t in temperatures], [t*spring_constant_unit for t in self.spring_constants]
+            return [t*unit.kelvin for t in temperatures], [t*spring_constant_unit for t in self.spring_constants]
         else:
-            return sampler_states, [t*unit.kelvin for t in temperatures]
+            return [t*unit.kelvin for t in temperatures]
         
         
     def _configure_simulation_parameters(self):
@@ -214,6 +214,7 @@ class Randolph():
             self.simulation.create(thermodynamic_state=self.ref_state, sampler_states=self.sampler_states,
                                    storage=self.reporter, temperatures=self.temperatures, n_temperatures=self.n_replicates)
         else:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found no. replicates:', self.n_replicates, 'and no. sampler_states:', len(self.sampler_states), flush=True)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Creating {len(self.temperatures)} Thermodynamic States', flush=True)
             thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done Creating Thermodynamic States', flush=True)
@@ -304,17 +305,20 @@ class Randolph():
         self.temperatures = [temp*unit.kelvin for temp in new_temps]
         self.n_replicates = len(self.temperatures)
 
-        # Add pos, box_vecs, velos for new temperatures
-        self.init_positions = np.insert(self.init_positions, insert_inds, [self.init_positions[ind-1] for ind in insert_inds], axis=0)
-        self.init_box_vectors = np.insert(self.init_box_vectors, insert_inds, [self.init_box_vectors[ind-1] for ind in insert_inds], axis=0)
-        if self.init_velocities is not None:
-            self.init_velocities = np.insert(self.init_velocities, insert_inds, [self.init_velocities[ind-1] for ind in insert_inds], axis=0)
+        # Only interpolate inital positions and box_vectors if not first simulation
+        if self.sim_no > 0:
+            
+            # Add pos, box_vecs, velos for new temperatures
+            self.init_positions = np.insert(self.init_positions, insert_inds, [self.init_positions[ind-1] for ind in insert_inds], axis=0)
+            self.init_box_vectors = np.insert(self.init_box_vectors, insert_inds, [self.init_box_vectors[ind-1] for ind in insert_inds], axis=0)
+            if self.init_velocities is not None:
+                self.init_velocities = np.insert(self.init_velocities, insert_inds, [self.init_velocities[ind-1] for ind in insert_inds], axis=0)
 
-        # Convert to quantities    
-        self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
-        self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
-        if init_velocities is not None:
-            self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
+            # Convert to quantities    
+            self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
+            self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
+            if init_velocities is not None:
+                self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
 
 
 
