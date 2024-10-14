@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH --job-name="ParTemp"
+#SBATCH --output="ParTemp.%j.%N.out"
+#SBATCH --partition=gpu-shared
+#SBATCH --gpus=1
+#SBATCH --nodes=1
+#SBATCH --ntasks=5
+#SBATCH --mem=80G
+#SBATCH --account=iit122
+#SBATCH -t 48:00:00
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=jdepaoloboisvert@hawk.iit.edu
+
+source ~/.bashrc
+
+conda activate replica
+
+cd $SLURM_SUBMIT_DIR
+
+echo REPLICA EXCHANGE BATCH JOB FOR $2 $4
+python test_standardPT_REPLICA_EXCHANGE.py $1 $2 $3 $4 $5 $6
