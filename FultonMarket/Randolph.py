@@ -188,6 +188,7 @@ class Randolph():
 
         # Remove existing .ncdf files
         if os.path.exists(self.output_ncdf):
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Removing', self.output_ncdf, flush=True)
             os.remove(self.output_ncdf)
         
         # Setup reporter
@@ -209,8 +210,9 @@ class Randolph():
                 self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
             
         if self.restrained_atoms_dsl is None:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found no. replicates:' self.n_replicates, 'and no. sampler_states:', len(self.sampler_states), flush=True)
             self.simulation.create(thermodynamic_state=self.ref_state, sampler_states=self.sampler_states,
-                                   storage=self.reporter, temperatures=self.temperatures, n_temperatures=len(self.temperatures))
+                                   storage=self.reporter, temperatures=self.temperatures, n_temperatures=self.n_replicates)
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Creating {len(self.temperatures)} Thermodynamic States', flush=True)
             thermodynamic_states = [ThermodynamicState(system=self.system, temperature=T) for T in self.temperatures]
