@@ -210,7 +210,7 @@ class Randolph():
                 self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
             
         if self.restrained_atoms_dsl is None:
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found no. replicates:' self.n_replicates, 'and no. sampler_states:', len(self.sampler_states), flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found no. replicates:', self.n_replicates, 'and no. sampler_states:', len(self.sampler_states), flush=True)
             self.simulation.create(thermodynamic_state=self.ref_state, sampler_states=self.sampler_states,
                                    storage=self.reporter, temperatures=self.temperatures, n_temperatures=self.n_replicates)
         else:
@@ -311,10 +311,10 @@ class Randolph():
             self.init_velocities = np.insert(self.init_velocities, insert_inds, [self.init_velocities[ind-1] for ind in insert_inds], axis=0)
 
         # Convert to quantities    
-        self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
-        self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
+        self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
+        self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
         if init_velocities is not None:
-            self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=reshaped_init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
+            self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
 
 
 
