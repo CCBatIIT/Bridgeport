@@ -209,11 +209,11 @@ class FultonMarket():
 
             # Save simulation
             if self.spring_centers is not None:
-                self.sampler_states, self.temperatures, self.spring_constants, self.spring_centers = simulation.save_simulation(self.save_dir)
+                self.temperatures, self.spring_constants, self.spring_centers = simulation.save_simulation(self.save_dir)
             elif restrained_atoms_dsl is not None:
-                self.sampler_states, self.temperatures, self.spring_constants = simulation.save_simulation(self.save_dir)
+                self.temperatures, self.spring_constants = simulation.save_simulation(self.save_dir)
             else:
-                self.sampler_states, self.temperatures = simulation.save_simulation(self.save_dir)
+                self.temperatures = simulation.save_simulation(self.save_dir)
 
             
             # Delete output.ncdf files if not last simulation 
