@@ -29,7 +29,7 @@ class FultonMarketAnalysis():
     methods:
         init: input_dir
     """
-    def __init__(self, input_dir:str, pdb: str, skip: int=0):
+    def __init__(self, input_dir:str, pdb: str, skip: int=0, resids: List[int]=None):
         """
         get Numpy arrays, determine indices of interpolations, and set state_inds
         """
@@ -43,6 +43,7 @@ class FultonMarketAnalysis():
         fprint(f"Found storage directory at {self.stor_dir}")
         self.storage_dirs = sorted(glob.glob(self.stor_dir + '/*'), key=lambda x: int(x.split('/')[-1]))
         self.pdb = pdb
+        self.resids = resids
 
         
         # Load saved variables
@@ -405,12 +406,7 @@ class FultonMarketAnalysis():
         starting from each of the first 50 frames
         returns the likely best index of equilibration
         """
-        # PCA
-        def detect_PC_equil(pc, reduced_cartesian):
-            t0, _, _ = detect_equilibration(reduced_cartesian[:,pc])
 
-            return t0*10
-        
         
         # Compute average energies
         if self.equilibration_method == 'energy':
@@ -429,15 +425,10 @@ class FultonMarketAnalysis():
             
          
         elif self.equilibration_method == 'PCA':    
-            # Get state traj
-            state0_traj = self.state_trajectory(state_no=0, stride=10)
-
             # PCA
-            pca = PCA()
-            reduced_cartesian = pca.fit_transform(state0_traj.xyz.reshape(state0_traj.n_frames, state0_traj.n_atoms * 3))
-            explained_variance = np.array([np.sum(pca.explained_variance_ratio_[:i+1]) for i in range(pca.n_components_)])
-
-            n_components = int(np.argwhere(explained_variance >= 0.9)[0])
+            pca, reduced_cartesian, explained_variance, n_components = self.get_PCA(explained_variance_threshold=0.9)
+            
+            # Iterate through PCs to detect equilibration
             equil_times = np.empty(n_components)
             for pc in range(n_components):
                 equil_times[pc] = detect_PC_equil(pc, reduced_cartesian)
@@ -452,7 +443,33 @@ class FultonMarketAnalysis():
             
             
         fprint(f'Equilibration detected at {np.round(self.t0 / 10, 3)} ns')
+
+        
+
+    def get_PCA(self, state_no: int=0, stride: int=10, n_components: int=1, explained_variance_threshold: float=None):
+        """
+        """
+        # Get state trajectory
+        traj = self.state_trajectory(state_no, stride)
+
+        # Get protein or resids of interest
+        top = traj.topology
+        if self.resids is not None:
+            sele = top.select(f'resid {" ".join([str(resid) for resid in self.resids])}')
+        else:
+            sele = top.select('protein')
+        traj = traj.atom_slice(sele)
     
+        # PCA
+        pca = PCA()
+        reduced_cartesian = pca.fit_transform(traj.xyz.reshape(traj.n_frames, traj.n_atoms * 3))
+        explained_variance = np.array([np.sum(pca.explained_variance_ratio_[:i+1]) for i in range(pca.n_components_)])
+
+        if explained_variance_threshold is not None:
+            n_components = int(np.argwhere(explained_variance >= explained_variance_threshold)[0])
+
+        return pca, reduced_cartesian[:n_components], explained_variance[:n_components], n_components
+
     
     
     def _load_positions_box_vecs(self):
@@ -521,7 +538,12 @@ def compute_MBAR_weights(u_kln, N_k):
     return mbar.weights()
 
 
+@staticmethod
+# PCA
+def detect_PC_equil(pc, reduced_cartesian):
+    t0, _, _ = detect_equilibration(reduced_cartesian[:,pc])
 
+    return t0*10
 
 
 
