@@ -43,8 +43,9 @@ class FultonMarketAnalysis():
         fprint(f"Found storage directory at {self.stor_dir}")
         self.storage_dirs = sorted(glob.glob(self.stor_dir + '/*'), key=lambda x: int(x.split('/')[-1]))
         self.pdb = pdb
-        self.resids = resids
-
+        self.top = md.load_pdb(self.pdb).topology
+        if resids is not None:
+            self.resids = [[self.top.residue(i).resSeq for i in range(self.top.n_residues)].index(resid) for resid in resids] # convert to mdtraj resids
         
         # Load saved variables
         self.temperatures_list = [np.round(np.load(os.path.join(storage_dir, 'temperatures.npy'), mmap_mode='r'), decimals=2) for storage_dir in self.storage_dirs]
@@ -86,6 +87,12 @@ class FultonMarketAnalysis():
         
         # Determine equilibration
         self._determine_equilibration()
+
+        # Get average energies
+        state_energies = np.empty((self.energies.shape[0], self.energies.shape[1]))
+        for state in range(self.energies.shape[1]):
+            state_energies[:,state] = self.energies[:,state,state]
+        self.average_energies = state_energies.mean(axis=1)
         
         # Plot if specified:
         if plot:
@@ -124,8 +131,7 @@ class FultonMarketAnalysis():
         self.equilibration_method = equilibration_method
         
         #Ensure equilibration has been detected
-        if not hasattr(self, 't0'):
-            self._determine_equilibration()
+        self._determine_equilibration()
         
         # Create map to match shape of weights
   
@@ -237,7 +243,7 @@ class FultonMarketAnalysis():
         traj.image_molecules()
         
         # Align 
-        prot_sel = traj.topology.select('protein and name CA')
+        prot_sel = self.top.select('protein and name CA')
         traj = traj.superpose(traj, frame=0, atom_indices=prot_sel, ref_atom_indices=prot_sel)
         
 
@@ -433,31 +439,32 @@ class FultonMarketAnalysis():
             for pc in range(n_components):
                 equil_times[pc] = detect_PC_equil(pc, reduced_cartesian)
 
-            weights = pca.explained_variance_ratio_[:n_components]
 
             # Save equilibration/uncorrelated inds to new variables
+            weights = pca.explained_variance_ratio_[:n_components]
             self.t0 = np.sum(equil_times  * (weights / weights.sum())).astype(int)
           
         else:
             print('equilibration_method must be either PCA or energy')
-            
-            
+
         fprint(f'Equilibration detected at {np.round(self.t0 / 10, 3)} ns')
+
+            
+            
 
         
 
-    def get_PCA(self, state_no: int=0, stride: int=10, n_components: int=1, explained_variance_threshold: float=None):
+    def get_PCA(self, state_no: int=0, stride: int=10, n_components: int=2, explained_variance_threshold: float=None):
         """
         """
         # Get state trajectory
         traj = self.state_trajectory(state_no, stride)
 
         # Get protein or resids of interest
-        top = traj.topology
         if self.resids is not None:
-            sele = top.select(f'resid {" ".join([str(resid) for resid in self.resids])}')
+            sele = traj.topology.select(f'resid {" ".join([str(resid) for resid in self.resids])}')
         else:
-            sele = top.select('protein')
+            sele = traj.topology.select('protein')
         traj = traj.atom_slice(sele)
     
         # PCA
@@ -466,9 +473,9 @@ class FultonMarketAnalysis():
         explained_variance = np.array([np.sum(pca.explained_variance_ratio_[:i+1]) for i in range(pca.n_components_)])
 
         if explained_variance_threshold is not None:
-            n_components = int(np.argwhere(explained_variance >= explained_variance_threshold)[0])
+            n_components = int(np.where(explained_variance >= explained_variance_threshold)[0][0])
 
-        return pca, reduced_cartesian[:n_components], explained_variance[:n_components], n_components
+        return pca, reduced_cartesian[:,:n_components], explained_variance[:n_components], n_components
 
     
     
