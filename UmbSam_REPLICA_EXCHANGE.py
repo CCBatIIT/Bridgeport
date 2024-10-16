@@ -37,7 +37,7 @@ try:
 except:
     total_sim_time = 500
 
-sub_sim_length = 5
+sub_sim_length = 50
 
 try:
     n_replica = int(sys.argv[6])

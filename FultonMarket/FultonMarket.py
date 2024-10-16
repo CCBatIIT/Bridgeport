@@ -143,7 +143,7 @@ class FultonMarket():
             # Additionally, in this Umbrella Sampling mode - the temps should all be the max
             self.temperatures = [T_max * unit.kelvin for temp in geometric_distribution(T_min, T_max, n_replicates)]
         elif self.spring_constants is not None:
-            self.spring_centers = self.init_positions
+            self.spring_centers = np.array([self.init_positions for i in range(n_replicates)])
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Restraining All States to the Initial Positions', flush=True)
         else:
             self.spring_centers = None
@@ -208,13 +208,10 @@ class FultonMarket():
             simulation.main(init_overlap_thresh=init_overlap_thresh, term_overlap_thresh=term_overlap_thresh)
 
             # Save simulation
-            if self.spring_centers is not None:
-                self.temperatures, self.spring_constants, self.spring_centers = simulation.save_simulation(self.save_dir)
-            elif restrained_atoms_dsl is not None:
-                self.temperatures, self.spring_constants = simulation.save_simulation(self.save_dir)
-            else:
+            if self.spring_centers is None and restrained_atoms_dsl is None:
                 self.temperatures = simulation.save_simulation(self.save_dir)
-
+            else:
+                self.temperatures, self.spring_constants, self.spring_centers = simulation.save_simulation(self.save_dir)
             
             # Delete output.ncdf files if not last simulation 
             if not self.sim_no+1 == self.total_n_sims:
@@ -237,8 +234,6 @@ class FultonMarket():
         if self.spring_constants is not None:
             self.spring_constants = np.load(os.path.join(load_dir, 'spring_constants.npy'))
             self.spring_constants = [s*spring_constant_unit for s in self.spring_constants]
-
-        if self.spring_centers is not None:
             self.spring_centers = np.load(os.path.join(load_dir, 'spring_centers.npy'))
         
         try:

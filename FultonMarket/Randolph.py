@@ -115,12 +115,10 @@ class Randolph():
         np.save(os.path.join(save_no_dir, 'energies.npy'), energies.data)
         np.save(os.path.join(save_no_dir, 'temperatures.npy'), temperatures)
         
-        if self.spring_centers.shape[0] == self.n_replicates:
-            np.save(os.path.join(save_no_dir, 'spring_centers.npy'), self.spring_centers)
-        
         if self.restrained_atoms_dsl is not None:
             spring_constants = np.array([np.round(t._value,2) for t in self.spring_constants])
             np.save(os.path.join(save_no_dir, 'spring_constants.npy'), spring_constants)
+            np.save(os.path.join(save_no_dir, 'spring_centers.npy'), self.spring_centers)
 
         # Truncate output_checkpoint.ncdf
         checkpoint_copy = os.path.join(self.output_dir, 'output_checkpoint_copy.ncdf')
@@ -136,10 +134,8 @@ class Randolph():
         except:
             pass    
         
-        if self.spring_centers.shape[0] == self.n_replicates:
+        if self.restrained_atoms_dsl is not None:    
             return [t*unit.kelvin for t in temperatures], [t*spring_constant_unit for t in self.spring_constants], self.spring_centers
-        elif self.restrained_atoms_dsl is not None:
-            return [t*unit.kelvin for t in temperatures], [t*spring_constant_unit for t in self.spring_constants]
         else:
             return [t*unit.kelvin for t in temperatures]
         
@@ -175,13 +171,11 @@ class Randolph():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated temperature of', self.n_replicates,
                                       'replicates to be', [np.round(t._value,1) for t in self.temperatures], flush=True)
         
-        if self.spring_centers.shape[0] == self.n_replicates:
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated spring_centers of', self.n_replicates,
-                                          'replicates to be', [self.spring_centers[i].shape for i in range(self.spring_centers.shape[0])], flush=True)
-        
         if self.restrained_atoms_dsl is not None:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated spring_constants of', self.n_replicates,
                                           'replicates to be', [np.round(t._value,1) for t in self.spring_constants], flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Calculated spring_centers of', self.n_replicates,
+                                          'replicates to be', [self.spring_centers[i].shape for i in range(self.spring_centers.shape[0])], flush=True)
         
     def _build_simulation(self):
         """
@@ -228,15 +222,9 @@ class Randolph():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Done Creating Thermodynamic States', flush=True)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + f'Assigning {len(self.spring_constants)} Restraints', flush=True)
             assert len(self.temperatures) == len(self.spring_constants)
-            if self.spring_centers.shape[0] == self.n_replicates:
-                #In this case, iterate over the n_replicate spring_centers and assign different ones to each thermo_state
-                for thermo_state, spring_cons, spring_center in zip(thermodynamic_states, self.spring_constants, self.spring_centers):
-                    self._restrain_atoms_by_dsl(thermo_state, self.mdtraj_topology, self.restrained_atoms_dsl, spring_cons, spring_center)
-            else:
-                #In this case, the spring centers array should be the same shape as the init_positions array, and the same restraints are used every time
-                assert self.spring_centers.shape == self.init_positions.shape
-                for thermo_state, spring_cons in zip(thermodynamic_states, self.spring_constants):
-                    self._restrain_atoms_by_dsl(thermo_state, self.mdtraj_topology, self.restrained_atoms_dsl, spring_cons, self.spring_centers)
+            #In this case, iterate over the n_replicate spring_centers and assign different ones to each thermo_state
+            for thermo_state, spring_cons, spring_center in zip(thermodynamic_states, self.spring_constants, self.spring_centers):
+                self._restrain_atoms_by_dsl(thermo_state, self.mdtraj_topology, self.restrained_atoms_dsl, spring_cons, spring_center)
             
             self.simulation.create(thermodynamic_states=thermodynamic_states, sampler_states=self.sampler_states, storage=self.reporter)
         
@@ -317,8 +305,7 @@ class Randolph():
                 new_spring_cons.insert(ind + displacement, np.mean((cons_below, cons_above)))
             self.spring_constants = [cons * spring_constant_unit for cons in new_spring_cons]
             assert len(self.spring_constants) == len(self.temperatures)
-        
-        if self.spring_centers.shape[0] == self.n_replicates:
+            
             prev_spring_centers = self.spring_centers
             new_spring_centers = self.spring_centers
             for displacement, ind in enumerate(insert_inds):
@@ -395,5 +382,7 @@ class Randolph():
         for index in restrained_atom_indices:
             parameters = spring_center[index,:]
             restraint_force.addParticle(index, parameters)
-        thermodynamic_state.system.addForce(restraint_force)
+        a_stupid_copied_system = thermodynamic_state.system
+        a_stupid_copied_system.addForce(restraint_force)
+        thermodynamic_state.system = a_stupid_copied_system
 
