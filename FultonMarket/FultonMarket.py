@@ -20,6 +20,7 @@ faulthandler.enable()
 
 geometric_distribution = lambda min_val, max_val, n_vals: [min_val + (max_val - min_val) * (math.exp(float(i) / float(n_vals-1)) - 1.0) / (math.e - 1.0) for i in range(n_vals)]
 spring_constant_unit = (unit.joule)/(unit.angstrom*unit.angstrom*unit.mole)
+rmsd = lambda a, b: np.sqrt(np.mean(np.sum((b-a)**2, axis=-1), axis=-1))
 
 class FultonMarket():
     """
@@ -140,6 +141,7 @@ class FultonMarket():
             # Unpack .pdb
             self.spring_centers = self.make_interpolated_positions_array(self.input_pdb, spring_centers2_pdb, n_replicates) #All atoms, not just protein
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Second Spring Centers and Made the Shifting Center Schedule', flush=True)
+            
             # Additionally, in this Umbrella Sampling mode - the temps should all be the max
             self.temperatures = [T_max * unit.kelvin for temp in geometric_distribution(T_min, T_max, n_replicates)]
             
@@ -166,6 +168,8 @@ class FultonMarket():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Temperature Schedule', [np.round(T._value, 1) for T in self.temperatures], 'Kelvin', flush=True)
         if self.restrained_atoms_dsl is not None:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Restraint Schedule', [np.round(T._value, 1) for T in self.spring_constants], spring_constant_unit, flush=True)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found Spring Center Schedule', np.round(rmsd(self.spring_centers[:], self.spring_centers[0]), 2), 'nm', flush=True)
+            
 
         # Loop through short 50 ns simulations to allow for .ncdf truncation
         self._configure_experiment_parameters(sim_length=sim_length)
@@ -314,5 +318,6 @@ class FultonMarket():
         for i in range(num_replicates):
             positions_array[i, prot_inds1] = lambdas[i]*xyz1[prot_inds1] + gammas[i]*xyz2[prot_inds2]
             positions_array[i, not_prot_inds1] = xyz1[not_prot_inds1]
+        
         return positions_array
 
