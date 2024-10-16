@@ -54,7 +54,7 @@ for ind in intracellular_inds:
 selection_string = selection_string[:-4] + ')'
 
 # Second Spring Center
-spring_center2_pdb = sys.argv[7]
+spring_center2_pdb = os.path.join(input_dir, sys.argv[7] + '.pdb')
 
 # Run rep exchange
 market = FultonMarket(input_pdb=input_pdb, input_system=input_sys, input_state=None)

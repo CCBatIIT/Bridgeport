@@ -1,6 +1,6 @@
 from openmm import *
 from openmm.app import *
-from openmm.utils import *
+from openmmtools.utils.utils import TrackedQuantity
 from openmmtools import states, mcmc, multistate
 from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.multistate import ParallelTemperingSampler, ReplicaExchangeSampler, MultiStateReporter
@@ -87,11 +87,11 @@ class Randolph():
         self.current_cycle = 0
         while self.current_cycle <= self.n_cycles:
 
-            # Minimize
-            if self.sim_no == 0 and self.current_cycle == 0:
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing...', flush=True)
-                self.simulation.minimize()
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing finished.', flush=True)
+            # Minimize TODO: Reinsert
+            # if self.sim_no == 0 and self.current_cycle == 0:
+            #     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing...', flush=True)
+            #     self.simulation.minimize()
+            #     print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Minimizing finished.', flush=True)
 
             # Advance 1 cycle
             self._run_cycle()
@@ -210,8 +210,10 @@ class Randolph():
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions with the "No Context" method', flush=True)
             if self.sim_no > 0:
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions individual to each state', flush=True)
                 self.sampler_states = [SamplerState(positions=self.init_positions[i], box_vectors=self.init_box_vectors[i]) for i in range(self.n_replicates)]
             else:
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Setting initial positions the same to each state', flush=True)
                 self.sampler_states = SamplerState(positions=self.init_positions, box_vectors=self.init_box_vectors)
             
         if self.restrained_atoms_dsl is None:
