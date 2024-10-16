@@ -1,6 +1,6 @@
 from openmm import *
 from openmm.app import *
-from openmm.utils import *
+from openmmtools.utils.utils import TrackedQuantity
 from openmmtools import states, mcmc, multistate
 from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.multistate import ParallelTemperingSampler, ReplicaExchangeSampler, MultiStateReporter
