@@ -315,7 +315,7 @@ class Randolph():
 
             # Convert to quantities    
             self.init_positions = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_positions, mask=False, fill_value=1e+20), unit=unit.nanometer))
-            self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
+            self.init_box_vectors = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_box_vectors, mask=False, fill_value=1e+20), unit=unit.nanometer))
             if self.init_velocities is not None:
                 self.init_velocities = TrackedQuantity(unit.Quantity(value=np.ma.masked_array(data=self.init_velocities, mask=False, fill_value=1e+20), unit=(unit.nanometer / unit.picosecond)))
 
