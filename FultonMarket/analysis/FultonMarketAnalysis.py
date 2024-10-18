@@ -16,7 +16,7 @@ from sklearn.decomposition import PCA
 from pymbar.timeseries import detect_equilibration
 
 fprint = lambda my_string: print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + ' // ' + str(my_string), flush=True)
-get_kT = lambda temp: temp*cons.gas_constant
+get_kT = lambda temp: temp*cons.gas_constant / 1000
 geometric_distribution = lambda min_val, max_val, n_vals: [min_val + (max_val - min_val) * (math.exp(float(i) / float(n_vals-1)) - 1.0) / (math.e - 1.0) for i in range(n_vals)]
 rmsd = lambda a, b: np.sqrt(np.mean(np.sum((b-a)**2, axis=-1), axis=-1))
 
@@ -58,7 +58,7 @@ class FultonMarketAnalysis():
         
         # Reshape lists 
         self.energies = self._reshape_list(self.unshaped_energies)
-        self.reduced_potentials = [e / get_kT(temps) for (e, temps) in zip(self.energies, self.temperatures_list)]
+        
 
         # Compute positions/box_vectors map 
         self._get_postions_map()
@@ -76,7 +76,7 @@ class FultonMarketAnalysis():
         Optionally reduce energies based on temperatures, and concatenate the list of arrays to a single array
         """
         
-        state_energies = self.energies[:,state_indice, state_indice]
+        state_energies = self.energies[:,state_indice, state_indice] * get_kT(self.temperatures[state_indice])
         
         return state_energies
     
@@ -91,7 +91,7 @@ class FultonMarketAnalysis():
         # Get average energies
         state_energies = np.empty((self.energies.shape[0], self.energies.shape[1]))
         for state in range(self.energies.shape[1]):
-            state_energies[:,state] = self.energies[:,state,state]
+            state_energies[:,state] = self.energies[:,state,state] * get_kT(self.temperatures[state])
         self.average_energies = state_energies.mean(axis=1)
         
         # Plot if specified:
@@ -137,21 +137,21 @@ class FultonMarketAnalysis():
   
         # Get MBAR weights
         if self.equilibration_method == 'energy':
-            u_kln = self.reduced_potentials[self.t0:][self.uncorrelated_indices].T
-            N_k = [len(self.uncorrelated_indices) for i in range(self.reduced_potentials.shape[1])]
-            self.flat_inds = np.array([[state, ind] for ind in self.uncorrelated_indices for state in range(self.reduced_potentials.shape[1])])
+            u_kln = self.energies[self.t0:][self.uncorrelated_indices].T
+            N_k = [len(self.uncorrelated_indices) for i in range(self.energies.shape[1])]
+            self.flat_inds = np.array([[state, ind] for ind in self.uncorrelated_indices for state in range(self.energies.shape[1])])
 
         else:
-            self.flat_inds = np.array([[state, ind] for ind in range(self.t0, self.reduced_potentials.shape[0]) for state in range(self.reduced_potentials.shape[1])])
-            u_kln = self.reduced_potentials[self.t0:].T
-            N_k = [self.reduced_potentials[self.t0:].shape[0] for i in range(self.reduced_potentials.shape[1])]
+            self.flat_inds = np.array([[state, ind] for ind in range(self.t0, self.energies.shape[0]) for state in range(self.energies.shape[1])])
+            u_kln = self.energies[self.t0:].T
+            N_k = [self.energies[self.t0:].shape[0] for i in range(self.energies.shape[1])]
         self.resampled_inds, self.weights = resample_with_MBAR(objs=[self.flat_inds], u_kln=u_kln, N_k=N_k, size=n_samples, return_inds=False, return_weights=True, specify_state=0)
         
         
 
     def plot_weights(self, state_no: int=0, figsize: tuple=(4,4)):
         # Reshape weights
-        self.weights = self.weights.copy().reshape(self.temperatures.shape[0], self.reduced_potentials.shape[0] - self.t0, self.temperatures.shape[0])[:,:,state_no].T
+        self.weights = self.weights.copy().reshape(self.temperatures.shape[0], self.energies.shape[0] - self.t0, self.temperatures.shape[0])[:,:,state_no].T
         
         # Get sum of weights by state
         sum_weights = self.weights.sum(axis=0)
@@ -221,7 +221,7 @@ class FultonMarketAnalysis():
         traj = md.load_pdb(self.pdb)
         
         # Use the map to find the resampled configurations
-        inds = np.arange(0, self.reduced_potentials.shape[0], stride)
+        inds = np.arange(0, self.energies.shape[0], stride)
         pos = np.empty((len(inds), self.positions[0].shape[2], 3))
         box_vec = np.empty((len(inds), 3, 3))
         for i, ind in enumerate(inds):
@@ -358,20 +358,20 @@ class FultonMarketAnalysis():
             
             #Create an array for this simulations energies, in the final simulation's shape on axis 1, 2
             sim_energies = np.zeros((self.energies[sim_no].shape[0], self.temperatures.shape[0], self.temperatures.shape[0]))
-            sim_reduced_potentials = np.zeros((self.reduced_potentials[sim_no].shape[0], self.temperatures.shape[0], self.temperatures.shape[0]))
+            sim_reduced_potentials = np.zeros((self.energies[sim_no].shape[0], self.temperatures.shape[0], self.temperatures.shape[0]))
             sim_map = np.zeros((self.map[sim_no].shape[0], self.temperatures.shape[0], 3))
 
             #Fill this array with the values that exist
             for i, ind in enumerate(interpolation_map[sim_no]):
                 sim_energies[:, ind, interpolation_map[sim_no]] = self.energies[sim_no][:, i, :]
-                sim_reduced_potentials[:, ind, interpolation_map[sim_no]] = self.reduced_potentials[sim_no][:, i, :]
+                sim_reduced_potentials[:, ind, interpolation_map[sim_no]] = self.energies[sim_no][:, i, :]
                 sim_map[:,ind] = self.map[sim_no][:,i]
 
             #Fill in rows and columns 
             for state_no in sim_interpolate_inds:
 
                 # Get state-specific objects to resample from
-                filled_reduced_potentials = np.concatenate([self.reduced_potentials[sim_no] for sim_no in filled_sim_inds])
+                filled_reduced_potentials = np.concatenate([self.energies[sim_no] for sim_no in filled_sim_inds])
                 filled_energies = np.concatenate([self.energies[sim_no] for sim_no in filled_sim_inds])
                 filled_map = np.concatenate([self.map[sim_no] for sim_no in filled_sim_inds])
                 
@@ -400,7 +400,7 @@ class FultonMarketAnalysis():
 
         # Concatenate
         self.energies = np.concatenate(backfilled_energies, axis=0)
-        self.reduced_potentials = np.concatenate(backfilled_potentials, axis=0)
+        self.energies = np.concatenate(backfilled_potentials, axis=0)
         self.map = np.concatenate(backfilled_map, axis=0)
     
     
