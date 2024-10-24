@@ -7,7 +7,8 @@ from openmm.app import *
 from openmm import *
 from openmm.unit import *
 from datetime import datetime
-from bp_utils import trim_env
+sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-1]))
+from utils.utils import trim_env
 
 
 
