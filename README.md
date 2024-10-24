@@ -69,7 +69,7 @@ If you want to generate an analogue of a known structure: Provide the SMILES str
     - **"engineered_resids"**: List of resids that are known engineered mutations in the crystal pdb. Adding this argument may prevent sequence errors in the RepairProtein section of Bridgeport.
     - **"secondary_template"**: Path to secondary .pdb to use as a reference to accurately model large portions that are missing in the input .pdb structure. 
 
-#### "environment" 
+#### "Environment" 
 - **"membrane"**: If membrane should be specified choose "true", and make sure that "alignment_ref" argument is the appropriate OPM structure. Default is false. 
 - **"pH"**: Specify the pH. Default is 7.0.
 - **"ion_strength"**: Specify the concentration of NaCl ions (in Molar). Default is 0.15 M.
