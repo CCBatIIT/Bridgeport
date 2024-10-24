@@ -28,6 +28,10 @@ All the input files and parameters are specifid in the Bridgeprot_input.json. js
 #### "Ligand"
 Ligands can be generated using an experimental structure. If the ligand is a small molecule, select the resname in the input.pdb with *resname*. If the ligand is a peptide, select the chainid in the input.pdb with *chainid*. 
 
+Bridgeport is also capable of generating ligand analogues based on a known ligand-protein complex. This workflow consists of forcing the maximum common substructure (MCS) between the analogue and the known structure to have matching torsions and the MCS of the analogue is aligned to that of the known ligand. Then, then a specified number of conformations of functional groups unique to the analogue are generated that maintain a certain RMSD threshold of the MCS and any other specified atoms that are matching in the known ligand and analogue. Then, each conformation is prepared in complex with the receptor and minimized to avoid steric clashes between the receptor and analogue. The lowest potential energy conformation, after minimization, becomes the final conformation of the analogue. 
+
+If you want to generate an analogue of a known structure: Provide the SMILES string for you analogue with the *smiles* key. Provide the name of your analogue with *analogue_name*. There parameters should be in a subdictionary of *Ligand* named *Analogue*.
+
 - **"resname"**: resname of ligand found in *input_pdb*. If the ligand, is a peptide set to "false".
 - **"chainid"**: If ligand is a peptide, specify the letter code that denotes the ligand, if not choose "false".
 - **"sequence"**: If ligand is a peptide, and you would like to use modeller to repair the ligand, provide the sequence.
@@ -42,10 +46,8 @@ Ligands can be generated using an experimental structure. If the ligand is a sma
 - **"nstd_resids "**: List of nonstandard resids to conserve from input structure. 
 - **"neutral_Cterm"**: If true, neutralize the C-terminus of a peptide ligand. Only applicable is small_molecule_params is False
 
-Bridgeport is also capable of generating ligand analogues based on a known ligand-protein complex. This workflow consists of forcing the maximum common substructure (MCS) between the analogue and the known structure to have matching torsions and the MCS of the analogue is aligned to that of the known ligand. Then, then a specified number of conformations of functional groups unique to the analogue are generated that maintain a certain RMSD threshold of the MCS and any other specified atoms that are matching in the known ligand and analogue. Then, each conformation is prepared in complex with the receptor and minimized to avoid steric clashes between the receptor and analogue. The lowest potential energy conformation, after minimization, becomes the final conformation of the analogue. 
 
-If you want to generate an analogue of a known structure: Provide the SMILES string for you analogue with the *smiles* key. Provide the name of your analogue with *analogue_name*. There parameters should be in a subdictionary of *Ligand* named *Analogue*.
-**"Analogue"**:
+- **"Analogue"**:
     - **"name"**: a name for your ligand
     - **"smiles"**: smiles str of your analogue.
     - **"add_atoms"**: List of atom inds as depicted to be added to common substructure. Ex: [[0, 1], [2, 4]] where atoms 0 and 2 in the analogue match atoms 1 and 4 in the template, respectively. Default is False, which will use automatically determined maximum common substructure.
