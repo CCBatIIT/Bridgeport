@@ -5,10 +5,12 @@ from openbabel import openbabel
 #OpenMM
 from openmm.app import *
 from openmm import *
-from openmm.unit import *
+from openmm import unit
 from datetime import datetime
 sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-1]))
-from utils.utils import trim_env
+from openmm.app.pdbfile import PDBFile
+import MDAnalysis as mda
+
 
 
 
@@ -96,9 +98,6 @@ class ProteinPreparer():
         if os.path.exists(self.env_pdb):
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Output written to:', self.env_pdb, flush=True)
 
-        # # # Trim 
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Trimming', self.env_pdb, 'with padding of 15 Angstroms.', flush=True)
-        trim_env(self.env_pdb, 15)
 
         return self.env_pdb
         
@@ -160,20 +159,97 @@ class ProteinPreparer():
             solvated_file_fn: the filename of the solvated output
         """
         assert mode in ['MEM', 'SOL']
-        fixer = PDBFixer(self.H_pdb)
+        self.fixer = PDBFixer(self.H_pdb)
 
         if mode == 'MEM':
-            fixer.addMembrane('POPC', minimumPadding=padding * nanometer, ionicStrength=ionicStrength * molar)
+            self.fixer.addMembrane('POPC', minimumPadding=padding * unit.nanometer, ionicStrength=ionicStrength * unit.molar)
         elif mode == 'SOL':
-            fixer.addSolvent(padding=padding * nanometer, ionicStrength=ionicStrength * molar)
+            self.fixer.addSolvent(padding=padding * unit.nanometer, ionicStrength=ionicStrength * unit.molar)
 
-        fixer.addMissingHydrogens()
+        # ADD hydrogens
+        self.fixer.addMissingHydrogens()
+
+        # Trim
+        self._trim_env()
         
-        # ADD PDBFixer hydrogens and parsing crystal structures (Hydrogens with pdb2pqr30 at the moment)
+
+    
+    def _trim_env(self, padding: float=15):
+        """
+        Remove the excess membrane and solvent added by calling PDBFixer.addMembrane()
+    
+        Protocol:
+        ---------
+            1. Get dimensions of protein and new periodic box
+            2. Write corresponding CRYST1 line
+            3. Identify atoms outside of box
+            4. Identify corresponding resnames and resids outside of box
+            5. Remove residues outside of box 
+            6. Overwrite original file ('pdb' parameter)
+    
+        Parameters:
+        -----------
+            pdb (str):
+                String path to pdb file to trim.
+    
+            padding (float):
+                Amount of padding (Angstrom) to trim to. Default is 15 Angstrom to accomodate the default 10 Angstrom NonBondededForce cutoff.     
+        """
+    
+        # Copy the fixer topology to a new topology,
+        # excluding residues with atoms outside of the box
+        def copyTopology(topology_o, residx_to_exclude = None):
+          from openmm.app.topology import Topology
+          topology_n = Topology()
+        
+          atom_indices = []
+        
+          chains = {}
+          residues = {}
+          atoms = {}
+          # Add chains
+          for c_o in topology_o.chains():
+            c_n = topology_n.addChain()
+            chains[c_o.id] = c_n
+            # Add residues that are not excluded
+            for r_o in c_o.residues():
+              if not r_o.index in residx_to_exclude:
+                r_n = topology_n.addResidue(r_o.name, c_n)
+                residues[r_o.id] = r_n
+                for a_o in r_o.atoms():
+                  a_n = topology_n.addAtom(a_o.name, a_o.element, r_n)
+                  atoms[a_o.id] = a_n
+                  atom_indices.append(a_o.index)
+          # Add bonds
+          for b_o in topology_o.bonds():
+            if (b_o.atom1.index in atom_indices) and (b_o.atom2.index in atom_indices):
+              b_n = topology_n.addBond(atoms[b_o.atom1.id], atoms[b_o.atom2.id], \
+                                       b_o.type, b_o.order)
+          return (topology_n, atom_indices)
+    
+    
+        
+        u = mda.Universe(self.H_pdb)
+        prot_sele = u.select_atoms('protein')
+        max_coords = (np.array([prot_sele.positions[:,i].max() for i in range(3)]) + padding) * unit.angstroms
+        min_coords = (np.array([prot_sele.positions[:,i].min() for i in range(3)]) - padding) * unit.angstroms
+        
+        # Identify residues with atoms outside of the box
+        residx_out_of_box = set([a.residue.index for (a, p) in zip(self.fixer.topology.atoms(), self.fixer.positions.in_units_of(unit.angstroms)) \
+         if (p<min_coords).any() or (p>max_coords).any()])
+        
+        (topology, atom_indices) = copyTopology(self.fixer.topology, \
+                                                residx_to_exclude = residx_out_of_box)
+        topology.setUnitCellDimensions(max_coords - min_coords)
+        positions = np.array(self.fixer.positions.value_in_unit(unit.angstroms))[atom_indices]
+
+        # Save file
         if not hasattr(self, "env_pdb"):
             self.env_pdb = os.path.join(self.working_dir, self.prot_name + f'_env.pdb')
-        
-        with open(self.env_pdb, "w") as f:
-            PDBFile.writeFile(fixer.topology, fixer.positions, f, keepIds=True)
-        
-        
+            
+        with open(self.env_pdb, "w") as F:
+          PDBFile.writeFile(topology, positions, F, keepIds=True)
+
+    
+            
+            
