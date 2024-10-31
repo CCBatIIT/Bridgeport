@@ -74,6 +74,12 @@ class Analogue(Ligand):
         if remove_atoms is not None:
             self._remove_atoms_from_MCS(remove_atoms)
 
+        # Print matching atoms
+        if self.verbose:
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found matching inds:', flush=True)
+            for (atom, ref_atom) in zip(self.matching_inds, self.template_matching_inds):
+                print(f'atom={atom}, ref_atom={ref_atom}')
+
         # Draw molecules
         template_mol_copy = deepcopy(self.template_mol)
         Chem.rdDepictor.Compute2DCoords(template_mol_copy)
@@ -84,6 +90,8 @@ class Analogue(Ligand):
                                      subImgSize=subImgSize,
                                      highlightAtomLists=[self.matching_inds, self.template_matching_inds],
                                      drawOptions=dopts))
+
+    
 
 
     
@@ -104,11 +112,10 @@ class Analogue(Ligand):
 
         # Iterate for the n_conformers
         n=0
-        while n <= n_conformers:
+        while n < n_conformers:
 
             # Generate conformer
-            AllChem.EmbedMolecule(self.mol)
-            Chem.MolToPDBFile(self.mol, self.pdb)
+            self.mol = embed_rdkit_mol(self.mol)
             
             # Make selections
             self._make_selections()
@@ -119,7 +126,6 @@ class Analogue(Ligand):
             self.template_matching_sele = mda.Universe(self.bat_pdb).select_atoms('all')
 
             # Match internal coordinates
-            
             self.sele = match_internal_coordinates(ref_match=self.template_matching_sele,
                                        ref_match_atoms=self.template_matching_atoms,
                                        ref_match_resids=self.template_matching_resids,
@@ -128,7 +134,7 @@ class Analogue(Ligand):
                                        verbose=self.verbose)
 
             # Align
-            alignto(mobile=self.align_sele, reference=self.template_align_sele)
+            alignto(mobile=self.align_sele, reference=self.template_align_sele, tol_mass=5)
 
             # Save if RMSD is below threshold
             RMSD = rmsd(self.align_sele.positions.copy(), self.template_align_sele.positions.copy())
@@ -200,13 +206,10 @@ class Analogue(Ligand):
     def _load_molecules(self):
         """
         """
-        # Embed rdkit mol
-        orig_mol = deepcopy(self.mol)
-        AllChem.EmbedMolecule(self.mol)
-        pdb_block = Chem.MolToPDBBlock(self.mol)
-        self.mol = Chem.MolFromPDBBlock(pdb_block, proximityBonding=False)
-
-
+        # Store bond orders from SMILES and save to .pdb for MDAnalysis
+        self.mol = embed_rdkit_mol(self.mol, self.mol)
+        Chem.MolToPDBFile(self.mol, self.pdb)
+        
 
         # Load template from pdb
         self.template_mol = self.template.return_rdkit_mol(from_pdb=True,
@@ -215,14 +218,12 @@ class Analogue(Ligand):
                                                            removeHs=True,
                                                            proximityBonding=True)
 
-        # Assert bonds are correct
-        self.mol = AllChem.AssignBondOrdersFromTemplate(orig_mol, self.mol)
-
         
         # Load with MDAnalysis
         self.template_sele = self.template.return_MDA_sele()
 
-        
+
+    
 
     def _get_MDA_atoms(self):
         """
@@ -240,8 +241,14 @@ class Analogue(Ligand):
     def _add_atoms_to_MCS(self, add_atoms):
         """
         """
+
+        # Remove
+        self._remove_atoms_from_MCS([atom for atom, ref_atom in add_atoms])
+        
         # Add atoms
         for atom, temp_atom in add_atoms:
+
+                # Add
                 self.matching_inds.append(atom)
                 self.template_matching_inds.append(temp_atom)
 
@@ -253,12 +260,15 @@ class Analogue(Ligand):
         # Remove user specified atoms
         for atom in remove_atoms:
 
-            # Find atoms
-            atom_ind = self.matching_inds.index(atom)
-
-            # Remove
-            self.matching_inds.pop(atom_ind)
-            self.template_matching_inds.pop(atom_ind)
+            # See if already in there
+            if atom in self.matching_inds:
+            
+                # Find atoms
+                atom_ind = self.matching_inds.index(atom)
+    
+                # Remove
+                self.matching_inds.pop(atom_ind)
+                self.template_matching_inds.pop(atom_ind)
 
 
     
@@ -271,6 +281,8 @@ class Analogue(Ligand):
         self.template_align_sele = select(self.template_sele, self.template_align_atoms, self.template_align_resids)
         self.matching_sele = select(self.sele, self.matching_atoms)
         self.template_matching_sele = select(self.template_sele, self.template_matching_atoms, self.template_matching_resids)
+
+        print(self.matching_sele.atoms.names)
 
 
 

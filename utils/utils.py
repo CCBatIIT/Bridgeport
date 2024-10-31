@@ -93,44 +93,67 @@ def trim_env(pdb, padding: float=15):
             break
 
     lines = lines[:cryst_line_ind] + [cryst1_line] + lines[cryst_line_ind+1:]
-    open(pdb, 'w').writelines(lines)
+
+    # Check for atoms outside of box
+    remove_residues = []
+    for i, line in enumerate(lines):
+        if line.startswith('ATOM') or line.startswith('HETATM'):
+            key = line[6]
+            resname = line[17:20]
+            chain = line[21]
+            resid = line[22:26]
+            x = float(line[31:38])
+            y = float(line[39:46])
+            z = float(line[47:54])
+            
+            if x > max_coords[0] or y > max_coords[1] or z > max_coords[2]:
+                remove_residues.append([resname, chain, resid, key])
+                 
+            elif x < min_coords[0] or y < min_coords[1] or z < min_coords[2]:
+                remove_residues.append([resname, chain, resid, key])
 
 
-    # Identify atoms outside of box
-    u = mda.Universe(pdb)
-    all_atoms = u.select_atoms('all')
-    remove_inds = []
-    for i, atom_xyz in enumerate(all_atoms.positions):
-        if (atom_xyz[0] > max_coords[0]) or (atom_xyz[1] > max_coords[1]) or (atom_xyz[2] > max_coords[2]):
-            remove_inds.append(i)
-        elif (atom_xyz[0] < min_coords[0]) or (atom_xyz[1] < min_coords[1]) or (atom_xyz[2] < min_coords[2]):
-            remove_inds.append(i)
-    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified ', len(remove_inds), 'atoms to remove.' , flush=True)
+
+    remove_resnames = np.array(remove_residues)[:,0]
+    remove_chains = np.array(remove_residues)[:,1]
+    remove_resids = np.array(remove_residues)[:,2]
+    keys = np.array(remove_residues)[:,3]
+        
+    # Remove lines
+    write_lines = []
+    for line in lines:
+        if line.startswith('ATOM') or line.startswith('HETATM'):
+            key, resname, chain, resid = line[6], line[17:20], line[21], line[22:26]
+            x = float(line[31:38])
+            y = float(line[39:46])
+            z = float(line[47:54])
+
+            if resname in remove_resnames and resid in remove_resids and chain in remove_chains:
+                inds1 = np.where(remove_resnames == resname)[0]
+                inds2 = np.where(remove_resids == resid)[0]
+                inds3 = np.where(remove_chains == chain)[0]
+            
+                cross = np.intersect1d(inds1, inds2)
+                cross = np.intersect1d(inds3, cross)
+                
+                if len(cross) == 0 or key not in keys[cross]:
+                    write_lines.append(line)
+                elif resname == 'HOH' and (x-1 < max_coords[0] and y-1 < max_coords[1] and z-1 < max_coords[2]) and (x+1 > min_coords[0] and y+1 > min_coords[1] and z+1 > min_coords[2]):
+                    write_lines.append(line)
+
+                
+            else:
+                write_lines.append(line)
+        else:
+            write_lines.append(line)
 
 
+    # Write lines
+    with open(pdb, 'w') as f:
+        f.writelines(write_lines)
+        f.close()
 
-    # Identify resnames and resids outside of box
-    remove_resnames = all_atoms.resnames[remove_inds]
-    remove_resids = all_atoms.resids[remove_inds]
-    
-    remove = np.unique([[remove_resnames[i], remove_resids[i]] for i in range(len(remove_inds))], axis=0)
-    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Identified ', len(remove), 'resids to remove.' , flush=True)
 
-    # Remove residues outside of box
-    trimmed_sele = u.select_atoms('all')
-    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Untrimmed no. of atoms:', trimmed_sele.n_atoms , flush=True)
-    
-    for rem in remove:
-        trimmed_sele = trimmed_sele - u.select_atoms(f'resname {rem[0]} and resid {rem[1]}')
-    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Trimmed no. of atoms:', trimmed_sele.n_atoms , flush=True)
-
-    # Write over original file
-    trimmed_sele.write(pdb)
-    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Trimmed environment saved to:', pdb , flush=True)
-
-    # # Remove MDAnalysis headers
-    # lines = [line for line in open(pdb, 'r').readlines() if line.startswith('ATOM') or line.startswith('HETATM') or line.startswith('CONECT') or line.startswith('CRYST1')]
-    # open(pdb, 'w').writelines(lines)
 
 
 

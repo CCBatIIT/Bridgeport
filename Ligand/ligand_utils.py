@@ -8,6 +8,10 @@ from MDAnalysis.lib.distances import calc_dihedrals
 from MDAnalysis.coordinates.PDB import PDBWriter
 from typing import List
 from datetime import datetime
+import rdkit
+from rdkit import Chem
+from rdkit.Chem import rdForceFieldHelpers
+
 
 
 
@@ -105,6 +109,7 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
                                                     ref_match_names=ref_match_atoms,
                                                     ref_match_resids=ref_match_resids)
 
+        #TEST
         if 'X' not in ref_eq_atoms:
             
             # Select reference atoms
@@ -169,6 +174,28 @@ def select(sele: mda.AtomGroup, atoms: List[str], resids: List[int]=None):
 
 
     return new_sele 
+
+def embed_rdkit_mol(mol, template_mol=None):
+
+    # Embed
+    Chem.AllChem.EmbedMolecule(mol)
+
+    # Minimize
+    mmffps = rdForceFieldHelpers.MMFFGetMoleculeProperties(mol)
+    ff = rdForceFieldHelpers.MMFFGetMoleculeForceField(mol,mmffps)
+    maxIters = 10000
+    while ff.Minimize(maxIts=1000) and maxIters>0:
+        maxIters -= 1
+
+    # Get PDB naming with correct bond orders if template is provided
+    if template_mol is not None:
+        pdb_block = Chem.MolToPDBBlock(mol)
+        mol = Chem.MolFromPDBBlock(pdb_block, proximityBonding=False)
+        mol = Chem.AllChem.AssignBondOrdersFromTemplate(template_mol, mol)
+
+    return mol
+    
+
 
 
     

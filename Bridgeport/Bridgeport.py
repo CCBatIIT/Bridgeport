@@ -462,13 +462,13 @@ class Bridgeport():
         Add water, lipids, and hydrogens to protein with the ProteinPreparer class.
         """
         # See if environment parameters are present
-        if "environment" in self.input_params.keys():
-            if "pH" in self.input_params["environment"].keys():
-                pH = self.input_params["environment"]["pH"]
-            if "membrane" in self.input_params["environment"].keys():
-                membrane = self.input_params["environment"]["membrane"]
-            if "ion_strength" in self.input_params["environment"].keys():
-                ion_strength = self.input_params["environment"]["ion_strength"]
+        if "Environment" in self.input_params.keys():
+            if "pH" in self.input_params["Environment"].keys():
+                pH = self.input_params["Environment"]["pH"]
+            if "membrane" in self.input_params["Environment"].keys():
+                membrane = self.input_params['Environment']['membrane']
+            if "ion_strength" in self.input_params["Environment"].keys():
+                ion_strength = self.input_params["Environment"]["ion_strength"]
         
         # Add the environment with ProteinPreparer
         if membrane:
