@@ -163,14 +163,15 @@ class Bridgeport():
         Output system .pdb and .xml file will be found in self.working_dir/systems
         """
 
+        
+        # Align first
+        self.align_to_reference()
+        
         # Build analogue complex
         if 'Analogue' in self.input_params['Ligand']:
                 self.get_analogue_MCS()
                 self.build_analogue_complex()
-        
-        # Align first
-        self.align_to_reference()
-      
+
         # Ligand and Protein Seperate
         self.separate_lig_prot()     
         
@@ -196,6 +197,9 @@ class Bridgeport():
             else:
                 self.choose_analogue_conformer()
 
+        # Repositions
+        self.resposition_at_origin()
+
 
     def get_analogue_MCS(self, 
                          add_atoms: List[List[int]]=None, 
@@ -217,13 +221,13 @@ class Bridgeport():
             os.mkdir(self.lig_only_dir)        
         else:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found directory for ligand structures:', self.lig_only_dir, flush=True)  
-        
+
 
         # Build template ligand
         if self.type == 'small_molecule':
             
             # Get template ligand from input structure
-            lig_sele = mda.Universe(self.input_pdb).select_atoms(f'chainid {self.chain} and resname {self.resname}')
+            lig_sele = mda.Universe(self.aligned_pdb).select_atoms(f'chainid {self.chain} and resname {self.resname}')
             lig_sele.write(os.path.join(self.lig_only_dir, self.input_params['Ligand']['name'] + '.pdb'))
 
             # Build Ligand
@@ -235,7 +239,7 @@ class Bridgeport():
         elif self.type == 'peptide':
 
             # Get template ligand from input structure
-            lig_sele = mda.Universe(self.input_pdb).select_atoms(f'chainid {self.lig_chainid}')
+            lig_sele = mda.Universe(self.aligned_pdb).select_atoms(f'chainid {self.lig_chainid}')
             lig_sele.write(os.path.join(self.lig_only_dir, self.input_params['Ligand']['name'] + '.pdb'))
 
             # Build Ligand
@@ -295,14 +299,14 @@ class Bridgeport():
         self.analogue_pdbs = [pdb for pdb in os.listdir(self.analogue.conformer_dir) if pdb.endswith('pdb')]
 
         # Get protein 
-        prot_sele = mda.Universe(self.input_pdb).select_atoms(f'chainid {self.chain}')
+        prot_sele = mda.Universe(self.aligned_pdb).select_atoms(f'protein and chainid {self.chain}')
+
         
         # Combine to create new initial complex
         self.name = self.analogue.name
-        self.input_pdb = os.path.join(self.input_pdb_dir, self.name+'.pdb')
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Changing input_pdb to:', self.input_pdb, flush=True)
+        self.aligned_pdb = os.path.join(self.aligned_input_dir, self.name+'.pdb')
         u = mda.core.universe.Merge(prot_sele, self.analogue.sele)
-        u.select_atoms('all').write(self.input_pdb)
+        u.select_atoms('all').write(self.aligned_pdb)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Built new inital complex.', flush=True)
 
         # Change input parameters
@@ -342,8 +346,8 @@ class Bridgeport():
         else:
             raise FileNotFoundError("Cannot find reference structure:", ref_pdb_path)
             
-        ref = mda.Universe(ref_pdb_path)
-        ref_resids = ref.residues.resids
+        self.ref = mda.Universe(ref_pdb_path)
+        self.ref_resids = self.ref.residues.resids
         
         # Load structure to align
         if os.path.exists(self.input_pdb):
@@ -360,7 +364,7 @@ class Bridgeport():
             resids = chain_sele.residues.resids
 
             # Find matching resids
-            matching_resids, matching_res_inds, matching_ref_res_inds = np.intersect1d(resids, ref_resids, return_indices=True)
+            matching_resids, matching_res_inds, matching_ref_res_inds = np.intersect1d(resids, self.ref_resids, return_indices=True)
                         
             sele_str = chain_sele_str +\
                        ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
@@ -370,7 +374,7 @@ class Bridgeport():
                            ' and backbone'
             # Align
             _, _ = alignto(mobile=u, 
-                    reference=ref,
+                    reference=self.ref,
                     select={'mobile': sele_str,
                           'reference': ref_sele_str})
             
@@ -454,6 +458,14 @@ class Bridgeport():
                             tails=tails,
                             loops=loops,
                             verbose=self.verbose)
+
+        # Align 
+        u = mda.Universe(self.prot_pdb)
+        resids = u.select_atoms('protein').resids
+        matching_resids = np.intersect1d(resids, self.ref_resids)
+        sele_str = 'name CA and resid ' + ' '.join(str(resid) for resid in matching_resids)
+        _, _ = alignto(u, self.ref, select=sele_str)
+        u.select_atoms('all').write(self.prot_pdb)
         
 
     
@@ -622,35 +634,54 @@ class Bridgeport():
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
 
         # Combine systems 
-        sys, top, pos = Joiner((lig_sys, lig_top, lig_pos),
-                               (prot_sys, prot_top, prot_pos)).main()
+        self.sys, self.top, self.pos = Joiner((lig_sys, lig_top, lig_pos),  (prot_sys, prot_top, prot_pos)).main()
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'System parameters built.', flush=True)
 
+        # Get energy
+        int = LangevinIntegrator(300 * kelvin, 1/picosecond, 0.001 * picosecond)
+        sim = Simulation(self.top, self.sys, int)
+        sim.context.setPositions(self.pos)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
+        
+        # Save combined systems
+        self.final_pdb = os.path.join(self.sys_dir, self.name+'.pdb')
+        self.final_xml = os.path.join(self.sys_dir, self.name+'.xml')        
+        with open(self.final_pdb, 'w') as f:
+            PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
+        with open(self.final_xml, 'w') as f:
+            f.write(XmlSerializer.serialize(sim.system))
+
+
+    def resposition_at_origin(self):
+        """
+        OpenMM does not like having the origin in the middle :)
+        """
         # Reposition at origin
-        box_vectors = sys.getDefaultPeriodicBoxVectors()
+        box_vectors = self.sys.getDefaultPeriodicBoxVectors()
         translate = Quantity(np.array((box_vectors[0].x,
                                        box_vectors[1].y,
                                        box_vectors[2].z))/2,
                              unit=nanometer)
 
+        # Get positions in case they changed
+        self.pos = PDBFile(self.final_pdb).positions
+        
         # Get energy
         int = LangevinIntegrator(300 * kelvin, 1/picosecond, 0.001 * picosecond)
-        sim = Simulation(top, sys, int)
-        sim.context.setPositions(pos + translate)
+        sim = Simulation(self.top, self.sys, int)
+        sim.context.setPositions(self.pos + translate)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
-
+        
         # Write out
-        self.final_pdb = os.path.join(self.sys_dir, self.name+'.pdb')
-        self.final_xml = os.path.join(self.sys_dir, self.name+'.xml')
         with open(self.final_pdb, 'w') as f:
             PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
         with open(self.final_xml, 'w') as f:
             f.write(XmlSerializer.serialize(sim.system))
-        
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system coordinates saved to', self.final_pdb, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system parameters saved to', self.final_xml, flush=True)
 
 
+        
     def choose_analogue_conformer(self):
         """
         """
@@ -686,6 +717,8 @@ class Bridgeport():
             f.writelines(lines)
             
         # Load initial structure
+        u = mda.Universe(self.final_pdb)
+        u.select_atoms('all').write(self.final_pdb)
         traj = md.load_pdb(self.final_pdb)
         lig_sele = traj.topology.select(f'resname UNK')
         assert len(lig_sele) > 0
@@ -700,11 +733,7 @@ class Bridgeport():
         # Choose minimum PE
         conf_pdb = self.analogue_pdbs[list(potential_energies).index(potential_energies.min())]
         conf_path = os.path.join(self.analogue.conformer_dir, conf_pdb)
-        shutil.copy(self.final_pdb, self.sys_dir + '_' + self.name + '_init.pdb')
-        temp_conf_pdb, final_PE = _minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)
-
-        # Change to conformer with min. PE
-        print('Final PE:', final_PE)        
+        temp_conf_pdb, final_PE = _minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)     
 
         # Clean 
         if os.path.exists(temp_conf_pdb):
