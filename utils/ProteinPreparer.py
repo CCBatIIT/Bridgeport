@@ -10,6 +10,7 @@ from datetime import datetime
 sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-1]))
 from openmm.app.pdbfile import PDBFile
 import MDAnalysis as mda
+import mdtraj as md
 
 
 
@@ -240,8 +241,30 @@ class ProteinPreparer():
         
         (topology, atom_indices) = copyTopology(self.fixer.topology, \
                                                 residx_to_exclude = residx_out_of_box)
+
+        # Remove excess Na or Cl
+        top = md.Topology.from_openmm(topology)
+        Na_atoms = top.select('name Na')
+        Cl_atoms = top.select('name Cl')
+        min_count = min(len(Na_atoms), len(Cl_atoms))
+        remove_Na = Na_atoms[min_count:]
+        remove_Cl = Cl_atoms[min_count:]
+        remove_atoms = np.concatenate((remove_Na, remove_Cl))
+        print(top.n_atoms, remove_atoms)
+        for i, atom in enumerate(sorted(remove_atoms)):
+            top.delete_atom_by_index(atom - i)
+
+        topology = top.to_openmm()
+        atom_indices = np.array([i for i in atom_indices if i not in remove_atoms])
+        print(topology.getNumAtoms(), len(atom_indices))
+        
         topology.setUnitCellDimensions(max_coords - min_coords)
         positions = np.array(self.fixer.positions.value_in_unit(unit.angstroms))[atom_indices]
+        print(positions.shape)
+
+        positions = np.delete(positions, remove_atoms, axis=0)
+
+        print(positions.shape)
 
         # Save file
         if not hasattr(self, "env_pdb"):
