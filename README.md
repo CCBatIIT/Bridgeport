@@ -18,9 +18,8 @@ BP = Bridgeport(input_json='Bridgeport_input.json')
 BP.run()
 ```
 
-
 ### Input .json files
-All the input files and parameters are specifid in the Bridgeprot_input.json. json files can be build interactively using *interactive.ipynb* in the *interactive* module. 
+All the input files and parameters are specifid in the Bridgeprot_input.json. json files can be build interactively using *interactive.ipynb* in the *interactive* module. FOR A VIDEO TUTORIAL VISIT (https://youtu.be/9fXNMXbbLtM)
 
 #### First the working directory must be specified:
 - **"working_dir"**: specifies where all output and intermediate directories will be created.
