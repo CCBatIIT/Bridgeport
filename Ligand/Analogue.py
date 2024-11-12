@@ -65,14 +65,15 @@ class Analogue(Ligand):
         self.matching_inds = deepcopy(self.align_inds)
         self.template_matching_inds = deepcopy(self.template_align_inds)
 
+        # Remove user specified atoms
+        if remove_atoms is not None:
+            self._remove_atoms_from_MCS(remove_atoms)
+
+        
         # Add user specified atoms
         if add_atoms is not None:
             self._add_atoms_to_MCS(add_atoms)
             
-
-        # Remove user specified atoms
-        if remove_atoms is not None:
-            self._remove_atoms_from_MCS(remove_atoms)
 
         # Print matching atoms
         if self.verbose:
@@ -93,8 +94,6 @@ class Analogue(Ligand):
 
     
 
-
-    
     def generate_conformers(self, n_conformers: int=1, align_all: bool=False, rmsd_thresh: float=3.0):
         """
         """
@@ -134,7 +133,7 @@ class Analogue(Ligand):
                                        verbose=self.verbose)
 
             # Align
-            alignto(mobile=self.align_sele, reference=self.template_align_sele, tol_mass=5)
+            alignto(mobile=self.align_sele, reference=self.template_align_sele, tol_mass=1000)
 
             # Save if RMSD is below threshold
             RMSD = rmsd(self.align_sele.positions.copy(), self.template_align_sele.positions.copy())
@@ -241,9 +240,6 @@ class Analogue(Ligand):
     def _add_atoms_to_MCS(self, add_atoms):
         """
         """
-
-        # Remove
-        self._remove_atoms_from_MCS([atom for atom, ref_atom in add_atoms])
         
         # Add atoms
         for atom, temp_atom in add_atoms:
