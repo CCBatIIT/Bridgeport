@@ -250,21 +250,21 @@ class ProteinPreparer():
         remove_Na = Na_atoms[min_count:]
         remove_Cl = Cl_atoms[min_count:]
         remove_atoms = np.concatenate((remove_Na, remove_Cl))
-        print(top.n_atoms, remove_atoms)
+        print('topology n_atoms', top.n_atoms, 'remove_atoms', remove_atoms)
         for i, atom in enumerate(sorted(remove_atoms)):
             top.delete_atom_by_index(atom - i)
 
         topology = top.to_openmm()
-        atom_indices = np.array([i for i in atom_indices if i not in remove_atoms])
-        print(topology.getNumAtoms(), len(atom_indices))
+        print('len(atom_indices)', len(atom_indices))
+        print('topology n_atoms', topology.getNumAtoms())
         
         topology.setUnitCellDimensions(max_coords - min_coords)
         positions = np.array(self.fixer.positions.value_in_unit(unit.angstroms))[atom_indices]
-        print(positions.shape)
-
-        positions = np.delete(positions, remove_atoms, axis=0)
-
-        print(positions.shape)
+        print('positions.shape', positions.shape)
+        
+        for atom in remove_atoms:
+            positions = np.delete(positions, atom, axis=0)
+        print('positions.shape', positions.shape)
 
         # Save file
         if not hasattr(self, "env_pdb"):
