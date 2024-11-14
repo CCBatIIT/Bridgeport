@@ -99,7 +99,7 @@ class Analogue(Ligand):
         """
 
         # Run setup methods
-        self._load_molecules()
+        self._load_molecules(load_template=True)
 
         # Get MDA atoms
         if align_all:
@@ -111,10 +111,11 @@ class Analogue(Ligand):
 
         # Iterate for the n_conformers
         n=0
+        conformer = 0
         while n < n_conformers:
 
             # Generate conformer
-            self.mol = embed_rdkit_mol(self.mol)
+            self._load_molecules()
             
             # Make selections
             self._make_selections()
@@ -144,6 +145,7 @@ class Analogue(Ligand):
 
                 # Up that ticker :)
                 n += 1
+            conformer += 1
 
         # Save final structure
         self.sele.write(self.pdb)
@@ -202,25 +204,23 @@ class Analogue(Ligand):
     
 
     
-    def _load_molecules(self):
+    def _load_molecules(self, load_template: bool=False):
         """
         """
         # Store bond orders from SMILES and save to .pdb for MDAnalysis
         self.mol = embed_rdkit_mol(self.mol, self.mol)
         Chem.MolToPDBFile(self.mol, self.pdb)
-        
 
         # Load template from pdb
-        self.template_mol = self.template.return_rdkit_mol(from_pdb=True,
-                                                           from_smiles=False,
-                                                           sanitize=True,
-                                                           removeHs=True,
-                                                           proximityBonding=True)
-
-        
-        # Load with MDAnalysis
-        self.template_sele = self.template.return_MDA_sele()
-
+        if load_template:
+            self.template_mol = self.template.return_rdkit_mol(from_pdb=True,
+                                                               from_smiles=False,
+                                                               sanitize=True,
+                                                               removeHs=True,
+                                                               proximityBonding=True)
+            
+            # Load with MDAnalysis
+            self.template_sele = self.template.return_MDA_sele()
 
     
 
