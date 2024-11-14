@@ -488,13 +488,15 @@ class Bridgeport():
                                  working_dir=self.prot_only_dir,
                                  pH=pH,
                                  env='MEM',
-                                 ion_strength=ion_strength)
+                                 ion_strength=ion_strength,
+                                 verbose=self.verbose)
         else:
             pp = ProteinPreparer(pdb_path=self.prot_pdb,
                                  working_dir=self.prot_only_dir,
                                  pH=pH,
                                  env='SOL',
-                                 ion_strength=ion_strength)            
+                                 ion_strength=ion_strength,
+                                 verbose=self.verbose)            
         pp.main()
 
         # Remove unecessary .pqr and .log files

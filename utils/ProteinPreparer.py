@@ -60,7 +60,7 @@ class ProteinPreparer():
             Generates a solvated and possibly membrane-added system based on the specified mode. It uses PDBFixer to create an environment around the protein, either with just solvent or with both membrane and solvent, according to the user's choice.
     """
     
-    def __init__(self, pdb_path, working_dir: str, pH=7, env='MEM', ion_strength=0.15):
+    def __init__(self, pdb_path, working_dir: str, pH=7, env='MEM', ion_strength=0.15, verbose: bool=False):
         """
         Parameters:
             pdb_path: string path to protein structure file
@@ -79,6 +79,7 @@ class ProteinPreparer():
         self.pH = pH
         self.env = env
         self.ion = ion_strength
+        self.verbose = verbose
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Welcome to ProteinPreparer', flush=True)
 
     def main(self):
@@ -174,7 +175,7 @@ class ProteinPreparer():
         self._trim_env()
         
 
-    
+
     def _trim_env(self, padding: float=15):
         """
         Remove the excess membrane and solvent added by calling PDBFixer.addMembrane()
@@ -244,27 +245,27 @@ class ProteinPreparer():
 
         # Remove excess Na or Cl
         top = md.Topology.from_openmm(topology)
+        positions = np.array(self.fixer.positions.value_in_unit(unit.angstroms))[atom_indices]
+        if self.verbose:
+            print('topology n_atoms', top.n_atoms, 'pos n_atoms', positions.shape[0])
         Na_atoms = top.select('name Na')
         Cl_atoms = top.select('name Cl')
         min_count = min(len(Na_atoms), len(Cl_atoms))
         remove_Na = Na_atoms[min_count:]
         remove_Cl = Cl_atoms[min_count:]
         remove_atoms = np.concatenate((remove_Na, remove_Cl))
-        print('topology n_atoms', top.n_atoms, 'remove_atoms', remove_atoms)
+        if self.verbose:
+            print('remove_atoms', remove_atoms)
         for i, atom in enumerate(sorted(remove_atoms)):
             top.delete_atom_by_index(atom - i)
+        positions = np.delete(positions, remove_atoms, axis=0)
+        
+        if self.verbose:
+            print('topology n_atoms', top.n_atoms, 'pos n_atoms', positions.shape[0])
 
+        
         topology = top.to_openmm()
-        print('len(atom_indices)', len(atom_indices))
-        print('topology n_atoms', topology.getNumAtoms())
-        
         topology.setUnitCellDimensions(max_coords - min_coords)
-        positions = np.array(self.fixer.positions.value_in_unit(unit.angstroms))[atom_indices]
-        print('positions.shape', positions.shape)
-        
-        for atom in remove_atoms:
-            positions = np.delete(positions, atom, axis=0)
-        print('positions.shape', positions.shape)
 
         # Save file
         if not hasattr(self, "env_pdb"):
@@ -272,6 +273,9 @@ class ProteinPreparer():
             
         with open(self.env_pdb, "w") as F:
           PDBFile.writeFile(topology, positions, F, keepIds=True)
+
+    
+            
 
     
             
