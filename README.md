@@ -31,6 +31,8 @@ Bridgeport is also capable of generating ligand analogues based on a known ligan
 
 If you want to generate an analogue of a known structure: Provide the SMILES string for you analogue with the *smiles* key. Provide the name of your analogue with *analogue_name*. There parameters should be in a subdictionary of *Ligand* named *Analogue*.
 
+If no ligand is desired (e.g. apo structure), then do not include the 'Ligand' section in the input.json file.
+
 - **"resname"**: resname of ligand found in *input_pdb*. If the ligand, is a peptide set to "false".
 - **"chainid"**: If ligand is a peptide, specify the letter code that denotes the ligand, if not choose "false".
 - **"sequence"**: If ligand is a peptide, and you would like to use modeller to repair the ligand, provide the sequence.
