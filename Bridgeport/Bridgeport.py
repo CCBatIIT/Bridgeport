@@ -21,6 +21,7 @@ from openbabel import openbabel
 from pdbfixer import PDBFixer
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from copy import deepcopy
 
 class Bridgeport():
     """
@@ -101,41 +102,46 @@ class Bridgeport():
 
 
         # Set other attributes
-        if 'resname' in self.input_params['Ligand'] and self.input_params['Ligand']['resname'] is not False:
-            
-            if 'Analogue' in self.input_params['Ligand']:
-                self.type = 'small_molecule'
-                self.name = self.input_params['Ligand']['Analogue']['name']
-                self.resname = self.input_params['Ligand']['resname']
-                self.lig_chainid = False
-                    
-            else:
-                self.type = 'small_molecule'
-                self.name = self.input_params['Ligand']['name']
-                self.resname = self.input_params['Ligand']['resname']
-                self.lig_chainid = False
-                    
-        elif 'chainid' in self.input_params['Ligand'] and self.input_params['Ligand']['chainid'] is not False:
-           
-            if 'Analogue' in self.input_params['Ligand']:
+        if 'Ligand' in list(self.input_params.keys()):
+            if 'resname' in self.input_params['Ligand'] and self.input_params['Ligand']['resname'] is not False:
                 
-                if 'small_molecule_params' in self.input_params['Ligand']['Analogue'] and self.input_params['Ligand']['Analogue']['small_molecule_params'] is True:
+                if 'Analogue' in self.input_params['Ligand']:
                     self.type = 'small_molecule'
                     self.name = self.input_params['Ligand']['Analogue']['name']
-                    self.resname = False
-                    self.lig_chainid = self.input_params['Ligand']['chainid']
+                    self.resname = self.input_params['Ligand']['resname']
+                    self.lig_chainid = False
+                        
+                else:
+                    self.type = 'small_molecule'
+                    self.name = self.input_params['Ligand']['name']
+                    self.resname = self.input_params['Ligand']['resname']
+                    self.lig_chainid = False
                     
+            elif 'chainid' in self.input_params['Ligand'] and self.input_params['Ligand']['chainid'] is not False:
+               
+                if 'Analogue' in self.input_params['Ligand']:
+                    
+                    if 'small_molecule_params' in self.input_params['Ligand']['Analogue'] and self.input_params['Ligand']['Analogue']['small_molecule_params'] is True:
+                        self.type = 'small_molecule'
+                        self.name = self.input_params['Ligand']['Analogue']['name']
+                        self.resname = False
+                        self.lig_chainid = self.input_params['Ligand']['chainid']
+                        
+                    else:
+                        self.type = 'peptide'
+                        self.name = self.input_params['Ligand']['Analogue']['name']
+                        self.resname = False
+                        self.lig_chainid = self.input_params['Ligand']['chainid']
+    
                 else:
                     self.type = 'peptide'
-                    self.name = self.input_params['Ligand']['Analogue']['name']
+                    self.name = self.input_params['Ligand']['name']
                     self.resname = False
                     self.lig_chainid = self.input_params['Ligand']['chainid']
-
-            else:
-                self.type = 'peptide'
-                self.name = self.input_params['Ligand']['name']
-                self.resname = False
-                self.lig_chainid = self.input_params['Ligand']['chainid']
+        else:
+            self.type = 'apo'
+            self.name = 'apo'
+            
 
         # Get initial structure
         self.input_pdb_dir = self.input_params['Protein']['input_pdb_dir']
@@ -168,7 +174,7 @@ class Bridgeport():
         self.align_to_reference()
         
         # Build analogue complex
-        if 'Analogue' in self.input_params['Ligand']:
+        if self.type != 'apo' and 'Analogue' in self.input_params['Ligand']:
                 self.get_analogue_MCS()
                 self.build_analogue_complex()
 
@@ -185,7 +191,8 @@ class Bridgeport():
         self.add_environment()
         
         #Prepare Ligand
-        self.ligand_prep()
+        if self.type != 'apo':
+            self.ligand_prep()
         
         #Make OpenMM Systems
         self.generate_systems()
@@ -198,7 +205,7 @@ class Bridgeport():
                 self.choose_analogue_conformer()
 
         # Repositions
-        self.resposition_at_origin()
+        self.reposition_at_origin()
 
 
     def get_analogue_MCS(self, 
@@ -412,18 +419,19 @@ class Bridgeport():
         prot_sele.write(self.prot_pdb)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated chain(s)', self.chain, 'from input structure', flush=True)  
 
-        # Select ligand by resname or peptide_chain        
-        if self.type == 'small_molecule':
-            if self.resname is not False:
-                lig_sele = u.select_atoms(f'resname {self.resname}')
-                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', self.resname, 'from input structure with', lig_sele.n_atoms, 'atoms', flush=True)
-            
-        elif self.type == 'peptide':
-            lig_sele = u.select_atoms(f'chainid {self.lig_chainid}')
-            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', self.lig_chainid, 'from input structure', flush=True)
-
-        self.lig_pdb = os.path.join(self.lig_only_dir, self.name+'.pdb')
-        lig_sele.write(self.lig_pdb)
+        # Select ligand by resname or peptide_chain    
+        if self.type != 'apo':
+            if self.type == 'small_molecule':
+                if self.resname is not False:
+                    lig_sele = u.select_atoms(f'resname {self.resname}')
+                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', self.resname, 'from input structure with', lig_sele.n_atoms, 'atoms', flush=True)
+                
+            elif self.type == 'peptide':
+                lig_sele = u.select_atoms(f'chainid {self.lig_chainid}')
+                print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Separated ligand', self.lig_chainid, 'from input structure', flush=True)
+    
+            self.lig_pdb = os.path.join(self.lig_only_dir, self.name+'.pdb')
+            lig_sele.write(self.lig_pdb)
 
 
     
@@ -619,25 +627,35 @@ class Bridgeport():
         # Iterate through files
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Building parameters for', self.name, flush=True)
         
-        # Generate protein system
-        assert os.path.exists(self.env_pdb), f"Cannot find path to protein file in environment: {prot_path}"
-        prot_sys, prot_top, prot_pos = ForceFieldHandler(self.env_pdb).main()
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
 
         # Get ligand path
-        if self.type == 'small_molecule':
-            lig_path = self.lig_sdf
-        elif self.type == 'peptide':
-            lig_path = self.lig_pdb
-        assert os.path.exists(lig_path), f"Cannot find path to ligand file: {lig_path}"
+        if self.type != 'apo':
+            if self.type == 'small_molecule':
+                lig_path = self.lig_sdf
+            elif self.type == 'peptide':
+                lig_path = self.lig_pdb
+            assert os.path.exists(lig_path), f"Cannot find path to ligand file: {lig_path}"
 
-        # Generate ligand system
-        lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
+            # Generate protein system
+            assert os.path.exists(self.env_pdb), f"Cannot find path to protein file in environment: {self.env_pdb}"
+            prot_sys, prot_top, prot_pos = ForceFieldHandler(self.env_pdb).main()
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
+            
+            # Generate ligand system
+            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
 
-        # Combine systems 
-        self.sys, self.top, self.pos = Joiner((lig_sys, lig_top, lig_pos),  (prot_sys, prot_top, prot_pos)).main()
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'System parameters built.', flush=True)
+            # Combine systems 
+            self.sys, self.top, self.pos = Joiner((lig_sys, lig_top, lig_pos),  (prot_sys, prot_top, prot_pos)).main()
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'System parameters built.', flush=True)
+
+        else:
+            # Generate protein system
+            assert os.path.exists(self.env_pdb), f"Cannot find path to protein file in environment: {self.env_pdb}"
+            self.sys, self.top, self.pos = ForceFieldHandler(self.env_pdb).main()
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
+        
+
 
         # Get energy
         int = LangevinIntegrator(300 * kelvin, 1/picosecond, 0.001 * picosecond)
@@ -654,7 +672,8 @@ class Bridgeport():
             f.write(XmlSerializer.serialize(sim.system))
 
 
-    def resposition_at_origin(self):
+        
+    def reposition_at_origin(self):
         """
         OpenMM does not like having the origin in the middle :)
         """
@@ -670,15 +689,15 @@ class Bridgeport():
         
         # Get energy
         int = LangevinIntegrator(300 * kelvin, 1/picosecond, 0.001 * picosecond)
-        sim = Simulation(self.top, self.sys, int)
-        sim.context.setPositions(self.pos + translate)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
+        self.sim = Simulation(self.top, self.sys, int)
+        self.sim.context.setPositions(self.pos + translate)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(self.sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
         
         # Write out
         with open(self.final_pdb, 'w') as f:
-            PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
+            PDBFile.writeFile(self.sim.topology, self.sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
         with open(self.final_xml, 'w') as f:
-            f.write(XmlSerializer.serialize(sim.system))
+            f.write(XmlSerializer.serialize(self.sim.system))
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system coordinates saved to', self.final_pdb, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Final system parameters saved to', self.final_xml, flush=True)
 
@@ -719,9 +738,10 @@ class Bridgeport():
             f.writelines(lines)
             
         # Load initial structure
-        u = mda.Universe(self.final_pdb)
-        u.select_atoms('all').write(self.final_pdb)
-        traj = md.load_pdb(self.final_pdb)
+        # u = mda.Universe(self.final_pdb)
+        # u.select_atoms('all').write(self.final_pdb)
+        top = md.Topology.from_openmm(self.sim.topology)
+        traj = md.Trajectory(self.sim.context.getState(getPositions=True).getPositions(asNumpy=True)._value, topology=top)
         lig_sele = traj.topology.select(f'resname UNK')
         assert len(lig_sele) > 0
 
