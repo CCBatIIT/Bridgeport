@@ -659,17 +659,17 @@ class Bridgeport():
 
         # Get energy
         int = LangevinIntegrator(300 * kelvin, 1/picosecond, 0.001 * picosecond)
-        sim = Simulation(self.top, self.sys, int)
-        sim.context.setPositions(self.pos)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
+        self.sim = Simulation(self.top, self.sys, int)
+        self.sim.context.setPositions(self.pos)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Initial structure potential energy:', np.round(self.sim.context.getState(getEnergy=True).getPotentialEnergy()._value, 2), flush=True)
         
         # Save combined systems
         self.final_pdb = os.path.join(self.sys_dir, self.name+'.pdb')
         self.final_xml = os.path.join(self.sys_dir, self.name+'.xml')        
         with open(self.final_pdb, 'w') as f:
-            PDBFile.writeFile(sim.topology, sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
+            PDBFile.writeFile(self.sim.topology, self.sim.context.getState(getPositions=True).getPositions(), f, keepIds=True)
         with open(self.final_xml, 'w') as f:
-            f.write(XmlSerializer.serialize(sim.system))
+            f.write(XmlSerializer.serialize(self.sim.system))
 
 
         
