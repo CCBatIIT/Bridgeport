@@ -354,7 +354,7 @@ class Bridgeport():
             raise FileNotFoundError("Cannot find reference structure:", ref_pdb_path)
             
         self.ref = mda.Universe(ref_pdb_path)
-        self.ref_resids = self.ref.residues.resids
+        self.ref_resids = self.ref.select_atoms('chainid ' + ' or '.join(chain for chain in ref_chains)).residues.resids
         
         # Load structure to align
         if os.path.exists(self.input_pdb):
@@ -471,6 +471,7 @@ class Bridgeport():
         u = mda.Universe(self.prot_pdb)
         resids = u.select_atoms('protein').resids
         matching_resids = np.intersect1d(resids, self.ref_resids)
+        print(matching_resids.shape, matching_resids)
         sele_str = 'name CA and resid ' + ' '.join(str(resid) for resid in matching_resids)
         _, _ = alignto(u, self.ref, select=sele_str)
         u.select_atoms('all').write(self.prot_pdb)
