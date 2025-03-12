@@ -235,7 +235,10 @@ class Bridgeport():
             
             # Get template ligand from input structure
             lig_sele = mda.Universe(self.aligned_pdb).select_atoms(f'chainid {self.chain} and resname {self.resname}')
-            lig_sele.write(os.path.join(self.lig_only_dir, self.input_params['Ligand']['name'] + '.pdb'))
+            try:
+                lig_sele.write(os.path.join(self.lig_only_dir, self.input_params['Ligand']['name'] + '.pdb'))
+            except:
+                raise Exception(f'Could not select ligand from {self.aligned_pdb} with chainid {self.chain} and resname {self.resname}')
 
             # Build Ligand
             self.template = Ligand(working_dir=self.lig_only_dir,
@@ -390,6 +393,9 @@ class Bridgeport():
             u.select_atoms('all').write(self.aligned_pdb)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved aligned structure to:', self.aligned_pdb, flush=True)
 
+        else:
+            raise FileNotFoundError(f'Could not locate {self.input_pdb}')
+
     
     
     def separate_lig_prot(self):
@@ -450,7 +456,7 @@ class Bridgeport():
         if 'secondary_template' in params and params['secondary_template'] is not False:
             secondary_template = params['secondary_template']
         if 'tails' in params and params['tails'] is not False:
-            tails = params['tails']
+            self.tails = params['tails']
         if 'loops' in params and params['loops'] is not False:
             loops = params['loops']
         
@@ -463,7 +469,7 @@ class Bridgeport():
         
         protein_reparer.run(pdb_out_fn=self.prot_pdb,
                             secondary_template_pdb=secondary_template,
-                            tails=tails,
+                            tails=self.tails,
                             loops=loops,
                             verbose=self.verbose)
 
@@ -471,7 +477,7 @@ class Bridgeport():
         u = mda.Universe(self.prot_pdb)
         resids = u.select_atoms('protein').resids
         matching_resids = np.intersect1d(resids, self.ref_resids)
-        print(matching_resids.shape, matching_resids)
+        assert matching_resids.shape[0] > 0, f'Could not find matching residues. \n\nResidues in {self.prot_pdb}: {resids}\n\nResidues in OPM: {self.ref_resids}'
         sele_str = 'name CA and resid ' + ' '.join(str(resid) for resid in matching_resids)
         _, _ = alignto(u, self.ref, select=sele_str)
         u.select_atoms('all').write(self.prot_pdb)
@@ -481,7 +487,7 @@ class Bridgeport():
     def add_environment(self, pH: float=7.0, membrane: bool=False, ion_strength: float=0.15):
         """
         Add water, lipids, and hydrogens to protein with the ProteinPreparer class.
-        """
+        """        
         # See if environment parameters are present
         if "Environment" in self.input_params.keys():
             if "pH" in self.input_params["Environment"].keys():
@@ -516,6 +522,14 @@ class Bridgeport():
 
         # Set attr
         self.env_pdb = os.path.join(self.prot_only_dir, self.name+'_env.pdb')
+
+        # Correct resids
+        pdb = md.load_pdb(self.env_pdb)
+        top = pdb.topology
+        if top.residue(0).resSeq == 1:
+            for i in range(top.n_residues):
+                top.residue(i).resSeq += self.tails[0]
+            pdb[0].save_pdb(self.env_pdb)
 
 
     def ligand_prep(self,
