@@ -589,7 +589,8 @@ class Bridgeport():
                             smiles=params['smiles'],
                             verbose=self.verbose)
 
-            ligand.prepare_ligand(pH=pH,
+            ligand.prepare_ligand(small_molecule_params=small_molecule_params,
+                                  pH=pH,
                                   nstd_resids=nstd_resids,
                                   neutral_Cterm=neutral_Cterm)
 
@@ -657,7 +658,7 @@ class Bridgeport():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
             
             # Generate ligand system
-            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
+            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main(use_nonbonded=False)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
 
             # Combine systems 

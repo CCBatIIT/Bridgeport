@@ -34,6 +34,8 @@ sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-2]))
 sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-1]))
 from ligand_utils import *
 from utils.utils import write_FASTA
+from utils.ProteinPreparer import ProteinPreparer
+from RepairProtein.RepairProtein import RepairProtein
 
 class Ligand():
     """
@@ -62,7 +64,7 @@ class Ligand():
         # Peptide?
         if chainid is not False:
             self.chainid = chainid
-            if sequence is not False:
+            if sequence is not None:
                 self.sequence = sequence
             else:
                 self.sequence = False
@@ -115,6 +117,7 @@ class Ligand():
         self.visualize = visualize
         
         # If treating ligand like a small molecule
+        print('!!!!!', small_molecule_params)
         if small_molecule_params:
             self._prepare_small_molecule()
 
@@ -229,11 +232,11 @@ class Ligand():
                         f.write(line)
                     else:
                         f.write(nxt_line) 
+                f.close()
 
-        # Add hydrogens
-        if self.neutral_Cterm or len(self.nstd_resids) > 0:
-            
-            self._prepare_small_molecule()
+            # Protonate again
+            prot_mol_path = pp._protonate_with_PDBFixer()        # THIS DOES NOT ADD NECESSARY HYDROGENS OF NXT :(
+            os.rename(prot_mol_path, self.pdb)
 
             # Clean up extra Hs
             lines = open(self.pdb, 'r').readlines()

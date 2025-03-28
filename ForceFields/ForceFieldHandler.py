@@ -128,7 +128,7 @@ class ForceFieldHandler():
             raise Exception(f'The extension {ext} was not recognized!')
         return mode
 
-    def main(self, use_rdkit: bool=False):
+    def main(self, use_rdkit: bool=False, use_nonbonded: bool=True):
         """
         The intended main usage case.  Parameterize ligands from an SDF file with OpenFF (.offxml) parameters and
         environment/protein from a PDB file with OpenMM (.xml) parameters.
@@ -163,7 +163,10 @@ class ForceFieldHandler():
             ff = ForceField(*self.xmls)
             pdb = PDBFile(self.structure_file)
             top, positions = pdb.getTopology(), pdb.getPositions()
-            sys = ff.createSystem(top, nonbondedMethod=PME) # Make this an adjustable parameter later
+            if use_nonbonded:
+                sys = ff.createSystem(top, nonbondedMethod=PME) 
+            else:
+                sys = ff.createSystem(top)
 
         return (sys, top, positions)
 

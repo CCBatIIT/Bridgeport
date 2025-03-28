@@ -217,7 +217,11 @@ class RepairProtein():
         aln = modeller.Alignment(env)
 
         # Add target sequence
-        aln.append(file=self.fasta_fn, align_codes=(self.fasta_name))
+        try:
+            aln.append(file=self.fasta_fn, align_codes=(self.fasta_name))
+        except:
+            print(open(self.fasta_fn, 'r').readlines())
+            raise Exception(f'Could not find code {self.fasta_name} in {self.fasta_fn}. Contents printed above')
 
         # Add pdb
         m = modeller.Model(env, file=self.pdb_fn)
