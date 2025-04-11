@@ -192,6 +192,7 @@ def embed_rdkit_mol(mol, template_mol=None):
         pdb_block = Chem.MolToPDBBlock(mol)
         mol = Chem.MolFromPDBBlock(pdb_block, proximityBonding=False)
         mol = Chem.AllChem.AssignBondOrdersFromTemplate(template_mol, mol)
+        Chem.AssignStereochemistryFrom3D(mol)
 
     return mol
     

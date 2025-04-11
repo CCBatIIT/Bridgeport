@@ -69,12 +69,10 @@ class Analogue(Ligand):
         if remove_atoms is not None:
             self._remove_atoms_from_MCS(remove_atoms)
 
-        
         # Add user specified atoms
         if add_atoms is not None:
             self._add_atoms_to_MCS(add_atoms)
             
-
         # Print matching atoms
         if self.verbose:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Found matching inds:', flush=True)
@@ -151,7 +149,6 @@ class Analogue(Ligand):
         self.sele.write(self.pdb)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved first conformer to', self.pdb, flush=True)
 
-            
 
     def _detect_MCS(self):
         """
@@ -162,14 +159,14 @@ class Analogue(Ligand):
                                   from_smiles=True,
                                   sanitize=True,
                                   removeHs=True,
-                                  proximityBonding=False)
+                                  proximityBonding=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created analogue', self.name, 'from smiles:', self.smiles , flush=True)
         
         mol2 = self.template.return_rdkit_mol(from_pdb=True,
                           from_smiles=False,
                           sanitize=True,
                           removeHs=True,
-                          proximityBonding=False)
+                          proximityBonding=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created known ligand', self.template.name, 'from smiles:', self.template.smiles , flush=True)
 
         
@@ -218,6 +215,7 @@ class Analogue(Ligand):
                                                                sanitize=True,
                                                                removeHs=True,
                                                                proximityBonding=True)
+        
             
             # Load with MDAnalysis
             self.template_sele = self.template.return_MDA_sele()
@@ -278,7 +276,7 @@ class Analogue(Ligand):
         self.matching_sele = select(self.sele, self.matching_atoms)
         self.template_matching_sele = select(self.template_sele, self.template_matching_atoms, self.template_matching_resids)
 
-        print(self.matching_sele.atoms.names)
+        # print(self.matching_sele.atoms.names)
 
 
 

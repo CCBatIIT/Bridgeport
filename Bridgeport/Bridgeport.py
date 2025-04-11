@@ -259,8 +259,10 @@ class Bridgeport():
                               smiles=self.input_params['Ligand']['smiles'])
 
         # Prepare ligand
-        self.template.prepare_ligand(small_molecule_params=True, proximityBonding=True, visualize=False)
-
+        try:
+            self.template.prepare_ligand(small_molecule_params=True, proximityBonding=True, visualize=False) 
+        except:
+            self.template.prepare_ligand(small_molecule_params=True, proximityBonding=True, visualize=True)
         
         # Build analogue 
         self.analogue = Analogue(template=self.template,

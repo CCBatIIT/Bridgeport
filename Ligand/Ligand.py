@@ -1,5 +1,6 @@
 import textwrap, sys, os, glob, shutil
 import numpy as np
+from copy import deepcopy
 import MDAnalysis as mda
 from MDAnalysis.analysis.align import alignto
 from MDAnalysis.analysis.rms import rmsd
@@ -10,17 +11,8 @@ import mdtraj as md
 from pdbfixer import PDBFixer
 from openbabel import openbabel
 from datetime import datetime
-#OpenFF
-import openff
-import openff.units
-import openff.toolkit
-import openff.interchange
 
-#OpenMM
-from openmm.app import *
-from openmm import *
-from openmm.unit import *
-#rdkit
+# rdkit
 from rdkit import Chem
 from rdkit.Chem import Draw, AllChem
 from rdkit.Chem.Draw import IPythonConsole
@@ -117,7 +109,6 @@ class Ligand():
         self.visualize = visualize
         
         # If treating ligand like a small molecule
-        print('!!!!!', small_molecule_params)
         if small_molecule_params:
             self._prepare_small_molecule()
 
@@ -129,17 +120,27 @@ class Ligand():
     
     def return_rdkit_mol(self, from_pdb: bool=True, 
                                from_smiles: bool=True,
-                               sanitize: bool=None,
-                               removeHs: bool=None,
-                               proximityBonding: bool=None):
+                               sanitize: bool=True,
+                               removeHs: bool=False,
+                               proximityBonding: bool=True):
         """
         """        
         # Load molecules
-        if from_smiles:
-            template = Chem.MolFromSmiles(self.smiles, sanitize=True)
+        template = Chem.MolFromSmiles(self.smiles, sanitize=True)
         if from_pdb:
             mol = Chem.MolFromPDBFile(self.pdb, sanitize=sanitize, removeHs=removeHs, proximityBonding=proximityBonding)
+            
+            # Assign bond order from smiles
+            mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+            Chem.AssignStereochemistryFrom3D(mol, replaceExistingTags=False)
+    
+            # Visualize, if specified
+            if self.visualize:
+                mol_copy = deepcopy(mol)
+                Chem.rdDepictor.Compute2DCoords(mol_copy)
+                display(Draw.MolsToGridImage([mol_copy], subImgSize=(600,600)))
 
+        
         if from_pdb and from_smiles:
             return template, mol
         elif from_pdb:
@@ -166,12 +167,7 @@ class Ligand():
         """
         # Load input w/ rdkit
         template, mol = self.return_rdkit_mol(sanitize=self.sanitize, removeHs=self.removeHs, proximityBonding=self.proximityBonding)
-        if self.visualize:
-            display(Draw.MolsToGridImage([template], subImgSize=(600,600)))
-
-        # Assign bond order from smiles
-        mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
-
+        
         # Add Hs
         mol = AllChem.AddHs(mol, addCoords=True, addResidueInfo=True)
 
