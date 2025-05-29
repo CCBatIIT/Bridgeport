@@ -369,7 +369,11 @@ class Bridgeport():
             u = mda.Universe(self.input_pdb)
             
             #Make the selection
-            chain_sele_str = f'chainid {self.chain}'
+            if len(self.chain) > 1:
+                chain_sele_str = f'chainid {self.chain.split()[0]}'
+            else:
+                chain_sele_str = f'chainid {self.chain}'
+            print(chain_sele_str)
             chain_sele = u.select_atoms(chain_sele_str)
 
             # Get resids
@@ -385,11 +389,16 @@ class Bridgeport():
                            ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
                            ' and backbone'
             # Align
-            _, _ = alignto(mobile=u, 
-                    reference=self.ref,
-                    select={'mobile': sele_str,
-                          'reference': ref_sele_str})
-            
+            try:
+                _, _ = alignto(mobile=u, 
+                        reference=self.ref,
+                        select={'mobile': sele_str,
+                              'reference': ref_sele_str})
+            except:
+                print('Mobile sele str:', sele_str)
+                print('Ref sele str:', ref_sele_str)
+                raise Exception('Could not find match')
+                
             # Save 
             self.aligned_pdb = os.path.join(self.aligned_input_dir, self.name+'.pdb')
             u.select_atoms('all').write(self.aligned_pdb)
@@ -481,7 +490,10 @@ class Bridgeport():
         matching_resids = np.intersect1d(resids, self.ref_resids)
         assert matching_resids.shape[0] > 0, f'Could not find matching residues. \n\nResidues in {self.prot_pdb}: {resids}\n\nResidues in OPM: {self.ref_resids}'
         sele_str = 'name CA and resid ' + ' '.join(str(resid) for resid in matching_resids)
-        _, _ = alignto(u, self.ref, select=sele_str)
+        try:
+            _, _ = alignto(u, self.ref, select=sele_str)
+        except:
+            raise Exception(f'Could not find matching selection with selection string: {sele_str}')
         u.select_atoms('all').write(self.prot_pdb)
         
 

@@ -131,7 +131,15 @@ class Ligand():
             mol = Chem.MolFromPDBFile(self.pdb, sanitize=sanitize, removeHs=removeHs, proximityBonding=proximityBonding)
             
             # Assign bond order from smiles
-            mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+            try:
+                mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+            except:
+                mol_copy = deepcopy(mol)
+                Chem.rdDepictor.Compute2DCoords(mol_copy)
+                display(Draw.MolsToGridImage([mol_copy], subImgSize=(600,600)))
+                display(Draw.MolsToGridImage([template], subImgSize=(600,600)))
+                raise Exception(f'Could not find match between molecule smiles: {Chem.MolToSmiles(mol)} and template: {Chem.MolToSmiles(template)}')
+
             Chem.AssignStereochemistryFrom3D(mol, replaceExistingTags=False)
     
             # Visualize, if specified
