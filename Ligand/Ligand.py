@@ -62,10 +62,9 @@ class Ligand():
                 self.sequence = False
 
 
-        else:
+        if chainid is not False and resname is not False:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Must set either resname or chainid', flush=True)
-
-    
+                  
 
     def prepare_ligand(self, 
                        small_molecule_params: bool=True,

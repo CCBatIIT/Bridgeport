@@ -373,7 +373,6 @@ class Bridgeport():
                 chain_sele_str = f'chainid {self.chain.split()[0]}'
             else:
                 chain_sele_str = f'chainid {self.chain}'
-            print(chain_sele_str)
             chain_sele = u.select_atoms(chain_sele_str)
 
             # Get resids
@@ -384,10 +383,11 @@ class Bridgeport():
                         
             sele_str = chain_sele_str +\
                        ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
-                       ' and backbone'
+                       ' and name CA'
             ref_sele_str = 'chainid ' + ' or '.join(chain for chain in ref_chains) +\
                            ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
-                           ' and backbone'
+                           ' and name CA'
+            
             # Align
             try:
                 _, _ = alignto(mobile=u, 
@@ -396,7 +396,9 @@ class Bridgeport():
                               'reference': ref_sele_str})
             except:
                 print('Mobile sele str:', sele_str)
+                print('Mobile sele:', u.select_atoms(sele_str).residues.resids)
                 print('Ref sele str:', ref_sele_str)
+                print('Ref sele:', self.ref.select_atoms(ref_sele_str).residues.resids)
                 raise Exception('Could not find match')
                 
             # Save 
@@ -785,7 +787,7 @@ class Bridgeport():
         # Choose minimum PE
         conf_pdb = self.analogue_pdbs[list(potential_energies).index(potential_energies.min())]
         conf_path = os.path.join(self.analogue.conformer_dir, conf_pdb)
-        temp_conf_pdb, final_PE = _minimize_new_lig_coords(traj, lig_sele, conf_path, min_out_pdb=self.final_pdb)     
+        shutil.copy(os.path.join(min_sys_dir, conf_pdb), self.final_pdb)
 
         # Clean 
         if os.path.exists(temp_conf_pdb):
