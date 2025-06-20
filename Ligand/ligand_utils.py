@@ -10,7 +10,9 @@ from typing import List
 from datetime import datetime
 import rdkit
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.Chem import rdForceFieldHelpers
+from rdkit.Chem.AllChem import AssignBondOrdersFromTemplate
 
 
 
@@ -175,9 +177,13 @@ def select(sele: mda.AtomGroup, atoms: List[str], resids: List[int]=None):
 
     return new_sele 
 
+
+
 def embed_rdkit_mol(mol, template_mol=None):
 
-    # Embed
+    # Add Hs and Embed
+    template_mol = AllChem.AddHs(template_mol)
+    mol = AllChem.AddHs(mol)
     Chem.AllChem.EmbedMolecule(mol)
 
     # Minimize
@@ -190,12 +196,15 @@ def embed_rdkit_mol(mol, template_mol=None):
     # Get PDB naming with correct bond orders if template is provided
     if template_mol is not None:
         pdb_block = Chem.MolToPDBBlock(mol)
-        mol = Chem.MolFromPDBBlock(pdb_block, proximityBonding=False)
+        mol = Chem.MolFromPDBBlock(pdb_block, removeHs=False, proximityBonding=False)
         mol = Chem.AllChem.AssignBondOrdersFromTemplate(template_mol, mol)
         Chem.AssignStereochemistryFrom3D(mol)
 
+    mol = AllChem.RemoveHs(mol)
+
     return mol
-    
+
+
 
 
 
