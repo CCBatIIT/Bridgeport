@@ -25,9 +25,7 @@ from typing import List
 sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-2]))
 sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-1]))
 from ligand_utils import *
-from utils.utils import write_FASTA
-from utils.ProteinPreparer import ProteinPreparer
-from RepairProtein.RepairProtein import RepairProtein
+
 
 class Ligand():
     """
@@ -189,6 +187,9 @@ class Ligand():
     def _prepare_peptide(self):
         """
         """
+        from utils.utils import write_FASTA
+        from utils.ProteinPreparer import ProteinPreparer
+        from RepairProtein.RepairProtein import RepairProtein
         # Repair with RepairProtein
         if self.sequence is not False:
             # Write fasta
