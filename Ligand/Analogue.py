@@ -22,7 +22,6 @@ import warnings
 warnings.filterwarnings("ignore")
 sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-2]))
 sys.path.append('/'.join(os.path.abspath(__file__).split('/')[:-1]))
-from utils.utils import write_FASTA
 try:
     from Ligand.Ligand import Ligand
 except:
@@ -57,10 +56,12 @@ class Analogue(Ligand):
     def get_MCS(self, 
                 subImgSize: tuple=(600,600),
                 add_atoms: List[List[int]]=None,
-                remove_atoms: List[int]=None):
+                remove_atoms: List[int]=None,
+                strict: bool=False):
         """
         """
         # Detect MCS
+        self.strict = strict
         self._detect_MCS()
         self.matching_inds = deepcopy(self.align_inds)
         self.template_matching_inds = deepcopy(self.template_align_inds)
@@ -80,7 +81,7 @@ class Analogue(Ligand):
                 print(f'atom={atom}, ref_atom={ref_atom}')
 
         # Draw molecules
-        template_mol_copy = deepcopy(self.template_mol)
+        template_mol_copy = Chem.Mol(self.template_mol)
         Chem.rdDepictor.Compute2DCoords(template_mol_copy)
         dopts = Chem.Draw.rdMolDraw2D.MolDrawOptions()
         dopts.addAtomIndices = True
@@ -172,10 +173,11 @@ class Analogue(Ligand):
         
         # Set parameters
         params = rdFMCS.MCSParameters()
-        params.AtomCompareParameters.CompleteRingsOnly = True
-        params.AtomCompareParameters.MatchValences = True
-        params.AtomCompareParameters.RingMatchesRingOnly = True
-        params.BondCompareParameters.MatchFusedRingsStrict = True
+        if self.strict:
+            params.AtomCompareParameters.CompleteRingsOnly = True
+            params.AtomCompareParameters.MatchValences = True
+            params.AtomCompareParameters.RingMatchesRingOnly = True
+            params.BondCompareParameters.MatchFusedRingsStrict = True
 
         # Compute MCS
         mcs = rdFMCS.FindMCS([mol1,mol2], params)

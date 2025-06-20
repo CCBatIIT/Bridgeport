@@ -210,7 +210,8 @@ class Bridgeport():
 
     def get_analogue_MCS(self, 
                          add_atoms: List[List[int]]=None, 
-                         remove_atoms: List[int]=None):
+                         remove_atoms: List[int]=None,
+                         strict: bool=True):
         """
         Get the maximum common substructure of an analogue (from smiles) and a template ligand with an experimental structure. 
 
@@ -277,7 +278,7 @@ class Bridgeport():
         if 'remove_atoms' in self.input_params['Ligand']['Analogue'] and self.input_params['Ligand']['Analogue']['remove_atoms'] is not False:
             remove_atoms = self.input_params['Ligand']['Analogue']['remove_atoms']
 
-        self.analogue.get_MCS(add_atoms=add_atoms, remove_atoms=remove_atoms)
+        self.analogue.get_MCS(add_atoms=add_atoms, remove_atoms=remove_atoms, strict=strict)
 
                          
     

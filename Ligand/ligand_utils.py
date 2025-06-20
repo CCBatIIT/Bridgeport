@@ -196,7 +196,10 @@ def embed_rdkit_mol(mol, template_mol=None):
 
     return mol
     
-
+def mol_with_atom_idx(mol):
+    for atom in mol.GetAtoms():
+        atom.SetAtomMapNum(atom.GetIdx())
+    return mol
 
 
     
