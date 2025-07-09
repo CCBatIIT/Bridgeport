@@ -212,4 +212,105 @@ def mol_with_atom_idx(mol):
     return mol
 
 
+
+def compute_C_positions(A, B, angle_deg=120.0, length=1.03):
+    A = np.array(A)
+    B = np.array(B)
+    
+    # Step 1: BA vector
+    BA = A - B
+    BA_unit = BA / np.linalg.norm(BA)
+
+    # Step 2: Define a perpendicular vector in the same plane
+    # Choose a normal to define the plane — default is Z
+    ref = np.array([0, 0, 1])
+    plane_normal = np.cross(BA, ref)
+    if np.linalg.norm(plane_normal) < 1e-6:
+        # BA is parallel to Z, pick a different reference
+        ref = np.array([0, 1, 0])
+        plane_normal = np.cross(BA, ref)
+    plane_normal /= np.linalg.norm(plane_normal)
+
+    # Vector perpendicular to BA, in the plane
+    perp = np.cross(plane_normal, BA_unit)
+    perp /= np.linalg.norm(perp)
+
+    # Step 3: Rotate by ±θ
+    theta = np.deg2rad(angle_deg)
+    
+    # First C position (rotation in one direction)
+    BC1 = (np.cos(theta) * BA_unit + np.sin(theta) * perp) * length
+    C1 = B + BC1
+
+    # Second C position (mirror across BA, i.e., -theta)
+    BC2 = (np.cos(theta) * BA_unit - np.sin(theta) * perp) * length
+    C2 = B + BC2
+
+    return C1, C2
+
+
+def remove_xml_atoms(xml_fn, resname, remove_atoms, change_atoms, external_bonds=None):
+
+    import xml.etree.ElementTree as ET
+    tree = ET.parse(xml_fn)
+    root = tree.getroot()
+    
+    # Remove atom types
+    # remove_types = []
+    # atom_types = root.find('AtomTypes')
+    # for at in list(atom_types):
+    #     name = at.attrib.get('name').split('-')[1]
+    #     if name in remove_atoms:
+    #         remove_types.append(at.attrib.get('name'))
+    #         atom_types.remove(at)
+    
+    # Remove residues
+    for r in list(root.find('Residues')):
+        r.attrib['name'] = resname
+        
+        # Remove atoms
+        change_types = {}
+        for atom in list(r.findall('Atom')):
+            if atom.attrib.get('name') in remove_atoms:
+                r.remove(atom)
+            if atom.attrib.get('name') in change_atoms.keys():
+                change_types[atom.attrib.get('type')] = change_atoms[atom.attrib.get('name')]
+        
+        # Remove bonds
+        for bond in list(r.findall('Bond')):
+            if bond.attrib.get('atomName1') in remove_atoms or bond.attrib.get('atomName2') in remove_atoms:
+                r.remove(bond)
+    
+        # Add external bond
+        if external_bonds != None:
+            for atom_name in external_bonds:
+                r.append(ET.Element('ExternalBond', {'atomName': atom_name}))
+    
+    # # Remove forces
+    def change_force_entries(section_name, *attrib_keys):
+        section = root.find(section_name)
+        if section is not None:
+            for entry in list(section):
+                new_entry_needed = False
+                new_entry = {}
+                for k in entry.keys():
+                    if entry.attrib.get(k) in change_types.keys():
+                        new_entry_needed = True
+                        new_entry[k] = change_types[entry.attrib.get(k)]
+                    else:
+                        new_entry[k] = entry.attrib.get(k)
+                        
+                if new_entry_needed:
+                    section.append(ET.Element(entry.tag, new_entry))
+    
+    change_force_entries("HarmonicBondForce", "type1", "type2")
+    change_force_entries("HarmonicAngleForce", "type1", "type2", "type3")
+    change_force_entries("PeriodicTorsionForce", "type1", "type2", "type3", "type4")
+    # change_force_entries("NonbondedForce", "type")
+    
+    tree.write(xml_fn, encoding="utf-8", xml_declaration=True)
+
+
+
+
     

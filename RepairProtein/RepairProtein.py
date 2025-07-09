@@ -5,9 +5,9 @@ from modeller import *
 from modeller.automodel import *
 import mdtraj as md
 import numpy as np
+import MDAnalysis as mda
 from pdbfixer import PDBFixer
 from openmm.app import PDBFile
-import mdtraj as md
 from datetime import datetime
 from typing import List
 modeller.log.none()
@@ -147,6 +147,9 @@ class RepairProtein():
             self.secondary_name = self.secondary_template_pdb.split('/')[-1].split('.')[0]
             shutil.copy(self.secondary_template_pdb, os.path.join(self.working_dir, self.secondary_name + '.pdb'))
 
+        # Make a copy for alignment purposes
+        temp_pdb = os.path.join(os.path.dirname(self.pdb_fn), os.path.basename(self.pdb_fn).split('.')[0] + '_temp.pdb')
+        shutil.copy(self.pdb_fn, temp_pdb)
         
         # Find mutated/missing residues
         self._align_sequences()
@@ -203,6 +206,17 @@ class RepairProtein():
             for line in pdb_lines:
                 f.write(line)
 
+        # Alignment correction
+        u = mda.Universe(self.pdb_out_fn)
+        resids = u.atoms.resids
+        ref_u = mda.Universe(temp_pdb)
+        ref_resids = ref_u.atoms.resids
+        matching_resids = np.intersect1d(resids, ref_resids)
+        b, a = mda.analysis.align.alignto(u, ref_u, select=f'name CA and resid {" ".join(str(r) for r in matching_resids)}')
+        u.atoms.write(self.pdb_out_fn)
+        os.remove(temp_pdb)
+        
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Moved protein from', b, 'to', a, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
 
     

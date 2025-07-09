@@ -38,12 +38,13 @@ class Analogue(Ligand):
     def __init__(self, template: Ligand, working_dir: str, name: str, 
                      resname: str=False, smiles: str=False,
                      chainid: str=False, sequence: str=False,
-                     verbose: bool=False):
+                     verbose: bool=False, visualize: bool=True):
         """
         """
 
         # Initialize inheritated attributes
         super().__init__(working_dir, name, resname, smiles, chainid, sequence, verbose)
+        self.visualize = visualize
 
         # Assign new attributes
         self.template = template
@@ -57,12 +58,38 @@ class Analogue(Ligand):
                 subImgSize: tuple=(600,600),
                 add_atoms: List[List[int]]=None,
                 remove_atoms: List[int]=None,
-                strict: bool=False):
+                strict: bool=False,
+                removeHs: bool=True,
+                from_pdb: bool=False,
+                from_smiles: bool=True,
+                sanitize: bool=True,
+                proximityBonding: bool=True):
         """
         """
+
+        # Set attributes
+        self.sanitize = sanitize
+        self.removeHs = removeHs
+        self.proximityBonding = proximityBonding
+
+        # Get rdkit molecules
+        mol = self.return_rdkit_mol(from_pdb=from_pdb,
+                                  from_smiles=from_smiles,
+                                  sanitize=self.sanitize,
+                                  removeHs=self.removeHs,
+                                  proximityBonding=self.proximityBonding)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created analogue', self.name, 'from smiles:', self.smiles , flush=True)
+        
+        template_mol = self.template.return_rdkit_mol(from_pdb=True,
+                          from_smiles=False,
+                          sanitize=True,
+                          removeHs=False,
+                          proximityBonding=True)
+        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created known ligand', self.template.name, 'from smiles:', self.template.smiles , flush=True)
+        
         # Detect MCS
         self.strict = strict
-        self._detect_MCS()
+        self._detect_MCS(mol, template_mol)
         self.matching_inds = deepcopy(self.align_inds)
         self.template_matching_inds = deepcopy(self.template_align_inds)
 
@@ -81,15 +108,16 @@ class Analogue(Ligand):
                 print(f'atom={atom}, ref_atom={ref_atom}')
 
         # Draw molecules
-        template_mol_copy = Chem.Mol(self.template_mol)
-        Chem.rdDepictor.Compute2DCoords(template_mol_copy)
-        dopts = Chem.Draw.rdMolDraw2D.MolDrawOptions()
-        dopts.addAtomIndices = True
-        print('Analogue, Template')
-        display(Draw.MolsToGridImage([self.mol, template_mol_copy],
-                                     subImgSize=subImgSize,
-                                     highlightAtomLists=[self.matching_inds, self.template_matching_inds],
-                                     drawOptions=dopts))
+        if self.visualize:
+            template_mol_copy = Chem.Mol(self.template_mol)
+            Chem.rdDepictor.Compute2DCoords(template_mol_copy)
+            dopts = Chem.Draw.rdMolDraw2D.MolDrawOptions()
+            dopts.addAtomIndices = True
+            print('Analogue, Template')
+            display(Draw.MolsToGridImage([self.mol, template_mol_copy],
+                                         subImgSize=subImgSize,
+                                         highlightAtomLists=[self.matching_inds, self.template_matching_inds],
+                                         drawOptions=dopts))
 
     
 
@@ -151,25 +179,13 @@ class Analogue(Ligand):
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved first conformer to', self.pdb, flush=True)
 
 
-    def _detect_MCS(self):
+    def _detect_MCS(self, mol1, mol2):
         """
         Return indices of maximum common substructure between two rdkit molecules
-        """
-        # Get rdkit molecules
-        mol1 = self.return_rdkit_mol(from_pdb=False,
-                                  from_smiles=True,
-                                  sanitize=True,
-                                  removeHs=True,
-                                  proximityBonding=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created analogue', self.name, 'from smiles:', self.smiles , flush=True)
-        
-        mol2 = self.template.return_rdkit_mol(from_pdb=True,
-                          from_smiles=False,
-                          sanitize=True,
-                          removeHs=True,
-                          proximityBonding=True)
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Created known ligand', self.template.name, 'from smiles:', self.template.smiles , flush=True)
 
+        mol1 should be analogue, mol2 should be template
+        
+        """
         
         # Set parameters
         params = rdFMCS.MCSParameters()

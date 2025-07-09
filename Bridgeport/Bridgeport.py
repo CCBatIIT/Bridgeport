@@ -13,6 +13,7 @@ from ForceFields.ForceFieldHandler import ForceFieldHandler
 from ForceFields.OpenMMJoiner import Joiner
 from Ligand.Ligand import Ligand
 from Ligand.Analogue import Analogue
+from Ligand.MutatedPeptide import MutatedPeptide
 from Minimizer.Minimizer import Minimizer
 from openmm.app import *
 from openmm import *
@@ -471,8 +472,6 @@ class Bridgeport():
             secondary_template = params['secondary_template']
         if 'tails' in params and params['tails'] is not False:
             self.tails = params['tails']
-        if 'loops' in params and params['loops'] is not False:
-            loops = params['loops']
         
 
         # Run with secondary template if specified
@@ -484,22 +483,10 @@ class Bridgeport():
         protein_reparer.run(pdb_out_fn=self.prot_pdb,
                             secondary_template_pdb=secondary_template,
                             tails=self.tails,
-                            loops=loops,
+                            loops=False,
                             verbose=self.verbose)
 
-        # Align 
-        u = mda.Universe(self.prot_pdb)
-        resids = u.select_atoms('protein').resids
-        matching_resids = np.intersect1d(resids, self.ref_resids)
-        assert matching_resids.shape[0] > 0, f'Could not find matching residues. \n\nResidues in {self.prot_pdb}: {resids}\n\nResidues in OPM: {self.ref_resids}'
-        sele_str = 'name CA and resid ' + ' '.join(str(resid) for resid in matching_resids)
-        try:
-            _, _ = alignto(u, self.ref, select=sele_str)
-        except:
-            raise Exception(f'Could not find matching selection with selection string: {sele_str}')
-        u.select_atoms('all').write(self.prot_pdb)
         
-
     
     def add_environment(self, pH: float=7.0, membrane: bool=False, ion_strength: float=0.15):
         """
@@ -557,7 +544,10 @@ class Bridgeport():
                     sequence: str=None,
                     nstd_resids: List[int]=None,
                     pH: float=7.0,
-                    neutral_Cterm: bool=False):
+                    neutral_Cterm: bool=False,
+                    loops=False,
+                    chain=False,
+                    smiles=False):
         """ 
         Prepare ligand for OpenFF parameterization.
 
@@ -584,34 +574,75 @@ class Bridgeport():
             nstd_resids = params['nstd_resids']
         if 'neutral_Cterm' in params.keys():
             neutral_Cterm = params['neutral_Cterm']
+        if 'smiles' in params.keys():
+            smiles = params['smiles']
+        if 'loops' in params.keys():
+            loops = params['loops']
+        if 'chain' in params.keys():
+            chain = params['chain']
 
         # Prepare based on type of ligand
         if self.type == 'small_molecule':
             ligand = Ligand(working_dir=self.lig_only_dir, 
                             name=self.name,
                             resname=self.resname,
-                            smiles=params['smiles'],
+                            smiles=smiles,
                             verbose=self.verbose)
 
             ligand.prepare_ligand(small_molecule_params=small_molecule_params,
                                   sanitize=sanitize,
                                   removeHs=removeHs,
                                   proximityBonding=proximityBonding)
-            
+                                  
+            self.lig_sdf = ligand.sdf
+
         elif self.type == 'peptide':
-            ligand = Ligand(working_dir=self.lig_only_dir,
-                            name=self.name,
-                            chainid=self.lig_chainid,
-                            sequence=sequence,
-                            smiles=params['smiles'],
-                            verbose=self.verbose)
 
-            ligand.prepare_ligand(small_molecule_params=small_molecule_params,
-                                  pH=pH,
-                                  nstd_resids=nstd_resids,
-                                  neutral_Cterm=neutral_Cterm)
+            if 'MutatedPeptide' in self.input_params['Ligand'].keys():
+                mp_params = self.input_params['Ligand']['MutatedPeptide']
 
-        self.lig_sdf = ligand.sdf
+                # Prepare reference peptide for mutation
+                ref_name = self.name + '_reference'
+                shutil.move(self.lig_pdb, os.path.join(self.lig_only_dir, ref_name + '.pdb'))
+                reference = Ligand(working_dir=self.lig_only_dir, name=ref_name, chainid=params['chain'], sequence=sequence)
+                reference.prepare_ligand(small_molecule_params=False, removeHs=False)
+
+                # Mutate
+                ligand = MutatedPeptide(template=reference, replace_resid=mp_params['mutation_resid'], replace_resname=mp_params['mutation_resname'], replace_smiles=mp_params['mutation_smiles'], working_dir=self.lig_only_dir, name=self.name, chainid=params['chain'])
+                if 'remove_atoms' in mp_params.keys():
+                    remove_atoms = mp_params['remove_atoms']
+                else:
+                    remove_atoms = []
+                if 'change_atoms' in mp_params.keys():
+                    change_atoms = mp_params['change_atoms']
+                else:
+                    change_atoms = {}
+                if 'bonds_to_add' in mp_params.keys():
+                    bonds_to_add = mp_params['bonds_to_add']
+                else:
+                    bonds_to_add = None
+                if 'external_bonds' in mp_params.keys():
+                    external_bonds = mp_params['external_bonds']
+                else:
+                    external_bonds = None
+                ligand.run(remove_atoms=remove_atoms, change_atoms=change_atoms, bonds_to_add=bonds_to_add, external_bonds=external_bonds)
+                self.ligand_xml = ligand.analogue.xml
+                
+            else:
+                ligand = Ligand(working_dir=self.lig_only_dir,
+                                name=self.name,
+                                chainid=self.lig_chainid,
+                                sequence=sequence,
+                                smiles=smiles,
+                                verbose=self.verbose)
+    
+                ligand.prepare_ligand(small_molecule_params=small_molecule_params,
+                                      pH=pH,
+                                      nstd_resids=nstd_resids,
+                                      neutral_Cterm=neutral_Cterm,
+                                      loops=loops,
+                                      chain=chain)
+
 
 
         # If analogues were generated, prepare those too
@@ -675,9 +706,12 @@ class Bridgeport():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
             
             # Generate ligand system
-            lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main(use_nonbonded=False)
+            if 'MutatedPeptide' in self.input_params['Ligand'].keys():
+                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=[self.ligand_xml]).main(use_nonbonded=False)
+            else:
+                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main(use_nonbonded=False)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
-
+            
             # Combine systems 
             self.sys, self.top, self.pos = Joiner((lig_sys, lig_top, lig_pos),  (prot_sys, prot_top, prot_pos)).main()
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'System parameters built.', flush=True)

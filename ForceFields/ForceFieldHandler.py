@@ -1,7 +1,8 @@
 import textwrap, sys, os, pathlib, json, warnings
+from copy import deepcopy
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import Descriptors, Draw
+from rdkit.Chem import Descriptors, Draw, AllChem
 
 #OpenFF
 import openff
@@ -128,7 +129,7 @@ class ForceFieldHandler():
             raise Exception(f'The extension {ext} was not recognized!')
         return mode
 
-    def main(self, use_rdkit: bool=False, use_nonbonded: bool=True):
+    def main(self, use_nonbonded: bool=True):
         """
         The intended main usage case.  Parameterize ligands from an SDF file with OpenFF (.offxml) parameters and
         environment/protein from a PDB file with OpenMM (.xml) parameters.
@@ -142,16 +143,11 @@ class ForceFieldHandler():
             (sys, top, positions): tuple - A 3-tuple of OpenMM System, OpenMM Topology, and coordinate array of positions
         """
         if self.working_mode == 'OpenFF':
-            if use_rdkit:
-                rdkit_mol = Chem.MolFromPDBFile(self.structure_file, removeHs=False, proximityBonding=False)
-                display(rdkit_mol)
-                mol = openff.toolkit.Molecule.from_rdkit(rdkit_mol, hydrogens_are_explicit=True)
-            else:
-                try:
-                    mol = openff.toolkit.Molecule.from_file(self.structure_file)
-                except:
-                    warnings.warn('WARNING: ATTEMPTING TO ALLOW UNDEFINED STEREOCHEMISTRY. CHECK OUTPUT SsTRUCTURE CAREFULLY')
-                    mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
+            try:
+                mol = openff.toolkit.Molecule.from_file(self.structure_file)
+            except:
+                warnings.warn('WARNING: ATTEMPTING TO ALLOW UNDEFINED STEREOCHEMISTRY. CHECK OUTPUT STRUCTURE CAREFULLY')
+                mol = openff.toolkit.Molecule.from_file(self.structure_file, allow_undefined_stereo=True)
             ff = openff.toolkit.ForceField(*self.xmls)
             cubic_box = openff.units.Quantity(30 * np.eye(3), openff.units.unit.angstrom)
             self.interchange = openff.interchange.Interchange.from_smirnoff(topology=[mol], force_field=ff, box=cubic_box)
@@ -169,40 +165,3 @@ class ForceFieldHandler():
                 sys = ff.createSystem(top)
 
         return (sys, top, positions)
-
-    def generate_custom_xml(self, out_xml: str, name: str):
-        """
-        Generate a custom .xml to pass to Handler.  This is done by loading the self.structure_file into OpenFF, parameterizing,
-        and writing out prmtop.  This is used as input to a custom python script (write_xml_pretty.py) which generates an OpenMM
-        XML file from a prmtop file.
-
-        Parameters:
-            out_xml: string: Path to the created xml file
-            name: string: atom-prefix for the xml file (atomtypes will be name-H, name-CA for example)
-
-        Returns:
-            None
-        """
-
-        # Invoke main to define the self.interchange object (as OpenFF Interchange)
-        self.working_mode = 'OpenFF'
-        self.xmls = self.default_xmls[self.working_mode]
-        _, _, _ = self.main(use_rdkit=True)
-
-        # Write out to .prmtop
-        out_pre = out_xml.split('.xml')[0]
-        out_prmtop = out_pre + '.prmtop'
-        self.interchange.to_prmtop(out_prmtop)
-
-        # Write write_xml_pretty_input.json
-        input_json = f'{pathlib.Path(__file__).parent.resolve()}/write_xml_pretty_input.json'
-        data = json.load(open(input_json, 'r'))
-
-        data['fname_prmtop'] = out_prmtop
-        data['fname_xml'] = out_xml
-        data['ff_prefix'] = str(name)
-
-        json.dump(data, open(input_json, 'w'), indent=6)
-        
-        # Use write_xml_pretty.py to convert .prmtop to .xml
-        os.system(f'python {pathlib.Path(__file__).parent.resolve()}/write_xml_pretty.py -i {input_json}')  

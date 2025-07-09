@@ -72,7 +72,9 @@ class Ligand():
                        pH: float=7.0,
                        nstd_resids: List[int]=[],
                        neutral_Cterm: bool=False,
-                       visualize: bool=True):
+                       loops: bool=False,
+                       chain: str=False,
+                       visualize: bool=False):
         """
         Prepare a ligand
 
@@ -104,6 +106,8 @@ class Ligand():
         self.nstd_resids = nstd_resids
         self.neutral_Cterm = neutral_Cterm
         self.visualize = visualize
+        self.chain = chain
+        self.loops = loops
         
         # If treating ligand like a small molecule
         if small_molecule_params:
@@ -113,6 +117,11 @@ class Ligand():
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Found peptide ligand with resname:', self.chainid, flush=True)
             self._prepare_peptide()
 
+        # Change chain, if specified
+        if self.chain != False:
+            u = mda.Universe(self.pdb)
+            u.atoms.chainIDs = self.chain
+            u.atoms.write(self.pdb)
 
     
     def return_rdkit_mol(self, from_pdb: bool=True, 
@@ -123,27 +132,33 @@ class Ligand():
         """
         """        
         # Load molecules
-        template = Chem.MolFromSmiles(self.smiles, sanitize=True)
+        if from_smiles:
+            template = Chem.MolFromSmiles(self.smiles, sanitize=True)
         if from_pdb:
             mol = Chem.MolFromPDBFile(self.pdb, sanitize=sanitize, removeHs=removeHs, proximityBonding=proximityBonding)
-            
-            # Assign bond order from smiles
-            try:
-                mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
-            except:
-                mol_copy = deepcopy(mol)
-                Chem.rdDepictor.Compute2DCoords(mol_copy)
-                display(Draw.MolsToGridImage([mol_copy], subImgSize=(600,600)))
-                display(Draw.MolsToGridImage([template], subImgSize=(600,600)))
-                raise Exception(f'Could not find match between molecule smiles: {Chem.MolToSmiles(mol)} and template: {Chem.MolToSmiles(template)}')
+
+            if from_smiles:
+                
+                # Assign bond order from smiles
+                try:
+                    mol = AllChem.AssignBondOrdersFromTemplate(template, mol)
+                except:
+                    mol_copy = deepcopy(mol)
+                    Chem.rdDepictor.Compute2DCoords(mol_copy)
+                    display(Draw.MolsToGridImage([mol_copy], subImgSize=(600,600)))
+                    display(Draw.MolsToGridImage([template], subImgSize=(600,600)))
+                    raise Exception(f'Could not find match between molecule smiles: {Chem.MolToSmiles(mol)} and template: {Chem.MolToSmiles(template)}')
 
             Chem.AssignStereochemistryFrom3D(mol, replaceExistingTags=False)
     
-            # Visualize, if specified
-            if self.visualize:
+        # Visualize, if specified
+        if self.visualize:
+            if from_pdb:
                 mol_copy = deepcopy(mol)
-                Chem.rdDepictor.Compute2DCoords(mol_copy)
-                display(Draw.MolsToGridImage([mol_copy], subImgSize=(600,600)))
+            else:
+                mol_copy = deepcopy(template)
+            Chem.rdDepictor.Compute2DCoords(mol_copy)
+            display(Draw.MolsToGridImage([mol_copy], subImgSize=(600,600)))
 
         
         if from_pdb and from_smiles:
@@ -171,15 +186,15 @@ class Ligand():
         """
         """
         # Load input w/ rdkit
-        template, mol = self.return_rdkit_mol(sanitize=self.sanitize, removeHs=self.removeHs, proximityBonding=self.proximityBonding)
+        template, self.mol = self.return_rdkit_mol(sanitize=self.sanitize, removeHs=self.removeHs, proximityBonding=self.proximityBonding)
         
         # Add Hs
-        mol = AllChem.AddHs(mol, addCoords=True, addResidueInfo=True)
+        self.mol = AllChem.AddHs(self.mol, addCoords=True, addResidueInfo=False)
 
         # Save
-        Chem.MolToPDBFile(mol, self.pdb)
+        Chem.MolToPDBFile(self.mol, self.pdb)
         writer = Chem.SDWriter(self.sdf)
-        writer.write(mol)
+        writer.write(self.mol)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', self.pdb, self.sdf, flush=True)
 
 
@@ -205,7 +220,7 @@ class Ligand():
             repairer.run(pdb_out_fn=self.pdb,
                          tails=True,
                          nstd_resids=self.nstd_resids,
-                         loops=False)
+                         loops=self.loops)
 
         # Protonate with pdb2pqr30
         pp = ProteinPreparer(pdb_path=self.pdb,
@@ -219,57 +234,72 @@ class Ligand():
 
         # Neutralize C terminus
         if self.neutral_Cterm:
+            # Open pdb
             pdb_lines = open(self.pdb, 'r').readlines()
             oxt_line = ''
             for line in pdb_lines:
                 if line.find('OXT') != -1:
                     oxt_line = line
 
+            # Change OXT -> NXT
             nxt_line = [c for c in oxt_line]
             nxt_line[13] = 'N'
             nxt_line[-4] = 'N'
             nxt_line = ''.join(nxt_line)
 
+            # Calculate H coordinates
+            pdb = md.load_pdb(self.pdb)
+            nxt_sele = pdb.topology.select('name OXT')[0]
+            nxt_xyz = pdb.xyz[0, nxt_sele]*10
+            print(nxt_xyz)
+            c_sele = pdb.topology.select('name C and resSeq ' + str(pdb.topology.atom(nxt_sele).residue.resSeq))[0]
+            c_xyz = pdb.xyz[0, c_sele]*10
+            h1_xyz, h2_xyz = compute_C_positions(c_xyz, nxt_xyz)
+            
+            # Add hydrogens
+            h1_line = deepcopy(nxt_line)
+            h2_line = deepcopy(nxt_line)
+            h_lines = []
+            atom_no = pdb.n_atoms
+            for i, (h_line, name, h_xyz) in enumerate(zip([h1_line, h2_line], ['H1', 'H2'], [h1_xyz, h2_xyz])):
+                h_line = [a for a in h_line]
+                h_line[13:17] = name + '  '
+                h_line[-4] = 'H'
+                h_xyz_str = ''
+                for crd in h_xyz:
+                    if crd < 0 or crd >= 10:
+                        h_xyz_str += f'{crd:.3f}'
+                    else:
+                        h_xyz_str += f' {crd:.3f}'
+                    h_xyz_str += '  '
+                h_line[32:56] = h_xyz_str
+    
+                if atom_no + i + 1 < 10:
+                    h_line[8:11] = '  ' + str(atom_no_i+1)
+                elif atom_no + i + 1 >= 10 and atom_no + i + 1 < 100:
+                    h_line[8:11] = ' ' + str(atom_no + i + 1)            
+                elif atom_no + i + 1 >= 100 and atom_no + i + 1 < 1000:
+                    h_line[8:11] = str(atom_no + i + 1)
+                else:
+                    raise NotImplementedError(atom_no + i + 1)
+                
+                h_lines.append(''.join(h_line))
+    
             with open(self.pdb, 'w') as f:
                 for line in pdb_lines:
-                    if line.find('OXT') == -1:
-                        f.write(line)
-                    else:
-                        f.write(nxt_line) 
+                    if line.startswith('ATOM'):
+                        if line.find('OXT') != -1:
+                            f.write(nxt_line)
+                        else:
+                            f.write(line)
+                        
+                for h_line in h_lines:
+                    f.write(h_line)
+    
+                f.write('END')
+                
                 f.close()
 
-            # Protonate again
-            prot_mol_path = pp._protonate_with_PDBFixer()        # THIS DOES NOT ADD NECESSARY HYDROGENS OF NXT :(
-            os.rename(prot_mol_path, self.pdb)
-
-            # Clean up extra Hs
-            lines = open(self.pdb, 'r').readlines()
-            prev_resid = 0
-            write_lines = []
-            H_counter = 0
-            max_resid = max([int(line[24:26].strip()) for line in lines if line.startswith('ATOM')])
-            for i, line in enumerate(lines):
-                if line.startswith('ATOM'):
-                    atom, resid = line[12:16].strip(), int(line[24:26].strip())
-                    if resid >= prev_resid:
-                        prev_resid = resid
-                        if resid == max_resid:
-                            if atom == 'H':
-                                if H_counter > 0:
-                                    write_lines.append(line[:12] + f' HT{H_counter} NCT' + line[20:])
-                                else:
-                                    write_lines.append(line[:17] + 'NCT' + line[20:])
-                                H_counter += 1
-                            else:
-                                write_lines.append(line[:17] + 'NCT' + line[20:])
-                        else:
-                            write_lines.append(line)
-                else:
-                    write_lines.append(line)
-
-            with open(self.pdb, 'w') as f:
-                for line in write_lines:
-                    f.write(line)       
 
 
 
