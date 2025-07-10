@@ -284,12 +284,13 @@ def remove_xml_atoms(xml_fn, resname, remove_atoms, change_atoms, external_bonds
         r.attrib['name'] = resname
         
         # Remove atoms
-        change_types = {}
+        change_types = [{} for i in range(len(change_atoms))]
         for atom in list(r.findall('Atom')):
             if atom.attrib.get('name') in remove_atoms:
                 r.remove(atom)
-            if atom.attrib.get('name') in change_atoms.keys():
-                change_types[atom.attrib.get('type')] = change_atoms[atom.attrib.get('name')]
+            for i, change_atom_dict in enumerate(change_atoms):
+                if atom.attrib.get('name') in change_atom_dict.keys():
+                    change_types[i][atom.attrib.get('type')] = change_atom_dict[atom.attrib.get('name')]
         
         # Remove bonds
         for bond in list(r.findall('Bond')):
@@ -305,18 +306,19 @@ def remove_xml_atoms(xml_fn, resname, remove_atoms, change_atoms, external_bonds
     def change_force_entries(section_name, *attrib_keys):
         section = root.find(section_name)
         if section is not None:
-            for entry in list(section):
-                new_entry_needed = False
-                new_entry = {}
-                for k in entry.keys():
-                    if entry.attrib.get(k) in change_types.keys():
-                        new_entry_needed = True
-                        new_entry[k] = change_types[entry.attrib.get(k)]
-                    else:
-                        new_entry[k] = entry.attrib.get(k)
-                        
-                if new_entry_needed:
-                    section.append(ET.Element(entry.tag, new_entry))
+            for i, change_types_dict in enumerate(change_types):
+                for entry in list(section):
+                    new_entry_needed = False
+                    new_entry = {}
+                    for k in entry.keys():
+                        if entry.attrib.get(k) in change_types_dict.keys():
+                            new_entry_needed = True
+                            new_entry[k] = change_types_dict[entry.attrib.get(k)]
+                        else:
+                            new_entry[k] = entry.attrib.get(k)
+                            
+                    if new_entry_needed:
+                        section.append(ET.Element(entry.tag, new_entry))
     
     change_force_entries("HarmonicBondForce", "type1", "type2")
     change_force_entries("HarmonicAngleForce", "type1", "type2", "type3")
