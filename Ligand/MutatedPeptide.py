@@ -90,9 +90,7 @@ class MutatedPeptide(Analogue):
         self._patch_topology(bonds_to_add)
 
         # Update chain
-        print('111', self.chainid)
         if self.chainid != False:
-            print('!!!HERE')
             u = mda.Universe(self.pdb)
             u.atoms.chainIDs = self.chainid
             u.atoms.write(self.pdb)
@@ -124,10 +122,10 @@ class MutatedPeptide(Analogue):
         
         # Get charges with antechamber
         self.analogue.mol2 = os.path.join(self.working_dir, self.analogue_name + ".mol2")
-        # exit_code = os.system(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -c bcc -nc {net_charge} -at amber')
-        # if exit_code != 0:
-            # raise Exception(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -c bcc -nc {net_charge} -at amber')
-        os.system(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -nc {net_charge}') # THIS MUST BE CHANGED BACK AT ALL COSTS YOU IDIOT DO NOT COMMIT THIS 
+        exit_code = os.system(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -c bcc -nc {net_charge} -at amber')
+        if exit_code != 0:
+            raise Exception(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -c bcc -nc {net_charge} -at amber')
+        # os.system(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -nc {net_charge}') # THIS MUST BE CHANGED BACK AT ALL COSTS YOU IDIOT DO NOT COMMIT THIS 
 
         # Create forcefield params
         self.analogue.frcmod = os.path.join(self.working_dir, self.analogue_name + ".frcmod")
