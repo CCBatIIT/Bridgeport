@@ -150,8 +150,23 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
 def translate_rdkit_inds(mol, rdkit_inds):
     """
     """
-    atoms = [mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in rdkit_inds]
-    resids = [mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in rdkit_inds]
+    try:
+        atoms = [mol.GetAtoms()[i].GetMonomerInfo().GetName().strip() for i in rdkit_inds]
+        resids = [mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber() for i in rdkit_inds]
+    except:
+        for i in rdkit_inds:
+            try:
+                print(i, mol.GetAtoms()[i].GetMonomerInfo().GetName(), mol.GetAtoms()[i].GetPDBResidueInfo().GetResidueNumber())
+            except:
+                from rdkit.Chem import Draw
+                mol_copy = Chem.Mol(mol)
+                Chem.rdDepictor.Compute2DCoords(mol_copy)
+                dopts = Chem.Draw.rdMolDraw2D.MolDrawOptions()
+                dopts.addAtomIndices = True
+                print('Could not find atom with ind:', i)
+                display(Draw.MolsToGridImage([mol_copy], drawOptions=dopts))
+                raise Exception()
+                
 
     return atoms, resids
 

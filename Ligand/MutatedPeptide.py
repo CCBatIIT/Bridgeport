@@ -60,7 +60,8 @@ class MutatedPeptide(Analogue):
             "THR": "N[C@@H](C(O)C)C=O",                     # Threonine
             "TRP": "N[C@@H](CC1=CNC2=CC=CC=C12)C=O",        # Tryptophan
             "TYR": "N[C@@H](CC1=CC=C(O)C=C1)C=O",           # Tyrosine
-            "VAL": "N[C@@H](C(C)C)C=O"                      # Valine
+            "VAL": "N[C@@H](C(C)C)C=O",                     # Valine
+            "AIB": "CC(C)(N)C=O"                            # AIB
         }
 
 
@@ -74,7 +75,7 @@ class MutatedPeptide(Analogue):
     
         # Build resid objects 
         self._build_resids()
-        self.analogue.get_MCS()
+        self.analogue.get_MCS(strict=True)
         self.analogue.generate_conformers(rmsd_thresh=1)
         self.analogue.prepare_ligand(chain=self.chainid)
 
@@ -87,6 +88,12 @@ class MutatedPeptide(Analogue):
         self._build_mut_topology()
         self._build_peptide_topology()
         self._patch_topology(bonds_to_add)
+
+        # Update chain
+        if self.chainid != False:
+            u = mda.Universe(self.pdb)
+            u.atoms.chainIDs = self.chainid
+            u.atoms.write(self.pdb)
         
 
 
@@ -96,15 +103,15 @@ class MutatedPeptide(Analogue):
         pdb = md.load_pdb(self.template.pdb)
         sel = pdb.topology.select(f'resSeq {self.mut_resid}')
         ref_resname = pdb.topology.atom(sel[0]).residue.name
-        self.ref_residue_pdb = os.path.join(self.working_dir, self.name + '_reference_residue.pdb')
+        self.ref_residue_pdb = os.path.join(self.working_dir, self.mut_resname + str(self.mut_resid) + '_reference_residue.pdb')
         pdb.atom_slice(sel)[0].save_pdb(self.ref_residue_pdb)
         
         # Build refernce
-        self.reference = Ligand(working_dir=self.working_dir, name=self.name + '_reference_residue', smiles=self.amino_acid_smiles[ref_resname])
+        self.reference = Ligand(working_dir=self.working_dir, name=self.mut_resname + str(self.mut_resid) + '_reference_residue', smiles=self.amino_acid_smiles[ref_resname])
         self.reference.prepare_ligand(small_molecule_params=True, proximityBonding=True, removeHs=False, visualize=False)
 
         # Build mutation
-        self.analogue_name = self.name + '_residue'
+        self.analogue_name = self.mut_resname + str(self.mut_resid) + '_residue'
         self.analogue = Analogue(template=self.reference, working_dir=self.working_dir, name=self.analogue_name, smiles=self.mut_smiles, visualize=self.visualize)
 
 
@@ -115,7 +122,10 @@ class MutatedPeptide(Analogue):
         
         # Get charges with antechamber
         self.analogue.mol2 = os.path.join(self.working_dir, self.analogue_name + ".mol2")
-        os.system(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -c bcc -nc {net_charge}')
+        exit_code = os.system(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -c bcc -nc {net_charge} -at amber')
+        if exit_code != 0:
+            raise Exception(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -c bcc -nc {net_charge} -at amber')
+        # os.system(f'antechamber -i {self.analogue.pdb} -fi pdb -o {self.analogue.mol2} -fo mol2 -nc {net_charge}') # THIS MUST BE CHANGED BACK AT ALL COSTS YOU IDIOT DO NOT COMMIT THIS 
 
         # Create forcefield params
         self.analogue.frcmod = os.path.join(self.working_dir, self.analogue_name + ".frcmod")
@@ -139,7 +149,9 @@ quit
         with open(self.analogue.tleap, 'w') as f:
             f.write(tleap_command)
             f.close()
-        os.system(f'tleap -f {self.analogue.tleap}')
+        exit_code = os.system(f'tleap -f {self.analogue.tleap}')
+        if exit_code != 0:
+            raise Exception()
 
         # Convert to .xml
         self.analogue.xml = os.path.join(self.working_dir, self.analogue_name + '.xml')
@@ -151,8 +163,9 @@ quit
         data['ff_prefix'] = str(self.mut_resid)
         json.dump(data, open(input_json, 'w'), indent=6)
         
-        os.system(f'python {pathlib.Path(__file__).parent.resolve()}/../ForceFields/write_xml_pretty.py* -i {input_json}')
-        
+        exit_code = os.system(f'python {pathlib.Path(__file__).parent.resolve()}/../ForceFields/write_xml_pretty.py* -i {input_json}')
+        if exit_code != 0:
+            raise Exception()
 
     def _remove_atoms_from_forcefield(self):
 
@@ -179,30 +192,44 @@ quit
             for res in chain.residues():
                 if int(res.id.strip()) == self.mut_resid:
                     self.peptide.delete(res.atoms())
-                    self.peptide.add(self.mut.topology, self.mut.positions)     
+                    self.peptide.add(self.mut.topology, self.mut.positions)   
 
         self.positions = self.peptide.getPositions()
 
     
     def _patch_topology(self, bonds_to_add):
 
+        # Define correct order map
+        residues = []
+        order_map = [] # [chain index, residue index, residue id]
+        for i, chain in enumerate(self.peptide.topology.chains()):
+            for residue in chain.residues():
+                if residue.name == 'UNL':
+                    order_map.append([chain.index, residue.index, self.mut_resid])
+                else:
+                    order_map.append([chain.index, residue.index, residue.id])
+                residues.append(residue)
+
+        order_map = np.array(order_map, dtype=int)
+        sorted_inds = np.argsort(order_map[:,2])
+        residues = [residues[i] for i in sorted_inds]
+
         # Create new topology
         self.top = Topology()
+        new_chain = self.top.addChain([c.id for c in self.peptide.topology.chains()][0])
         atom_map = {}
+        for i, residue in enumerate(residues):
+            if residue.name == "UNL":
+                new_residue = self.top.addResidue(name=self.mut_resname, chain=new_chain, id=str(self.mut_resid))
+            else:
+                new_residue = self.top.addResidue(residue.name, new_chain, id=residue.id)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Added residue', new_residue.name, new_residue.id, 'to topology', flush=True)
+            for atom in residue.atoms():
+                new_atom = self.top.addAtom(atom.name, atom.element, new_residue)
+                atom_map[atom] = new_atom
         
-        for chain in self.peptide.topology.chains():
-            new_chain = self.top.addChain(chain.id)
-            for residue in chain.residues():
-                if residue.name == "UNL":
-                    new_residue = self.top.addResidue(self.mut_resname, new_chain, id=str(self.mut_resid))
-                else:
-                    new_residue = self.top.addResidue(residue.name, new_chain, id=residue.id)
-                for atom in residue.atoms():
-                    new_atom = self.top.addAtom(atom.name, atom.element, new_residue)
-                    atom_map[atom] = new_atom
-
         # Add existing bonds
-        for bond in self.peptide.topology.bonds():
+        for bond in self.peptide.topology.bonds(): 
             self.top.addBond(atom_map[bond[0]], atom_map[bond[1]])
         
         # Add new bond(s)
@@ -210,21 +237,34 @@ quit
             for bond_to_add in bonds_to_add:
                 atom1_resid, atom1_name = bond_to_add[0]
                 atom2_resid, atom2_name = bond_to_add[1]
+                atom1, atom2 = None, None
                 for atom in self.top.atoms():
                     if atom.name.strip() == atom1_name and int(atom.residue.id) == atom1_resid:
                         atom1 = atom
                     if atom.name.strip() == atom2_name and int(atom.residue.id) == atom2_resid:
                         atom2 = atom
-                self.top.addBond(atom1, atom2, type='single')
+                if atom1 is not None and atom2 is not None:
+                    self.top.addBond(atom1, atom2, type='single')
+                    print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Added bond between', atom1.residue.id, atom1.name, 'and', atom2.residue.id, atom2.name, flush=True)
+                else:
+                    print(bond_to_add, atom1, atom2)
+                    raise Exception()
+
+        # Reorder positions
+        reordered_positions = np.zeros((len(self.positions), 3))
+        for i, atom in enumerate(self.peptide.getTopology().atoms()):
+            old_ind = atom.index
+            new_ind = atom_map[atom].index
+            reordered_positions[new_ind] = self.positions[old_ind]._value    
         
+        self.positions = np.array(reordered_positions)*10
+
         self.pdb = os.path.join(self.working_dir, self.name + '.pdb')
         with open(self.pdb, 'w') as f:
             PDBFile.writeFile(self.top, self.positions, f, keepIds=True)
-            f.close()            
+            f.close()          
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Saved first topology to', self.pdb, flush=True)
 
-
-        
-        
         
 
     

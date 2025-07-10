@@ -231,7 +231,7 @@ class Analogue(Ligand):
             self.template_mol = self.template.return_rdkit_mol(from_pdb=True,
                                                                from_smiles=False,
                                                                sanitize=True,
-                                                               removeHs=True,
+                                                               removeHs=False, # Changed to False for MutatedPeptide to work, proceed w/ caution
                                                                proximityBonding=True)
         
             

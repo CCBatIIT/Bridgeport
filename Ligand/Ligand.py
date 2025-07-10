@@ -52,15 +52,15 @@ class Ligand():
             self.smiles = smiles
 
         # Peptide?
-        if chainid is not False:
-            self.chainid = chainid
+        self.chainid = chainid
+        if self.chainid is not False:
             if sequence is not None:
                 self.sequence = sequence
             else:
                 self.sequence = False
 
 
-        if chainid is not False and resname is not False:
+        if self.chainid is not False and resname is not False:
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Must set either resname or chainid', flush=True)
                   
 
@@ -106,7 +106,6 @@ class Ligand():
         self.nstd_resids = nstd_resids
         self.neutral_Cterm = neutral_Cterm
         self.visualize = visualize
-        self.chain = chain
         self.loops = loops
         
         # If treating ligand like a small molecule
@@ -118,9 +117,9 @@ class Ligand():
             self._prepare_peptide()
 
         # Change chain, if specified
-        if self.chain != False:
+        if chain != False:
             u = mda.Universe(self.pdb)
-            u.atoms.chainIDs = self.chain
+            u.atoms.chainIDs =chain
             u.atoms.write(self.pdb)
 
     
@@ -218,7 +217,7 @@ class Ligand():
                                      working_dir=temp_working_dir)
 
             repairer.run(pdb_out_fn=self.pdb,
-                         tails=True,
+                         tails=False,
                          nstd_resids=self.nstd_resids,
                          loops=self.loops)
 
@@ -232,7 +231,7 @@ class Ligand():
         prot_mol_path = pp._protonate_with_PDBFixer()        
         os.rename(prot_mol_path, self.pdb)
 
-        # Neutralize C terminus
+        # Neutralize C terminus ***DEPRECATED***
         if self.neutral_Cterm:
             # Open pdb
             pdb_lines = open(self.pdb, 'r').readlines()
