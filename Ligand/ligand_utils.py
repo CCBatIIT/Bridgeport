@@ -202,11 +202,14 @@ def embed_rdkit_mol(mol, template_mol=None):
     Chem.AllChem.EmbedMolecule(mol)
 
     # Minimize
-    mmffps = rdForceFieldHelpers.MMFFGetMoleculeProperties(mol)
-    ff = rdForceFieldHelpers.MMFFGetMoleculeForceField(mol,mmffps)
-    maxIters = 10000
-    while ff.Minimize(maxIts=1000) and maxIters>0:
-        maxIters -= 1
+    try:
+        mmffps = rdForceFieldHelpers.MMFFGetMoleculeProperties(mol)
+        ff = rdForceFieldHelpers.MMFFGetMoleculeForceField(mol,mmffps)
+        maxIters = 10000
+        while ff.Minimize(maxIts=1000) and maxIters>0:
+            maxIters -= 1
+    except:
+        pass
 
     # Get PDB naming with correct bond orders if template is provided
     if template_mol is not None:
