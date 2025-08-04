@@ -187,36 +187,12 @@ class Analogue(Ligand):
         
         """
         
-        # Set parameters
-        params = rdFMCS.MCSParameters()
-        if self.strict:
-            params.AtomCompareParameters.CompleteRingsOnly = True
-            params.AtomCompareParameters.MatchValences = True
-            params.AtomCompareParameters.RingMatchesRingOnly = True
-            params.BondCompareParameters.MatchFusedRingsStrict = True
-
-        # Compute MCS
-        mcs = rdFMCS.FindMCS([mol1,mol2], params)
-
-        # Get atom lists
-        mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
-        match1 = mol1.GetSubstructMatch(mcs_mol)
-        target_atm1 = []
-        for i in match1:
-            atom = mol1.GetAtoms()[i]
-            target_atm1.append(atom.GetIdx())
-        match2 = mol2.GetSubstructMatch(mcs_mol)
-        target_atm2 = []
-        for i in match2:
-            atom = mol2.GetAtoms()[i]
-            target_atm2.append(atom.GetIdx())
+        # Get MCS
+        self.align_inds, self.template_align_inds = get_rdkit_MCS(mol1, mol2, strict=self.strict)
 
         # Set final attributes
         self.mol = mol1
-        self.template_mol = mol2
-        self.align_inds = target_atm1
-        self.template_align_inds = target_atm2
-    
+        self.template_mol = mol2 
 
     
     def _load_molecules(self, load_template: bool=False):

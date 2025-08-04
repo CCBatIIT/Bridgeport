@@ -7,7 +7,7 @@ The Bridgeport module serves as a comprehensive tool for preparing crystal struc
 ## Environment
 Construct the conda environment with the following command
 ```bash
-conda env create -f conda_setup.yml
+conda env create -f prep.yml
 ```
 
 ## BridgePort Usage 

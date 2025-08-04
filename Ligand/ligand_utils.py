@@ -10,13 +10,14 @@ from typing import List
 from datetime import datetime
 import rdkit
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, rdFMCS
 from rdkit.Chem import rdForceFieldHelpers
 from rdkit.Chem.AllChem import AssignBondOrdersFromTemplate
 
+# Lambda functions
+atom_rmsd = lambda a, b: np.sqrt(np.mean(np.sum((b-a)**2, axis=-1)))
 
-
-
+# Methods
 def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, ref_match_resids: List, mobile: mda.AtomGroup, mobile_match_atoms: List, verbose: bool=False):
     """
     Return an MDAnalysis.AtomGroup with internal coordinates that match a reference. 
@@ -111,21 +112,17 @@ def match_internal_coordinates(ref_match: mda.AtomGroup, ref_match_atoms: List, 
                                                     ref_match_names=ref_match_atoms,
                                                     ref_match_resids=ref_match_resids)
 
-        #TEST
         if 'X' not in ref_eq_atoms:
             
             # Select reference atoms
             ref_tors_sele = ref_match.select_atoms('')
-            # print(ref_match.select_atoms('all').atoms.names, ref_match.select_atoms('all').atoms.resids)
             for (r, a) in zip (ref_eq_resids, ref_eq_atoms):
-                # print(ref_tors_sele.atoms.names, a, ref_tors_sele.atoms.resids, r, ref_match.select_atoms(f"resid {r} and name {a}").n_atoms)
                 ref_tors_sele = ref_tors_sele + ref_match.select_atoms(f"(resid {r} and name {a})")
 
             # Calculated dihedral angle and assign to analogue
             try:
                 c1, c2, c3, c4 = ref_tors_sele.positions
             except:
-                # print(ref_eq_resids, ref_eq_atoms)
                 print('reference atoms names attempted to match:', ref_tors_sele.atoms.names, 'reference resids attempted to match', ref_tors_sele.atoms.resids, flush=True)
                 raise Exception("Could not match torsion")
             dihedral = calc_dihedrals(c1, c2, c3, c4)
@@ -331,6 +328,47 @@ def remove_xml_atoms(xml_fn, resname, remove_atoms, change_atoms, external_bonds
     tree.write(xml_fn, encoding="utf-8", xml_declaration=True)
 
 
+def get_rdkit_MCS(mol1, mol2, strict=True):
+    # Set parameters
+    params = rdFMCS.MCSParameters()
+    if strict:
+        params.AtomCompareParameters.CompleteRingsOnly = True
+        params.AtomCompareParameters.MatchValences = True
+        params.AtomCompareParameters.RingMatchesRingOnly = True
+        params.BondCompareParameters.MatchFusedRingsStrict = True
+
+    # Compute MCS
+    mcs = rdFMCS.FindMCS([mol1,mol2], params)
+
+    # Get atom lists
+    mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
+    match1 = mol1.GetSubstructMatch(mcs_mol)
+    target_atm1 = []
+    for i in match1:
+        atom = mol1.GetAtoms()[i]
+        target_atm1.append(atom.GetIdx())
+    match2 = mol2.GetSubstructMatch(mcs_mol)
+    target_atm2 = []
+    for i in match2:
+        atom = mol2.GetAtoms()[i]
+        target_atm2.append(atom.GetIdx())
+
+    return target_atm1, target_atm2
 
 
+def get_MCS_rmsd(mob, mob_atom_inds, ref, ref_atom_inds):
+    
+    #Iterate through conformers of mobile, evaluating the RMSD of each against ref
+    ref_pos = ref.GetConformer(0).GetPositions()[ref_atom_inds]
+    
+    if mob.GetNumConformers() == 1:
+        mob_pos = mob.GetConformer(0).GetPositions()[mob_atom_inds]
+        return atom_rmsd(ref_pos, mob_pos)
+    elif mob.GetNumConformers() > 1:
+        pose_rmsds = []
+        for i in range(mob.GetNumConformers()):
+            mob_pos = mob.GetConformer(i).GetPositions()[mob_atom_inds]
+            pose_rmsds.append(atom_rmsd(ref_pos, mob_pos))
+            
+        return pose_rmsds
     
