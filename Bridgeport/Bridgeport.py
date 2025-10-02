@@ -630,7 +630,17 @@ class Bridgeport():
                     else:
                         external_bonds = None
                     ligand.run(remove_atoms=remove_atoms, change_atoms=change_atoms, bonds_to_add=bonds_to_add, external_bonds=external_bonds)
-                    self.ligand_xmls.append(ligand.analogue.xml)
+
+                    # Avoid adding duplicate forcefields (OpenMM doesn't like that)
+                    if 'add_forcefield' in mp_params.keys():
+                        if mp_params['add_forcefield'] == False:
+                            pass
+                        else:
+                            self.ligand_xmls.append(ligand.analogue.xml)
+                    else:
+                        self.ligand_xmls.append(ligand.analogue.xml)
+
+                    # Reset reference pdb
                     reference.pdb = ligand.pdb
 
                 

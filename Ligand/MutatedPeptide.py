@@ -42,7 +42,7 @@ class MutatedPeptide(Analogue):
         # load amino acid smiles
         self.amino_acid_smiles = {
             "ALA": "N[C@@H](C)C=O",                         # Alanine
-            "ARG": "N[C@@H](CCCNC(=N)[NH2+])C=O",           # Arginine (side chain guanidinium)
+            "ARG": "N[C@@H](CCCNC(N)=[NH2+])C=O",           # Arginine (side chain guanidinium)
             "ASN": "N[C@@H](CC(=O)N)C=O",                   # Asparagine
             "ASP": "N[C@@H](CC([O-])=O)C=O",                # Aspartic acid
             "CYS": "N[C@@H](CS)C=O",                        # Cysteine (neutral thiol)
@@ -81,6 +81,7 @@ class MutatedPeptide(Analogue):
 
         # Build forcefield
         self._build_forcefield()
+        # raise Exception()
         self._remove_atoms_from_forcefield()
         # raise Exception()
         
