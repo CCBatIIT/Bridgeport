@@ -389,8 +389,7 @@ class Bridgeport():
                        
             ref_sele_str = 'chainid ' + ' or '.join(chain for chain in ref_chains) +\
                            ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
-                           ' and name CA' + \ 
-                           ' and protein and protein'
+                           ' and name CA and protein'
             
             # Align
             try:
