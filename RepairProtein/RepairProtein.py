@@ -116,7 +116,7 @@ class RepairProtein():
 
 
     
-    def run(self, pdb_out_fn: str, secondary_template_pdb: str=None, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False):
+    def run(self, pdb_out_fn: str, secondary_template_pdb: str=None, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False, align_after: bool=True):
         """
         Run the remodelling.
 
@@ -207,16 +207,17 @@ class RepairProtein():
                 f.write(line)
 
         # Alignment correction
-        u = mda.Universe(self.pdb_out_fn)
-        resids = u.atoms.resids
-        ref_u = mda.Universe(temp_pdb)
-        ref_resids = ref_u.atoms.resids
-        matching_resids = np.intersect1d(resids, ref_resids)
-        b, a = mda.analysis.align.alignto(u, ref_u, select=f'name CA and resid {" ".join(str(r) for r in matching_resids)}')
-        u.atoms.write(self.pdb_out_fn)
-        os.remove(temp_pdb)
-        
-        print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Moved protein from', b, 'to', a, flush=True)
+        if align_after:
+            u = mda.Universe(self.pdb_out_fn)
+            resids = u.atoms.resids
+            ref_u = mda.Universe(temp_pdb)
+            ref_resids = ref_u.atoms.resids
+            matching_resids = np.intersect1d(resids, ref_resids)
+            b, a = mda.analysis.align.alignto(u, ref_u, select=f'name CA and resid {" ".join(str(r) for r in matching_resids)}')
+            u.atoms.write(self.pdb_out_fn)
+            os.remove(temp_pdb)
+            
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Moved protein from', b, 'to', a, flush=True)
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//Protein Repaired. Output written to:', self.pdb_out_fn, flush=True)
 
     

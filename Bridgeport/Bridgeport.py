@@ -473,6 +473,10 @@ class Bridgeport():
             secondary_template = params['secondary_template']
         if 'tails' in params and params['tails'] is not False:
             self.tails = params['tails']
+        if 'align_after' in params:
+            align_after = params['align_after']
+        else:
+            align_after = True
         
 
         # Run with secondary template if specified
@@ -485,7 +489,8 @@ class Bridgeport():
                             secondary_template_pdb=secondary_template,
                             tails=self.tails,
                             loops=False,
-                            verbose=self.verbose)
+                            verbose=self.verbose,
+                            align_after=align_after)
 
         
     
