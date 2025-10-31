@@ -372,9 +372,9 @@ class Bridgeport():
             
             #Make the selection
             if len(self.chain) > 1:
-                chain_sele_str = f'chainid {self.chain.split()[0]}'
+                chain_sele_str = f'protein and chainid {self.chain.split()[0]}'
             else:
-                chain_sele_str = f'chainid {self.chain}'
+                chain_sele_str = f'protein and chainid {self.chain}'
             chain_sele = u.select_atoms(chain_sele_str)
 
             # Get resids
@@ -385,11 +385,11 @@ class Bridgeport():
                         
             sele_str = chain_sele_str +\
                        ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
-                       ' and name CA and protein' 
+                       ' and name CA' 
                        
             ref_sele_str = 'chainid ' + ' or '.join(chain for chain in ref_chains) +\
                            ' and resid ' + ' '.join(str(resids[res_ind]) for res_ind in matching_res_inds) +\
-                           ' and name CA and protein'
+                           ' and name CA'
             
             # Align
             try:
