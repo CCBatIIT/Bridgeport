@@ -146,7 +146,7 @@ class ProteinPreparer():
     def _run_PDBFixer(self,
                       mode: str = "MEM",
                       out_file_fn: str = None,
-                      padding = 1.5,
+                      padding = 2.0,
                       ionicStrength = 0.15):
         """
         Generates a solvated and membrane-added system (depending on MODE)
