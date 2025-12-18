@@ -399,7 +399,12 @@ class Bridgeport():
                               'reference': ref_sele_str})
             except:
                 print('Mobile sele str:', sele_str)
-                print('Mobile sele:', u.select_atoms(sele_str).residues.resids)
+                try:
+                    print('Mobile sele:', u.select_atoms(sele_str).residues.resids)
+                except:
+                    print('resids in mobile:', resids)
+                    print('resids in ref:', self.ref_resids)
+                    print('matching resids:', matching_resids)
                 print('Ref sele str:', ref_sele_str)
                 print('Ref sele:', self.ref.select_atoms(ref_sele_str).residues.resids)
                 raise Exception('Could not find match')
@@ -532,15 +537,16 @@ class Bridgeport():
 
         # Set attr
         self.env_pdb = os.path.join(self.prot_only_dir, self.name+'_env.pdb')
-
-        # Correct resids
-        pdb = md.load_pdb(self.env_pdb)
+    
+        
+        
+        # Correct resids 
+        pdb = PDBFile(self.env_pdb)
         top = pdb.topology
-        if top.residue(0).resSeq == 1:
-            for i in range(top.n_residues):
-                top.residue(i).resSeq += self.tails[0]
-            pdb[0].save_pdb(self.env_pdb)
-
+        for chain in top.chains():
+            for residue in chain.residues():
+                residue.id = str(int(residue.id) + self.tails[0])
+        PDBFile.writeFile(topology=top, positions=pdb.positions, file=self.env_pdb, keepIds=True)
 
     def ligand_prep(self,
                     small_molecule_params: bool=False,
