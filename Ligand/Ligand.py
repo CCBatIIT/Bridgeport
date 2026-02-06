@@ -187,13 +187,19 @@ class Ligand():
         # Load input w/ rdkit
         template, self.mol = self.return_rdkit_mol(sanitize=self.sanitize, removeHs=self.removeHs, proximityBonding=self.proximityBonding)
         
-        # Add Hs
-        self.mol = AllChem.AddHs(self.mol, addCoords=True, addResidueInfo=False)
-
         # Save
         Chem.MolToPDBFile(self.mol, self.pdb)
         writer = Chem.SDWriter(self.sdf)
         writer.write(self.mol)
+        writer.close()
+
+        exit_code = os.system(f'obabel -ipdb {self.pdb} -opdb -O {self.pdb} -p=7')
+        if exit_code > 0:
+            raise Exception(os.system(f'obabel -ipdb {self.pdb} -opdb -O {self.pdb} -p=7'))
+        exit_code = os.system(f'obabel -isdf {self.sdf} -osdf -O {self.sdf} -p=7')
+        if exit_code > 0:
+            raise Exception(os.system(f'obabel -isdf {self.sdf} -osdf -O {self.sdf} -p=7'))
+        
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', self.pdb, self.sdf, flush=True)
 
 
