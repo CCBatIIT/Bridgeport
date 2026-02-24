@@ -184,11 +184,12 @@ class RepairProtein():
 
         
         # Fix missing residues if cutting tails created improper terminals
-        fixer = PDBFixer(self.pdb_out_fn)
-        fixer.findMissingResidues()
-        fixer.findMissingAtoms()
-        fixer.addMissingAtoms()
-        PDBFile.writeFile(fixer.topology, fixer.positions, open(self.pdb_out_fn, 'w'), keepIds=True)
+        if not self.cyclic:
+            fixer = PDBFixer(self.pdb_out_fn)
+            fixer.findMissingResidues()
+            fixer.findMissingAtoms()
+            fixer.addMissingAtoms()
+            PDBFile.writeFile(fixer.topology, fixer.positions, open(self.pdb_out_fn, 'w'), keepIds=True)
 
         # Reinsert CRYS entry
         crys_line = ''
