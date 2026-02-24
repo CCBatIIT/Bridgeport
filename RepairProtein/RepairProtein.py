@@ -272,6 +272,7 @@ class RepairProtein():
                                          alnfile=f'{self.fasta_name}.ali')
 
         elif self.cyclic:
+            self.env.patch_default=False
             class CyclicModel(AutoModel):
                 def special_patches(self, aln):
                     # Link between last residue (-1) and first (0) to make chain cyclic:
