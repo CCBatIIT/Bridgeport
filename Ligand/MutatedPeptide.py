@@ -15,7 +15,7 @@ from openmm.app import *
 import mdtraj as md
 from rdkit import Chem
 from rdkit.Chem import AllChem
-import parmed as pmd
+#import parmed as pmd
 
 
 class MutatedPeptide(Analogue):
@@ -66,18 +66,19 @@ class MutatedPeptide(Analogue):
 
 
 
-    def run(self, remove_atoms: List=[], change_atoms: dict={}, bonds_to_add: List=[[[],[]]], external_bonds=None):
+    def run(self, remove_atoms: List=[], change_atoms: dict={}, bonds_to_add: List=[[[],[]]], external_bonds=None, cyclic:bool=False):
 
         # Set attributes
         self.remove_atoms = remove_atoms
         self.change_atoms = change_atoms
         self.external_bonds = external_bonds
+        self.cyclic = cyclic
     
         # Build resid objects 
         self._build_resids()
         self.analogue.get_MCS(strict=True)
         self.analogue.generate_conformers(rmsd_thresh=1)
-        self.analogue.prepare_ligand(chain=self.chainid)
+        self.analogue.prepare_ligand(chain=self.chainid, cyclic=self.cyclic)
 
         # Build forcefield
         self._build_forcefield()

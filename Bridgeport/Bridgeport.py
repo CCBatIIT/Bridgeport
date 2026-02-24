@@ -242,6 +242,7 @@ class Bridgeport():
             except:
                 raise Exception(f'Could not select ligand from {self.aligned_pdb} with chainid {self.chain} and resname {self.resname}')
 
+            
             # Build Ligand
             self.template = Ligand(working_dir=self.lig_only_dir,
                               name=self.input_params['Ligand']['name'],
@@ -265,7 +266,7 @@ class Bridgeport():
             self.template.prepare_ligand(small_molecule_params=True, proximityBonding=True, visualize=False) 
         except:
             self.template.prepare_ligand(small_molecule_params=True, proximityBonding=True, visualize=True)
-        
+            
         # Build analogue 
         self.analogue = Analogue(template=self.template,
                             working_dir=self.lig_only_dir,
@@ -559,7 +560,8 @@ class Bridgeport():
                     neutral_Cterm: bool=False,
                     loops=False,
                     chain=False,
-                    smiles=False):
+                    smiles=False,
+                    cyclic=False):
         """ 
         Prepare ligand for OpenFF parameterization.
 
@@ -621,7 +623,7 @@ class Bridgeport():
                     shutil.move(self.lig_pdb, os.path.join(self.lig_only_dir, ref_name + '.pdb'))
                     reference = Ligand(working_dir=self.lig_only_dir, name=ref_name, chainid=params['chain'], sequence=sequence)
                     if i == 0:
-                        reference.prepare_ligand(small_molecule_params=False, removeHs=False)
+                        reference.prepare_ligand(small_molecule_params=False, removeHs=False, cyclic=cyclic)
     
                     # Mutate
                     ligand = MutatedPeptide(template=reference, replace_resid=mp_params['mutation_resid'], replace_resname=mp_params['mutation_resname'], replace_smiles=mp_params['mutation_smiles'], working_dir=self.lig_only_dir, name=self.name, chainid=params['chain'])
@@ -669,7 +671,8 @@ class Bridgeport():
                                       nstd_resids=nstd_resids,
                                       neutral_Cterm=neutral_Cterm,
                                       loops=loops,
-                                      chain=chain)
+                                      chain=chain,
+                                      cyclic=cyclic)
 
 
         # If analogues were generated, prepare those too
@@ -701,7 +704,8 @@ class Bridgeport():
                     ligand.prepare_ligand(pH=pH,
                                           nstd_resids=nstd_resids,
                                           neutral_Cterm=neutral_Cterm,
-                                          visualize=False)
+                                          visualize=False,
+                                          cyclic=cyclic)
         
         
 
@@ -734,9 +738,9 @@ class Bridgeport():
             
             # Generate ligand system
             if 'MutatedPeptide' in self.input_params['Ligand'].keys():
-                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=self.ligand_xmls).main(use_nonbonded=False)
+                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=self.ligand_xmls).main()
             else:
-                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main(use_nonbonded=False)
+                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
             
             # Combine systems 

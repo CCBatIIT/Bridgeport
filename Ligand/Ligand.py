@@ -74,7 +74,8 @@ class Ligand():
                        neutral_Cterm: bool=False,
                        loops: bool=False,
                        chain: str=False,
-                       visualize: bool=False):
+                       visualize: bool=False,
+                       cyclic: bool=False):
         """
         Prepare a ligand
 
@@ -107,6 +108,7 @@ class Ligand():
         self.neutral_Cterm = neutral_Cterm
         self.visualize = visualize
         self.loops = loops
+        self.cyclic = cyclic
         
         # If treating ligand like a small molecule
         if small_molecule_params:
@@ -186,19 +188,18 @@ class Ligand():
         """
         # Load input w/ rdkit
         template, self.mol = self.return_rdkit_mol(sanitize=self.sanitize, removeHs=self.removeHs, proximityBonding=self.proximityBonding)
+
+        # Add hydrogens
+        self.mol = AllChem.AddHs(self.mol, addCoords=True, addResidueInfo=False)
         
         # Save
         Chem.MolToPDBFile(self.mol, self.pdb)
         writer = Chem.SDWriter(self.sdf)
         writer.write(self.mol)
         writer.close()
+        
 
-        exit_code = os.system(f'obabel -ipdb {self.pdb} -opdb -O {self.pdb} -p=7')
-        if exit_code > 0:
-            raise Exception(os.system(f'obabel -ipdb {self.pdb} -opdb -O {self.pdb} -p=7'))
-        exit_code = os.system(f'obabel -isdf {self.sdf} -osdf -O {self.sdf} -p=7')
-        if exit_code > 0:
-            raise Exception(os.system(f'obabel -isdf {self.sdf} -osdf -O {self.sdf} -p=7'))
+
         
         print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Saved prepared ligand to', self.pdb, self.sdf, flush=True)
 
@@ -225,7 +226,8 @@ class Ligand():
             repairer.run(pdb_out_fn=self.pdb,
                          tails=False,
                          nstd_resids=self.nstd_resids,
-                         loops=self.loops)
+                         loops=self.loops,
+                         cyclic=self.cyclic)
 
         # Protonate with pdb2pqr30
         pp = ProteinPreparer(pdb_path=self.pdb,

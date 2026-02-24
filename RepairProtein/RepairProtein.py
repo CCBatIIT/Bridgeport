@@ -116,7 +116,7 @@ class RepairProtein():
 
 
     
-    def run(self, pdb_out_fn: str, secondary_template_pdb: str=None, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False, align_after: bool=True):
+    def run(self, pdb_out_fn: str, secondary_template_pdb: str=None, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False, align_after: bool=True, cyclic: bool=False):
         """
         Run the remodelling.
 
@@ -142,6 +142,7 @@ class RepairProtein():
         self.pdb_out_fn = pdb_out_fn
         self.verbose = verbose
         self.nstd_resids = nstd_resids
+        self.cyclic = cyclic
         if secondary_template_pdb is not None:
             self.secondary_template_pdb = secondary_template_pdb
             self.secondary_name = self.secondary_template_pdb.split('/')[-1].split('.')[0]
@@ -265,6 +266,17 @@ class RepairProtein():
                                          sequence=self.fasta_name,
                                          knowns=(self.name, self.secondary_name),
                                          alnfile=f'{self.fasta_name}.ali')
+
+        elif self.cyclic:
+            class CyclicModel(AutoModel):
+                def special_patches(self, aln):
+                    # Link between last residue (-1) and first (0) to make chain cyclic:
+                    self.patch(residue_type='LINK', residues=(self.residues[-1], self.residues[0]))
+
+            self.model = CyclicModel(self.env, 
+                                     sequence=self.fasta_name,
+                                     knowns=(self.name),
+                                     alnfile=f'{self.fasta_name}.ali')
             
         else:
             self.model = modeller.automodel.AutoModel(self.env, 

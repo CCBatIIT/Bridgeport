@@ -189,7 +189,7 @@ class Analogue(Ligand):
         
         # Get MCS
         self.align_inds, self.template_align_inds = get_rdkit_MCS(mol1, mol2, strict=self.strict)
-
+        
         # Set final attributes
         self.mol = mol1
         self.template_mol = mol2 
@@ -210,7 +210,6 @@ class Analogue(Ligand):
                                                                removeHs=False, # Changed to False for MutatedPeptide to work, proceed w/ caution
                                                                proximityBonding=True)
         
-            
             # Load with MDAnalysis
             self.template_sele = self.template.return_MDA_sele()
 
@@ -226,6 +225,7 @@ class Analogue(Ligand):
         # Translate atoms for torsion matching
         self.matching_atoms, _ = translate_rdkit_inds(self.mol, self.matching_inds)
         self.template_matching_atoms, self.template_matching_resids = translate_rdkit_inds(self.template_mol, self.template_matching_inds)
+
 
 
     
@@ -269,8 +269,6 @@ class Analogue(Ligand):
         self.template_align_sele = select(self.template_sele, self.template_align_atoms, self.template_align_resids)
         self.matching_sele = select(self.sele, self.matching_atoms)
         self.template_matching_sele = select(self.template_sele, self.template_matching_atoms, self.template_matching_resids)
-
-        # print(self.matching_sele.atoms.names)
 
 
 

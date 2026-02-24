@@ -178,7 +178,7 @@ def select(sele: mda.AtomGroup, atoms: List[str], resids: List[int]=None):
     # If resids are provided
     if resids is not None:
         assert len(resids) == len(atoms)
-        for (atom, resid) in zip(atoms, resids):
+        for i, (atom, resid) in enumerate(zip(atoms, resids)):
             new_sele = new_sele + sele.select_atoms(f'resid {resid} and name {atom}')
 
     # If resids not provided
