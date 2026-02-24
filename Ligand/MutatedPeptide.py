@@ -110,7 +110,7 @@ class MutatedPeptide(Analogue):
         
         # Build refernce
         self.reference = Ligand(working_dir=self.working_dir, name=self.mut_resname + str(self.mut_resid) + '_reference_residue', smiles=self.amino_acid_smiles[ref_resname])
-        self.reference.prepare_ligand(small_molecule_params=True, proximityBonding=True, removeHs=False, visualize=False)
+        self.reference.prepare_ligand(small_molecule_params=True, proximityBonding=True, removeHs=False, visualize=False, cyclic=self.cyclic)
 
         # Build mutation
         self.analogue_name = self.mut_resname + str(self.mut_resid) + '_residue'
