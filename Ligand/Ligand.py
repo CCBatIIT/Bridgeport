@@ -217,11 +217,7 @@ class Ligand():
             fasta_fn = os.path.join(os.getcwd(), 'lig.fasta')
             write_FASTA(self.sequence, 'lig', fasta_fn)
 
-            # RepairProtein
-            if os.path.exists(self.pdb):
-                shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self.name + '_pre_modeller.pdb'))
-                print('>>',os.path.join(os.path.dirname(self.pdb), self.name + '_pre_modeller.pdb'))
-                
+            # RepairProtein                
             temp_working_dir = os.path.join(os.getcwd(), 'modeller')
             repairer = RepairProtein(pdb_fn=self.pdb,
                                      fasta_fn=fasta_fn,
@@ -232,8 +228,6 @@ class Ligand():
                          nstd_resids=self.nstd_resids,
                          loops=self.loops,
                          cyclic=self.cyclic)
-        shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self.name + '_post_modeller.pdb'))
-        print('>>',os.path.join(os.path.dirname(self.pdb), self.name + '_post_modeller.pdb'))
         
         # Protonate with pdb2pqr30
         pp = ProteinPreparer(pdb_path=self.pdb,
@@ -244,8 +238,6 @@ class Ligand():
         prot_mol_path = pp._protonate_with_pdb2pqr()
         prot_mol_path = pp._protonate_with_PDBFixer()        
         os.rename(prot_mol_path, self.pdb)
-        shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self.name + '_post_pp.pdb'))
-        print('>>',os.path.join(os.path.dirname(self.pdb), self.name + '_post_pp.pdb'))
 
         # Neutralize C terminus ***DEPRECATED***
         if self.neutral_Cterm:
