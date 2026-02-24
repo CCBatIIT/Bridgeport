@@ -143,6 +143,9 @@ class RepairProtein():
         self.verbose = verbose
         self.nstd_resids = nstd_resids
         self.cyclic = cyclic
+
+        print('\n\n\n', 'CYCLIC =', self.cyclic, '\n\n\n')
+        
         if secondary_template_pdb is not None:
             self.secondary_template_pdb = secondary_template_pdb
             self.secondary_name = self.secondary_template_pdb.split('/')[-1].split('.')[0]
