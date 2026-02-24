@@ -219,8 +219,8 @@ class Ligand():
 
             # RepairProtein
             if os.path.exists(self.pdb):
-                shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), 'pre_modeller.pdb'))
-                print('>>',os.path.join(os.path.dirname(self.pdb), 'pre_modeller.pdb'))
+                shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self._name + '_pre_modeller.pdb'))
+                print('>>',os.path.join(os.path.dirname(self.pdb), self.name + '_pre_modeller.pdb'))
                 
             temp_working_dir = os.path.join(os.getcwd(), 'modeller')
             repairer = RepairProtein(pdb_fn=self.pdb,
@@ -232,8 +232,8 @@ class Ligand():
                          nstd_resids=self.nstd_resids,
                          loops=self.loops,
                          cyclic=self.cyclic)
-        shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), 'post_modeller.pdb'))
-        print('>>',os.path.join(os.path.dirname(self.pdb), 'post_modeller.pdb'))
+        shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self.name + '_post_modeller.pdb'))
+        print('>>',os.path.join(os.path.dirname(self.pdb), self.name + '_post_modeller.pdb'))
         
         # Protonate with pdb2pqr30
         pp = ProteinPreparer(pdb_path=self.pdb,
@@ -244,8 +244,8 @@ class Ligand():
         prot_mol_path = pp._protonate_with_pdb2pqr()
         prot_mol_path = pp._protonate_with_PDBFixer()        
         os.rename(prot_mol_path, self.pdb)
-        shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), 'post_pp.pdb'))
-        print('>>',os.path.join(os.path.dirname(self.pdb), 'post_pp.pdb'))
+        shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self.name + '_post_pp.pdb'))
+        print('>>',os.path.join(os.path.dirname(self.pdb), self.name + '_post_pp.pdb'))
 
         # Neutralize C terminus ***DEPRECATED***
         if self.neutral_Cterm:
