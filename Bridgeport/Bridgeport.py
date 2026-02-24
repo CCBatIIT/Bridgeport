@@ -460,6 +460,8 @@ class Bridgeport():
     
             self.lig_pdb = os.path.join(self.lig_only_dir, self.name+'.pdb')
             lig_sele.write(self.lig_pdb)
+            shutil.copy(self.pdb, os.path.join(self.lig_only_dir, self._name + '_post_sep.pdb'))
+            print('>>',os.path.join(self.lig_only_dir, self.name + '_post_sep.pdb'))
 
 
     
