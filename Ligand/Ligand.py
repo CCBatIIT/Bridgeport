@@ -219,7 +219,7 @@ class Ligand():
 
             # RepairProtein
             if os.path.exists(self.pdb):
-                shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self._name + '_pre_modeller.pdb'))
+                shutil.copy(self.pdb, os.path.join(os.path.dirname(self.pdb), self.name + '_pre_modeller.pdb'))
                 print('>>',os.path.join(os.path.dirname(self.pdb), self.name + '_pre_modeller.pdb'))
                 
             temp_working_dir = os.path.join(os.getcwd(), 'modeller')
