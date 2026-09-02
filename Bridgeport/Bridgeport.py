@@ -745,11 +745,13 @@ class Bridgeport():
             prot_sys, prot_top, prot_pos = ForceFieldHandler(self.env_pdb).main()
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Protein parameters built.', flush=True)
             
-            # Generate ligand system
+            # Generate ligand system. The ligand is parameterized on its own, without a periodic box, and the
+            # Joiner below keeps only its per-particle parameters - the combined system takes its box and
+            # nonbonded method from the receptor - so the ligand gets no nonbonded method of its own.
             if 'MutatedPeptide' in self.input_params['Ligand'].keys():
-                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=self.ligand_xmls).main()
+                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path, force_field_files=self.ligand_xmls).main(nonbondedMethod=NoCutoff)
             else:
-                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main()
+                lig_sys, lig_top, lig_pos = ForceFieldHandler(lig_path).main(nonbondedMethod=NoCutoff)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Ligand parameters built.', flush=True)
             
             # Combine systems 

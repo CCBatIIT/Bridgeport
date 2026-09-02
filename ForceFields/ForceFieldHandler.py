@@ -129,16 +129,16 @@ class ForceFieldHandler():
             raise Exception(f'The extension {ext} was not recognized!')
         return mode
 
-    def main(self, use_nonbonded: bool=True):
+    def main(self, nonbondedMethod=PME, ):
         """
         The intended main usage case.  Parameterize ligands from an SDF file with OpenFF (.offxml) parameters and
         environment/protein from a PDB file with OpenMM (.xml) parameters.
 
         Paremeters:
-            use_rdkit: bool: Default=False - When a custom force field for the ligand is necessary, and the ligand is 
-                a pdb file, this should be True.  Takes an intermediate step to load an RDKit molecule from the pdb file
-                and then load an OpenFF molecule from the RDKit molecule - as opposed to loading the OpenFF molecule directly
-                from the structure file.
+            nonbondedMethod: Default=PME - OpenMM nonbonded method to build the system with.  Only applies to the
+                OpenMM (pdb) path.  Pass NoCutoff for a structure with no periodic box, such as a ligand that is
+                parameterized on its own before being joined onto a receptor - the joined system takes its box and
+                nonbonded method from the receptor.  None is accepted and read as NoCutoff.
         Returns:
             (sys, top, positions): tuple - A 3-tuple of OpenMM System, OpenMM Topology, and coordinate array of positions
         """
@@ -159,9 +159,10 @@ class ForceFieldHandler():
             ff = ForceField(*self.xmls)
             pdb = PDBFile(self.structure_file)
             top, positions = pdb.getTopology(), pdb.getPositions()
-            if use_nonbonded:
-                sys = ff.createSystem(top, nonbondedMethod=PME) 
-            else:
-                sys = ff.createSystem(top)
+            # None is not a value OpenMM accepts. Read it as "no nonbonded method", which is what
+            # createSystem() falls back on anyway when it is not given one.
+            if nonbondedMethod is None:
+                nonbondedMethod = NoCutoff
+            sys = ff.createSystem(top, nonbondedMethod=nonbondedMethod)
 
         return (sys, top, positions)
