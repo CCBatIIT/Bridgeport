@@ -482,7 +482,15 @@ class Bridgeport():
             align_after = params['align_after']
         else:
             align_after = True
-        
+        if 'preserve_resolved' in params:
+            preserve_resolved = params['preserve_resolved']
+        else:
+            preserve_resolved = True
+        if 'secondary_template_gaps_only' in params:
+            secondary_template_gaps_only = params['secondary_template_gaps_only']
+        else:
+            secondary_template_gaps_only = True
+
 
         # Run with secondary template if specified
         protein_reparer = RepairProtein(pdb_fn=self.prot_pdb,
@@ -495,7 +503,9 @@ class Bridgeport():
                             tails=self.tails,
                             loops=False,
                             verbose=self.verbose,
-                            align_after=align_after)
+                            align_after=align_after,
+                            preserve_resolved=preserve_resolved,
+                            secondary_template_gaps_only=secondary_template_gaps_only)
 
         
     
