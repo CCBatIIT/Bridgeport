@@ -136,7 +136,7 @@ class RepairProtein():
 
 
     
-    def run(self, pdb_out_fn: str, secondary_template_pdb: str=None, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False, align_after: bool=True, cyclic: bool=False, preserve_resolved: bool=True, secondary_template_gaps_only: bool=True):
+    def run(self, pdb_out_fn: str, secondary_template_pdb: str=None, tails: List=False, nstd_resids: List=None, loops: List=False, verbose: bool=False, align_after: bool=True, cyclic: bool=False, preserve_resolved: bool=False, secondary_template_gaps_only: bool=False):
         """
         Run the remodelling.
 
@@ -162,13 +162,15 @@ class RepairProtein():
                 Every residue that has coordinates in the input .pdb is held fixed, so experimentally resolved
                 regions - including disordered coils such as receptor N-termini - come through untouched.
                 Residues that are present but missing sidechain atoms are optimized anyway, since Modeller has to
-                build those atoms. Default is True.
+                build those atoms. Turn this on when the input .pdb resolves a flexible region whose conformation
+                matters, such as a receptor N-terminus that contacts the ligand. Default is False.
 
             secondary_template_gaps_only (bool):
                 If true, the secondary template is superposed onto the input .pdb and cut down to the residues
                 that fall in gaps, so it can only contribute restraints where the input structure has nothing.
                 Without this, Modeller derives restraints from both templates wherever they overlap, and a
-                predicted model can pull resolved regions away from their experimental positions. Default is True.
+                predicted model can pull resolved regions away from their experimental positions. Only has an
+                effect when a secondary template is given. Default is False.
 
         """
         # Attributes
@@ -200,7 +202,9 @@ class RepairProtein():
                 self._align_sequences()
 
         # Work out which residues Modeller actually has to build
-        self._find_template_gaps()
+        self.model_gaps = None
+        if self.preserve_resolved:
+            self._find_template_gaps()
 
         # Model 
         cwd = os.getcwd()

@@ -485,11 +485,11 @@ class Bridgeport():
         if 'preserve_resolved' in params:
             preserve_resolved = params['preserve_resolved']
         else:
-            preserve_resolved = True
+            preserve_resolved = False
         if 'secondary_template_gaps_only' in params:
             secondary_template_gaps_only = params['secondary_template_gaps_only']
         else:
-            secondary_template_gaps_only = True
+            secondary_template_gaps_only = False
 
 
         # Run with secondary template if specified
