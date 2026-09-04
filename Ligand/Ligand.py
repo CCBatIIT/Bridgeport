@@ -221,9 +221,16 @@ class Ligand():
         from RepairProtein.RepairProtein import RepairProtein
         # Repair with RepairProtein
         if self.sequence is not False:
-            # Write fasta
-            fasta_fn = os.path.join(os.getcwd(), 'lig.fasta')
-            write_FASTA(self.sequence, 'lig', fasta_fn)
+            # Write fasta. The name is unique to this ligand so that concurrent or successive runs do not
+            # overwrite each other's template sequence, and so that the .ali/.pap Modeller derives from it
+            # are traceable back to the ligand they belong to.
+            int_dir = os.path.join(os.getcwd(), 'modeller_intermediates')
+            if not os.path.exists(int_dir):
+                os.mkdir(int_dir)
+            fasta_name = self.name + '_lig'
+            fasta_fn = os.path.join(int_dir, fasta_name + '.fasta')
+            write_FASTA(self.sequence, fasta_name, fasta_fn)
+            print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Wrote ligand template sequence to', fasta_fn, flush=True)
 
             # RepairProtein                
             temp_working_dir = os.path.join(os.getcwd(), 'modeller')
