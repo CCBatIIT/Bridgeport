@@ -570,7 +570,8 @@ class Bridgeport():
                     loops=False,
                     chain=False,
                     smiles=False,
-                    cyclic=False):
+                    cyclic=False,
+                    preserve_resolved: bool=False):
         """ 
         Prepare ligand for OpenFF parameterization.
 
@@ -603,6 +604,8 @@ class Bridgeport():
             loops = params['loops']
         if 'chain' in params.keys():
             chain = params['chain']
+        if 'preserve_resolved' in params.keys():
+            preserve_resolved = params['preserve_resolved']
         
 
         # Prepare based on type of ligand
@@ -632,7 +635,7 @@ class Bridgeport():
                     shutil.move(self.lig_pdb, os.path.join(self.lig_only_dir, ref_name + '.pdb'))
                     reference = Ligand(working_dir=self.lig_only_dir, name=ref_name, chainid=params['chain'], sequence=sequence)
                     if i == 0:
-                        reference.prepare_ligand(small_molecule_params=False, removeHs=False, cyclic=cyclic)
+                        reference.prepare_ligand(small_molecule_params=False, removeHs=False, cyclic=cyclic, preserve_resolved=preserve_resolved)
     
                     # Mutate
                     ligand = MutatedPeptide(template=reference, replace_resid=mp_params['mutation_resid'], replace_resname=mp_params['mutation_resname'], replace_smiles=mp_params['mutation_smiles'], working_dir=self.lig_only_dir, name=self.name, chainid=params['chain'])
@@ -681,7 +684,8 @@ class Bridgeport():
                                       neutral_Cterm=neutral_Cterm,
                                       loops=loops,
                                       chain=chain,
-                                      cyclic=cyclic)
+                                      cyclic=cyclic,
+                                      preserve_resolved=preserve_resolved)
 
 
         # If analogues were generated, prepare those too
@@ -714,7 +718,8 @@ class Bridgeport():
                                           nstd_resids=nstd_resids,
                                           neutral_Cterm=neutral_Cterm,
                                           visualize=False,
-                                          cyclic=cyclic)
+                                          cyclic=cyclic,
+                                          preserve_resolved=preserve_resolved)
         
         
 

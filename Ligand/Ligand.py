@@ -75,7 +75,8 @@ class Ligand():
                        loops: bool=False,
                        chain: str=False,
                        visualize: bool=False,
-                       cyclic: bool=False):
+                       cyclic: bool=False,
+                       preserve_resolved: bool=False):
         """
         Prepare a ligand
 
@@ -98,6 +99,12 @@ class Ligand():
 
             neutral_C-term (bool):
                 If true, neutralize the C-terminus of a peptide ligand. Only applicable is small_molecule_params is False
+
+            preserve_resolved (bool):
+                If true, Modeller only optimizes the residues of the peptide that are absent from the input .pdb;
+                every residue with experimental coordinates is held fixed. Turn this on when the input .pdb
+                resolves the bound conformation and the *sequence* is only there to fill in what is missing.
+                Only applicable if small_molecule_params is False and a *sequence* is given. Default is False.
         """
         # Set attributes
         self.sanitize = sanitize
@@ -109,6 +116,7 @@ class Ligand():
         self.visualize = visualize
         self.loops = loops
         self.cyclic = cyclic
+        self.preserve_resolved = preserve_resolved
         
         # If treating ligand like a small molecule
         if small_molecule_params:
@@ -227,7 +235,8 @@ class Ligand():
                          tails=False,
                          nstd_resids=self.nstd_resids,
                          loops=self.loops,
-                         cyclic=self.cyclic)
+                         cyclic=self.cyclic,
+                         preserve_resolved=self.preserve_resolved)
         
         # Protonate with pdb2pqr30
         pp = ProteinPreparer(pdb_path=self.pdb,

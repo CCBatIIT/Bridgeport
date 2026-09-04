@@ -46,6 +46,7 @@ If no ligand is desired (e.g. apo structure), then do not include the 'Ligand' s
 - **"pH"**: pH to protonate a peptide ligand. Default is 7.0.
 - **"nstd_resids "**: List of nonstandard resids to conserve from input structure. 
 - **"neutral_Cterm"**: If true, neutralize the C-terminus of a peptide ligand. Only applicable is small_molecule_params is False
+- **"preserve_resolved"**: If true, Modeller only optimizes the peptide residues that are absent from the *input_pdb*; every residue with experimental coordinates is held fixed. Turn this on when the *input_pdb* already resolves the bound conformation and the *sequence* is only there to fill in what is missing. Only applicable if small_molecule_params is False and a *sequence* is given. Default is false. This is the same option as the *RepairProtein* key of the same name, read separately for the ligand.
 
 
 - **"Analogue"**:
