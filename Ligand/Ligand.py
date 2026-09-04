@@ -223,7 +223,7 @@ class Ligand():
         if self.sequence is not False:
             # Write fasta. The name is unique to this ligand so that concurrent or successive runs do not
             # overwrite each other's template sequence, and so that the .ali/.pap Modeller derives from it
-            # are traceable back to the ligand they belong to.
+            # are traceable back to the ligand they belong to. Everything Modeller touches lives here.
             int_dir = os.path.join(os.getcwd(), 'modeller_intermediates')
             if not os.path.exists(int_dir):
                 os.mkdir(int_dir)
@@ -232,11 +232,10 @@ class Ligand():
             write_FASTA(self.sequence, fasta_name, fasta_fn)
             print(datetime.now().strftime("%m/%d/%Y %H:%M:%S") + '//' + 'Wrote ligand template sequence to', fasta_fn, flush=True)
 
-            # RepairProtein                
-            temp_working_dir = os.path.join(os.getcwd(), 'modeller')
+            # RepairProtein. Modeller's scratch (.ali, .pap, models) goes alongside the FASTA.
             repairer = RepairProtein(pdb_fn=self.pdb,
                                      fasta_fn=fasta_fn,
-                                     working_dir=temp_working_dir)
+                                     working_dir=int_dir)
 
             repairer.run(pdb_out_fn=self.pdb,
                          tails=False,
